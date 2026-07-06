@@ -8,17 +8,25 @@
  *      INFORU_TOKEN    = <the InforU API token>
  * 3. Set TEMPLATE_ID below to the approved WhatsApp template id from the InforU panel.
  * 4. Run sendMessages (or attach a time-based trigger) to send to any row
- *    in the Contacts sheet whose status column is still empty.
- * 5. Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone)
- *    to get a URL. Give that URL to InforU as the reply webhook once they confirm
- *    the incoming payload format - doPost below is a placeholder until then.
+ *    whose status column is still empty.
+ * 5. Deploy > Manage deployments > Web app: Execute as "Me", Who has access "Anyone"
+ *    (not "Anyone with Google account" - InforU's server has no Google login).
+ *    Give the resulting /exec URL to InforU as the reply webhook.
  *
- * Contacts sheet columns: A=Name, B=Phone, C=Status, D=SentDate, E=Reply, F=ReplyDate
+ * The spreadsheet has a single sheet (tab). Columns are looked up by header
+ * name (row 1) rather than fixed position, so column order doesn't matter.
+ * Required headers: טלפון נייד, שם פרטי, סטטוס, תשובת לקוח, תאריך תשובה.
  */
 
-const SHEET_NAME = 'Contacts';
 const INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
-const TEMPLATE_ID = 'PUT_TEMPLATE_ID_HERE';
+const TEMPLATE_ID = '267627';
+
+const PHONE_HEADER = 'טלפון נייד';
+const NAME_HEADER = 'שם פרטי';
+const STATUS_HEADER = 'סטטוס';
+const REPLY_HEADER = 'תשובת לקוח';
+const REPLY_DATE_HEADER = 'תאריך תשובה';
+const SENT_STATUS = 'נשלח וואטסאפ';
 
 function getAuthHeader_() {
   const props = PropertiesService.getScriptProperties();
@@ -28,13 +36,26 @@ function getAuthHeader_() {
 }
 
 function sendMessages() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
   const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  const phoneCol = headers.indexOf(PHONE_HEADER);
+  const nameCol = headers.indexOf(NAME_HEADER);
+  const statusCol = headers.indexOf(STATUS_HEADER);
+
+  if (phoneCol === -1 || nameCol === -1 || statusCol === -1) {
+    throw new Error('לא נמצאה אחת העמודות: ' + PHONE_HEADER + ' / ' + NAME_HEADER + ' / ' + STATUS_HEADER);
+  }
 
   for (let i = 1; i < data.length; i++) {
-    const [name, phone, status] = data[i];
+    const row = data[i];
+    const phone = String(row[phoneCol]).replace(/\D/g, '');
+    const name = row[nameCol];
+    const status = row[statusCol];
     const rowIndex = i + 1;
-    if (!phone || status === 'נשלח') continue;
+
+    if (!phone || status === SENT_STATUS) continue;
 
     const payload = {
       Data: {
@@ -57,30 +78,45 @@ function sendMessages() {
     });
 
     const result = JSON.parse(response.getContentText());
-    sheet.getRange(rowIndex, 3).setValue(result.StatusId === 1 ? 'נשלח' : 'שגיאה: ' + result.StatusDescription);
-    sheet.getRange(rowIndex, 4).setValue(new Date());
+    sheet.getRange(rowIndex, statusCol + 1).setValue(
+      result.StatusId === 1 ? SENT_STATUS : 'שגיאה: ' + result.StatusDescription
+    );
   }
 }
 
 /**
- * Placeholder webhook receiver for incoming WhatsApp replies.
- * Field names below are guesses - update once InforU confirms the payload shape.
+ * InforU posts: { "Data": [ { "Value": "<phone>", "Message": "<reply text>", ... } ] }
+ * Every call is also appended raw to a WebhookLog tab for troubleshooting.
  */
 function doPost(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName('WebhookLog') || ss.insertSheet('WebhookLog');
+  logSheet.appendRow([new Date(), e.postData.contents]);
+
   const payload = JSON.parse(e.postData.contents);
-  const incomingPhone = payload.Phone || payload.PhoneNumber;
-  const incomingText = payload.Text || payload.Message;
+  const entry = payload.Data && payload.Data[0];
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  const data = sheet.getDataRange().getValues();
+  if (entry) {
+    const incomingPhone = String(entry.Value).replace(/\D/g, '');
+    const incomingText = entry.Message;
 
-  for (let i = 1; i < data.length; i++) {
-    const sheetPhone = String(data[i][1]).replace(/\D/g, '');
-    if (sheetPhone && sheetPhone === String(incomingPhone).replace(/\D/g, '')) {
-      const rowIndex = i + 1;
-      sheet.getRange(rowIndex, 5).setValue(incomingText);
-      sheet.getRange(rowIndex, 6).setValue(new Date());
-      break;
+    const sheet = ss.getSheets()[0];
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const phoneCol = headers.indexOf(PHONE_HEADER);
+    const replyCol = headers.indexOf(REPLY_HEADER);
+    const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
+
+    if (phoneCol !== -1 && replyCol !== -1) {
+      for (let i = 1; i < data.length; i++) {
+        const sheetPhone = String(data[i][phoneCol]).replace(/\D/g, '');
+        if (sheetPhone && sheetPhone === incomingPhone) {
+          const rowIndex = i + 1;
+          sheet.getRange(rowIndex, replyCol + 1).setValue(incomingText);
+          if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
+          break;
+        }
+      }
     }
   }
 
