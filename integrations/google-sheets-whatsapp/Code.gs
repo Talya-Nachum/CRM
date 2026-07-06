@@ -6,7 +6,9 @@
  * 2. Project Settings > Script Properties, add:
  *      INFORU_USERNAME = <the InforU API username>
  *      INFORU_TOKEN    = <the InforU API token>
- * 3. Set TEMPLATE_ID below to the approved WhatsApp template id from the InforU panel.
+ * 3. Add new contacts as new rows in the same sheet for future sends - no need
+ *    to redeploy or repeat setup. Each row carries its own template id (see
+ *    TEMPLATE_HEADER below), so different campaigns can use different templates.
  * 4. Run sendMessages (or attach a time-based trigger) to send to any row
  *    whose status column is still empty.
  * 5. Deploy > Manage deployments > Web app: Execute as "Me", Who has access "Anyone"
@@ -15,14 +17,15 @@
  *
  * The spreadsheet has a single sheet (tab). Columns are looked up by header
  * name (row 1) rather than fixed position, so column order doesn't matter.
- * Required headers: טלפון נייד, שם פרטי, סטטוס, תשובת לקוח, תאריך תשובה.
+ * Required headers: טלפון נייד, שם פרטי, מספר תבנית, סטטוס, תשובת לקוח, תאריך תשובה.
  */
 
 const INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
-const TEMPLATE_ID = '267627';
+const DEFAULT_TEMPLATE_ID = '267627';
 
 const PHONE_HEADER = 'טלפון נייד';
 const NAME_HEADER = 'שם פרטי';
+const TEMPLATE_HEADER = 'מספר תבנית';
 const STATUS_HEADER = 'סטטוס';
 const REPLY_HEADER = 'תשובת לקוח';
 const REPLY_DATE_HEADER = 'תאריך תשובה';
@@ -43,6 +46,7 @@ function sendMessages() {
   const phoneCol = headers.indexOf(PHONE_HEADER);
   const nameCol = headers.indexOf(NAME_HEADER);
   const statusCol = headers.indexOf(STATUS_HEADER);
+  const templateCol = headers.indexOf(TEMPLATE_HEADER);
 
   if (phoneCol === -1 || nameCol === -1 || statusCol === -1) {
     throw new Error('לא נמצאה אחת העמודות: ' + PHONE_HEADER + ' / ' + NAME_HEADER + ' / ' + STATUS_HEADER);
@@ -53,13 +57,14 @@ function sendMessages() {
     const phone = String(row[phoneCol]).replace(/\D/g, '');
     const name = row[nameCol];
     const status = row[statusCol];
+    const templateId = (templateCol !== -1 && row[templateCol]) ? String(row[templateCol]) : DEFAULT_TEMPLATE_ID;
     const rowIndex = i + 1;
 
     if (!phone || status === SENT_STATUS) continue;
 
     const payload = {
       Data: {
-        TemplateId: TEMPLATE_ID,
+        TemplateId: templateId,
         TemplateParameters: [
           { Name: '[#1#]', Type: 'Contact', Value: 'FirstName' }
         ],
