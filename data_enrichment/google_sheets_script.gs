@@ -207,65 +207,75 @@ function enrichActiveSheet() {
   }
 
   const cache = {};
-  const outputRows = [];
+  let processed = 0;
+  let foundCount = 0;
 
-  for (let r = 1; r < values.length; r++) {
-    const row = values[r];
-    const companyName = String(row[nameIdx] || '').trim();
-    const email = emailIdx !== -1 ? row[emailIdx] : '';
-    const domain = extractDomain(email);
+  try {
+    for (let r = 1; r < values.length; r++) {
+      const row = values[r];
+      const companyName = String(row[nameIdx] || '').trim();
+      const email = emailIdx !== -1 ? row[emailIdx] : '';
+      const domain = extractDomain(email);
 
-    if (!companyName) {
-      outputRows.push(['', 'לבדיקה - אין שם חברה', '', '', domain]);
-      continue;
-    }
+      let result;
 
-    const cacheKey = normalizeName(companyName);
-    if (cache[cacheKey]) {
-      outputRows.push(cache[cacheKey]);
-      continue;
-    }
-
-    let records = searchCompany(companyName, MAX_CANDIDATES);
-    Utilities.sleep(150);
-    if (records.length === 0 && isCorporateDomain(domain)) {
-      records = searchCompany(domain.split('.')[0], MAX_CANDIDATES);
-      Utilities.sleep(150);
-    }
-
-    const scored = records
-      .map(rec => ({ score: Math.max(...fieldMap.nameFields.map(f => similarityScore(companyName, rec[f] || ''))), record: rec }))
-      .sort((a, b) => b.score - a.score);
-
-    let hp = '', status = 'לא נמצא', matchedName = '', score = '';
-
-    if (scored.length > 0) {
-      const top = scored[0];
-      const second = scored.length > 1 ? scored[1].score : 0;
-      const ambiguous = scored.length > 1 && (top.score - second) < AMBIGUITY_GAP;
-
-      if (top.score >= AUTO_ACCEPT_THRESHOLD && !ambiguous) {
-        hp = String(top.record[fieldMap.hpField] || '');
-        status = 'אוטומטי';
-        matchedName = String(top.record[fieldMap.nameFields[0]] || '');
-        score = Math.round(top.score * 10) / 10;
-      } else if (top.score >= REVIEW_THRESHOLD) {
-        matchedName = String(top.record[fieldMap.nameFields[0]] || '');
-        score = Math.round(top.score * 10) / 10;
-        if (apiKey) {
-          const aiHp = aiDisambiguate(row, headers, scored.slice(0, 3).map(s => s.record), fieldMap, apiKey);
-          if (aiHp) { hp = aiHp; status = 'הוכרע ע"י AI'; } else { status = 'לבדיקה - ספק'; }
+      if (!companyName) {
+        result = ['', 'לבדיקה - אין שם חברה', '', '', domain];
+      } else {
+        const cacheKey = normalizeName(companyName);
+        if (cache[cacheKey]) {
+          result = cache[cacheKey];
         } else {
-          status = 'לבדיקה - ספק';
+          let records = searchCompany(companyName, MAX_CANDIDATES);
+          Utilities.sleep(150);
+          if (records.length === 0 && isCorporateDomain(domain)) {
+            records = searchCompany(domain.split('.')[0], MAX_CANDIDATES);
+            Utilities.sleep(150);
+          }
+
+          const scored = records
+            .map(rec => ({ score: Math.max(...fieldMap.nameFields.map(f => similarityScore(companyName, rec[f] || ''))), record: rec }))
+            .sort((a, b) => b.score - a.score);
+
+          let hp = '', status = 'לא נמצא', matchedName = '', score = '';
+
+          if (scored.length > 0) {
+            const top = scored[0];
+            const second = scored.length > 1 ? scored[1].score : 0;
+            const ambiguous = scored.length > 1 && (top.score - second) < AMBIGUITY_GAP;
+
+            if (top.score >= AUTO_ACCEPT_THRESHOLD && !ambiguous) {
+              hp = String(top.record[fieldMap.hpField] || '');
+              status = 'אוטומטי';
+              matchedName = String(top.record[fieldMap.nameFields[0]] || '');
+              score = Math.round(top.score * 10) / 10;
+            } else if (top.score >= REVIEW_THRESHOLD) {
+              matchedName = String(top.record[fieldMap.nameFields[0]] || '');
+              score = Math.round(top.score * 10) / 10;
+              if (apiKey) {
+                const aiHp = aiDisambiguate(row, headers, scored.slice(0, 3).map(s => s.record), fieldMap, apiKey);
+                if (aiHp) { hp = aiHp; status = 'הוכרע ע"י AI'; } else { status = 'לבדיקה - ספק'; }
+              } else {
+                status = 'לבדיקה - ספק';
+              }
+            }
+          }
+
+          result = [hp, status, matchedName, score, domain];
+          cache[cacheKey] = result;
         }
       }
+
+      // כתיבה מיידית שורה-שורה, כדי שרואים התקדמות בזמן אמת ולא מאבדים כלום אם משהו נכשל באמצע
+      sheet.getRange(r + 1, startCol + 1, 1, outHeaders.length).setValues([result]);
+      SpreadsheetApp.flush();
+      processed++;
+      if (result[0]) foundCount++;
     }
 
-    const result = [hp, status, matchedName, score, domain];
-    cache[cacheKey] = result;
-    outputRows.push(result);
+    ui.alert('הושלם! ' + foundCount + ' מתוך ' + processed + ' שורות קיבלו ח"פ.');
+  } catch (e) {
+    ui.alert('הריצה נעצרה בשגיאה אחרי ' + processed + ' שורות (התוצאות עד כה נשמרו).\n\nהשגיאה: ' + e.message);
+    throw e;
   }
-
-  sheet.getRange(2, startCol + 1, outputRows.length, outHeaders.length).setValues(outputRows);
-  ui.alert('הושלם! ' + outputRows.filter(r => r[0]).length + ' מתוך ' + outputRows.length + ' שורות קיבלו ח"פ.');
 }
