@@ -6,7 +6,7 @@
  */
 
 const DATASTORE_URL = 'https://data.gov.il/api/3/action/datastore_search';
-const RESOURCE_ID = 'f00517d5-6f43-474c-879e-5a1e74b1267b';
+const RESOURCE_ID = 'f004176c-b85f-4542-8901-7b3176f9a054';
 
 const AUTO_ACCEPT_THRESHOLD = 90;
 const REVIEW_THRESHOLD = 65;
@@ -124,7 +124,11 @@ function discoverFieldMap() {
   let hpField = fields.find(f => f.indexOf('מספר חברה') !== -1 || f.indexOf('ח"פ') !== -1);
   if (!hpField) hpField = fields.find(f => f.indexOf('מספר') !== -1) || fields[0];
 
-  let nameFields = fields.filter(f => f.indexOf('שם') !== -1 || f.toLowerCase().indexOf('name') !== -1);
+  const addressLike = ['עיר', 'רחוב', 'ישוב', 'מען', 'כתובת', 'מדינה'];
+  let nameFields = fields.filter(f =>
+    (f.indexOf('שם') !== -1 || f.toLowerCase().indexOf('name') !== -1) &&
+    !addressLike.some(k => f.indexOf(k) !== -1)
+  );
   if (nameFields.length === 0) nameFields = fields;
 
   return { hpField: hpField, nameFields: nameFields };

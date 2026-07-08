@@ -24,7 +24,7 @@ import requests
 from rapidfuzz import fuzz
 
 DATASTORE_SEARCH_URL = "https://data.gov.il/api/3/action/datastore_search"
-RESOURCE_ID = "f00517d5-6f43-474c-879e-5a1e74b1267b"
+RESOURCE_ID = "f004176c-b85f-4542-8901-7b3176f9a054"
 REQUEST_TIMEOUT = 15
 
 GENERIC_EMAIL_DOMAINS = {
@@ -102,7 +102,11 @@ def discover_field_map(session: requests.Session) -> FieldMap:
     if hp_field is None:
         hp_field = next((f for f in fields if "מספר" in f), fields[0])
 
-    name_fields = [f for f in fields if "שם" in f or "name" in f.lower()]
+    address_like = ["עיר", "רחוב", "ישוב", "מען", "כתובת", "מדינה"]
+    name_fields = [
+        f for f in fields
+        if ("שם" in f or "name" in f.lower()) and not any(k in f for k in address_like)
+    ]
     if not name_fields:
         name_fields = fields
 

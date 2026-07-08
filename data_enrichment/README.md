@@ -98,4 +98,4 @@ python enrich_companies.py --input customers.csv --output customers_enriched.csv
 
 - **זהו טיוב מבוסס הסתברות, לא ודאות מוחלטת.** גם עם AI, מומלץ לעבור ידנית על שורות עם סטטוס `לבדיקה - ספק` או `לא נמצא` לפני שהח"פ נטמע כמזהה חובה ב-CRM.
 - הסקריפט שולח בקשה אחת ל-API עבור כל שם חברה ייחודי (עם קאשינג בזיכרון בתוך הריצה) ומוסיף השהיה קצרה (`--request-delay`) בין קריאות כדי לא להעמיס על השרת הממשלתי.
-- אם resource_id של מערך הנתונים ברשם החברות ישתנה בעתיד, יש לעדכן את הקבוע `RESOURCE_ID` בראש הקובץ `enrich_companies.py`.
+- אם resource_id של מערך הנתונים ברשם החברות ישתנה שוב בעתיד (כבר קרה פעם אחת), אפשר לבדוק את המזהה הנוכחי בדף המאגר: https://data.gov.il/dataset/ica_companies - ולעדכן את הקבוע `RESOURCE_ID` גם ב-`enrich_companies.py` וגם ב-`google_sheets_script.gs`.
