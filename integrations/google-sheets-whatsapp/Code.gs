@@ -62,6 +62,26 @@ function getNlpearlAuthHeader_() {
   return 'Bearer ' + accountId + ':' + secretKey;
 }
 
+/**
+ * One-off helper: lists NLPearl outbound campaigns (with their real
+ * outboundId, distinct from the Pearl/agent id) into a "NLPearlCampaigns"
+ * tab, since the Pearl id shown in the platform URL is NOT the outboundId
+ * the Make Call API expects.
+ */
+function listOutboundCampaigns() {
+  const response = UrlFetchApp.fetch('https://api.nlpearl.ai/v1/Outbound', {
+    method: 'get',
+    headers: { Authorization: getNlpearlAuthHeader_() },
+    muteHttpExceptions: true
+  });
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('NLPearlCampaigns') || ss.insertSheet('NLPearlCampaigns');
+  sheet.clear();
+  sheet.appendRow(['raw response']);
+  sheet.appendRow([response.getContentText()]);
+}
+
 function sendMessages() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
   const data = sheet.getDataRange().getValues();
