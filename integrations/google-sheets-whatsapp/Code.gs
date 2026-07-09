@@ -144,9 +144,9 @@ function startCalls() {
     if (!phone || callStatus === CALL_SENT_STATUS) continue;
 
     const payload = {
-      phoneNumber: String(phone),
-      externalId: String(phone).replace(/\D/g, ''),
-      callData: { firstName: name }
+      To: String(phone),
+      ExternalId: String(phone).replace(/\D/g, ''),
+      CallData: { firstName: name }
     };
 
     const response = UrlFetchApp.fetch(NLPEARL_API_BASE + outboundId + '/Call', {
