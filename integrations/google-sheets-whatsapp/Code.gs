@@ -1,25 +1,31 @@
 /**
- * Google Sheets <-> InforU WhatsApp integration.
+ * Google Sheets <-> InforU WhatsApp + NLPearl voice call integration.
  *
- * Setup:
+ * Setup - InforU (WhatsApp):
  * 1. Extensions > Apps Script, paste this file as Code.gs.
  * 2. Project Settings > Script Properties, add:
- *      INFORU_USERNAME = <the InforU API username>
- *      INFORU_TOKEN    = <the InforU API token>
+ *      INFORU_USERNAME    = <the InforU API username>
+ *      INFORU_TOKEN       = <the InforU API token>
+ *      NLPEARL_ACCOUNT_ID = <NLPearl account id, from platform.nlpearl.ai/app/settings/api>
+ *      NLPEARL_SECRET_KEY = <NLPearl API secret key, same settings page>
  * 3. Add new contacts as new rows in the same sheet for future sends - no need
- *    to redeploy or repeat setup. Each row carries its own template id (see
- *    TEMPLATE_HEADER below), so different campaigns can use different templates.
- * 4. Run sendMessages (or attach a time-based trigger) to send to any row
- *    whose status column is still empty.
+ *    to redeploy or repeat setup. Each row carries its own template id / campaign id
+ *    (see TEMPLATE_HEADER / CAMPAIGN_HEADER below), so different campaigns or
+ *    different NLPearl Pearls can be used per row without touching the code.
+ * 4. Run sendMessages / startCalls (or attach a time-based trigger) to process
+ *    any row whose respective status column is still empty.
  * 5. Deploy > Manage deployments > Web app: Execute as "Me", Who has access "Anyone"
- *    (not "Anyone with Google account" - InforU's server has no Google login).
- *    Give the resulting /exec URL to InforU as the reply webhook.
+ *    (not "Anyone with Google account" - external servers have no Google login).
+ *    Give the resulting /exec URL to InforU as their reply webhook, and to NLPearl
+ *    as both the Lead Webhook and Call Webhook URL (Pearl settings > Overview > Webhooks).
  *
  * The spreadsheet has a single sheet (tab). Columns are looked up by header
  * name (row 1) rather than fixed position, so column order doesn't matter.
- * Required headers: טלפון נייד, שם פרטי, מספר תבנית, סטטוס, תשובת לקוח, תאריך תשובה.
+ * Required headers: טלפון נייד, שם פרטי, מספר תבנית, סטטוס, תשובת לקוח, תאריך תשובה,
+ * מזהה קמפיין, סטטוס שיחה, מזהה ליד NLPearl, תוצאת שיחה, תאריך שיחה.
  */
 
+// --- InforU (WhatsApp) ---
 const INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
 const DEFAULT_TEMPLATE_ID = '267627';
 
@@ -31,11 +37,29 @@ const REPLY_HEADER = 'תשובת לקוח';
 const REPLY_DATE_HEADER = 'תאריך תשובה';
 const SENT_STATUS = 'נשלח וואטסאפ';
 
-function getAuthHeader_() {
+// --- NLPearl (voice calls) ---
+const NLPEARL_API_BASE = 'https://api.nlpearl.ai/v1/Outbound/';
+const DEFAULT_OUTBOUND_ID = '6a27be5ae83373643a10ae34';
+
+const CAMPAIGN_HEADER = 'מזהה קמפיין';
+const CALL_STATUS_HEADER = 'סטטוס שיחה';
+const CALL_LEAD_ID_HEADER = 'מזהה ליד NLPearl';
+const CALL_RESULT_HEADER = 'תוצאת שיחה';
+const CALL_DATE_HEADER = 'תאריך שיחה';
+const CALL_SENT_STATUS = 'שיחה נשלחה';
+
+function getInforuAuthHeader_() {
   const props = PropertiesService.getScriptProperties();
   const username = props.getProperty('INFORU_USERNAME');
   const token = props.getProperty('INFORU_TOKEN');
   return 'Basic ' + Utilities.base64Encode(username + ':' + token);
+}
+
+function getNlpearlAuthHeader_() {
+  const props = PropertiesService.getScriptProperties();
+  const accountId = props.getProperty('NLPEARL_ACCOUNT_ID');
+  const secretKey = props.getProperty('NLPEARL_SECRET_KEY');
+  return 'Bearer ' + accountId + ':' + secretKey;
 }
 
 function sendMessages() {
@@ -77,7 +101,7 @@ function sendMessages() {
     const response = UrlFetchApp.fetch(INFORU_ENDPOINT, {
       method: 'post',
       contentType: 'application/json',
-      headers: { Authorization: getAuthHeader_() },
+      headers: { Authorization: getInforuAuthHeader_() },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     });
@@ -90,7 +114,63 @@ function sendMessages() {
 }
 
 /**
- * InforU posts: { "Data": [ { "Value": "<phone>", "Message": "<reply text>", ... } ] }
+ * Starts an NLPearl outbound call per row that hasn't been called yet.
+ * Request shape reconstructed from NLPearl's Python wrapper + docs chat
+ * (not yet confirmed against raw HTTP docs) - verify with one test row first.
+ */
+function startCalls() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  const phoneCol = headers.indexOf(PHONE_HEADER);
+  const nameCol = headers.indexOf(NAME_HEADER);
+  const campaignCol = headers.indexOf(CAMPAIGN_HEADER);
+  const callStatusCol = headers.indexOf(CALL_STATUS_HEADER);
+  const leadIdCol = headers.indexOf(CALL_LEAD_ID_HEADER);
+
+  if (phoneCol === -1 || callStatusCol === -1) {
+    throw new Error('לא נמצאה אחת העמודות: ' + PHONE_HEADER + ' / ' + CALL_STATUS_HEADER);
+  }
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const phone = row[phoneCol];
+    const name = nameCol !== -1 ? row[nameCol] : '';
+    const callStatus = row[callStatusCol];
+    const outboundId = (campaignCol !== -1 && row[campaignCol]) ? String(row[campaignCol]) : DEFAULT_OUTBOUND_ID;
+    const rowIndex = i + 1;
+
+    if (!phone || callStatus === CALL_SENT_STATUS) continue;
+
+    const payload = {
+      phoneNumber: String(phone),
+      externalId: String(phone).replace(/\D/g, ''),
+      callData: { firstName: name }
+    };
+
+    const response = UrlFetchApp.fetch(NLPEARL_API_BASE + outboundId + '/Call', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: getNlpearlAuthHeader_() },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+
+    const result = JSON.parse(response.getContentText());
+    const success = response.getResponseCode() < 300;
+    sheet.getRange(rowIndex, callStatusCol + 1).setValue(success ? CALL_SENT_STATUS : 'שגיאה: ' + response.getContentText());
+    if (success && leadIdCol !== -1) {
+      sheet.getRange(rowIndex, leadIdCol + 1).setValue(result.id || result.leadId || '');
+    }
+  }
+}
+
+/**
+ * Routes both webhook sources:
+ * - InforU posts: { "Data": [ { "Value": "<phone>", "Message": "<reply text>", ... } ] }
+ * - NLPearl posts a Lead/Call object directly (has "pearlId"), matched by lead id
+ *   captured in CALL_LEAD_ID_HEADER when the call was started.
  * Every call is also appended raw to a WebhookLog tab for troubleshooting.
  */
 function doPost(e) {
@@ -99,32 +179,65 @@ function doPost(e) {
   logSheet.appendRow([new Date(), e.postData.contents]);
 
   const payload = JSON.parse(e.postData.contents);
-  const entry = payload.Data && payload.Data[0];
 
-  if (entry) {
-    const incomingPhone = String(entry.Value).replace(/\D/g, '');
-    const incomingText = entry.Message;
-
-    const sheet = ss.getSheets()[0];
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const phoneCol = headers.indexOf(PHONE_HEADER);
-    const replyCol = headers.indexOf(REPLY_HEADER);
-    const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
-
-    if (phoneCol !== -1 && replyCol !== -1) {
-      for (let i = 1; i < data.length; i++) {
-        const sheetPhone = String(data[i][phoneCol]).replace(/\D/g, '');
-        if (sheetPhone && sheetPhone === incomingPhone) {
-          const rowIndex = i + 1;
-          sheet.getRange(rowIndex, replyCol + 1).setValue(incomingText);
-          if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
-          break;
-        }
-      }
-    }
+  if (payload.Data) {
+    handleInforuWebhook_(ss, payload);
+  } else if (payload.pearlId) {
+    handleNlpearlWebhook_(ss, payload);
   }
 
   return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleInforuWebhook_(ss, payload) {
+  const entry = payload.Data && payload.Data[0];
+  if (!entry) return;
+
+  const incomingPhone = String(entry.Value).replace(/\D/g, '');
+  const incomingText = entry.Message;
+
+  const sheet = ss.getSheets()[0];
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const phoneCol = headers.indexOf(PHONE_HEADER);
+  const replyCol = headers.indexOf(REPLY_HEADER);
+  const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
+
+  if (phoneCol === -1 || replyCol === -1) return;
+
+  for (let i = 1; i < data.length; i++) {
+    const sheetPhone = String(data[i][phoneCol]).replace(/\D/g, '');
+    if (sheetPhone && sheetPhone === incomingPhone) {
+      const rowIndex = i + 1;
+      sheet.getRange(rowIndex, replyCol + 1).setValue(incomingText);
+      if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
+      break;
+    }
+  }
+}
+
+function handleNlpearlWebhook_(ss, payload) {
+  // Lead Webhook: top-level "id" is the lead id. Call Webhook: "leadId" refers to it.
+  const leadId = payload.leadId || payload.id;
+  if (!leadId) return;
+
+  const sheet = ss.getSheets()[0];
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const leadIdCol = headers.indexOf(CALL_LEAD_ID_HEADER);
+  const resultCol = headers.indexOf(CALL_RESULT_HEADER);
+  const dateCol = headers.indexOf(CALL_DATE_HEADER);
+
+  if (leadIdCol === -1 || resultCol === -1) return;
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][leadIdCol]) === String(leadId)) {
+      const rowIndex = i + 1;
+      const summary = payload.collectedData ? JSON.stringify(payload.collectedData) : ('סטטוס: ' + payload.status);
+      sheet.getRange(rowIndex, resultCol + 1).setValue(summary);
+      if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
+      break;
+    }
+  }
 }
