@@ -39,7 +39,7 @@ const SENT_STATUS = 'נשלח וואטסאפ';
 
 // --- NLPearl (voice calls) ---
 const NLPEARL_API_BASE = 'https://api.nlpearl.ai/v2/Outbound/';
-const DEFAULT_OUTBOUND_ID = '6a27c37ce83373643a10ae63';
+const DEFAULT_OUTBOUND_ID = '6a27be5ae83373643a10ae34'; // Pearl id (v2 path param), not the outbound campaign id
 
 const CAMPAIGN_HEADER = 'מזהה קמפיין';
 const CALL_STATUS_HEADER = 'סטטוס שיחה';
