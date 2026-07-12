@@ -296,9 +296,13 @@ function handleInforuWebhook_(ss, payload) {
 }
 
 function handleNlpearlWebhook_(ss, payload) {
-  // Call Webhook uses "to" + "collectedInfo" (array of {id,name,value}).
-  // Lead Webhook uses "phoneNumber" + "collectedData" (plain object).
-  const incomingPhone = phoneSuffix_(payload.to || payload.phoneNumber);
+  // Only handle Call Webhook events (identified by "to") for the result column -
+  // Lead Webhook events (identified by "phoneNumber" instead) don't carry the
+  // human-readable outcome (tags/summary) and would overwrite a good result
+  // with less useful raw data.
+  if (!payload.to) return;
+
+  const incomingPhone = phoneSuffix_(payload.to);
   if (!incomingPhone) return;
 
   const sheet = getContactsSheet_(ss);
@@ -314,13 +318,9 @@ function handleNlpearlWebhook_(ss, payload) {
     const sheetPhone = phoneSuffix_(data[i][phoneCol]);
     if (sheetPhone && sheetPhone === incomingPhone) {
       const rowIndex = i + 1;
-      let info = '';
-      if (Array.isArray(payload.collectedInfo)) {
-        info = payload.collectedInfo.map(item => item.name + ': ' + item.value).join(', ');
-      } else if (payload.collectedData && typeof payload.collectedData === 'object') {
-        info = Object.keys(payload.collectedData).map(k => k + ': ' + payload.collectedData[k]).join(', ');
-      }
-      const summary = info || ('סטטוס: ' + payload.status);
+      const summary = (Array.isArray(payload.tags) && payload.tags.length)
+        ? payload.tags.join(', ')
+        : (payload.summary || 'סטטוס: ' + payload.status);
       sheet.getRange(rowIndex, resultCol + 1).setValue(summary);
       if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
       break;
