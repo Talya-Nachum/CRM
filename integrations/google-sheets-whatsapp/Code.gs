@@ -63,6 +63,20 @@ function getNlpearlAuthHeader_() {
 }
 
 /**
+ * Finds the contacts sheet by its header row instead of assuming it's the
+ * first tab - helper tabs like WebhookLog/NLPearlCampaigns can otherwise
+ * shift which sheet sits at index 0.
+ */
+function getContactsSheet_(ss) {
+  const sheets = ss.getSheets();
+  for (let s = 0; s < sheets.length; s++) {
+    const headers = sheets[s].getDataRange().getValues()[0] || [];
+    if (headers.indexOf(PHONE_HEADER) !== -1) return sheets[s];
+  }
+  throw new Error('לא נמצא גיליון עם עמודה בשם: ' + PHONE_HEADER);
+}
+
+/**
  * One-off helper: lists NLPearl outbound campaigns (with their real
  * outboundId, distinct from the Pearl/agent id) into a "NLPearlCampaigns"
  * tab, since the Pearl id shown in the platform URL is NOT the outboundId
@@ -103,7 +117,7 @@ function checkCallStatus() {
 }
 
 function sendMessages() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  const sheet = getContactsSheet_(SpreadsheetApp.getActiveSpreadsheet());
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
@@ -159,7 +173,7 @@ function sendMessages() {
  * (not yet confirmed against raw HTTP docs) - verify with one test row first.
  */
 function startCalls() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  const sheet = getContactsSheet_(SpreadsheetApp.getActiveSpreadsheet());
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
@@ -237,7 +251,7 @@ function handleInforuWebhook_(ss, payload) {
   const incomingPhone = String(entry.Value).replace(/\D/g, '');
   const incomingText = entry.Message;
 
-  const sheet = ss.getSheets()[0];
+  const sheet = getContactsSheet_(ss);
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const phoneCol = headers.indexOf(PHONE_HEADER);
@@ -263,7 +277,7 @@ function handleNlpearlWebhook_(ss, payload) {
   const incomingPhone = String(payload.to || '').replace(/\D/g, '');
   if (!incomingPhone) return;
 
-  const sheet = ss.getSheets()[0];
+  const sheet = getContactsSheet_(ss);
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const phoneCol = headers.indexOf(PHONE_HEADER);
