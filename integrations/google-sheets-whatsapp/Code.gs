@@ -82,6 +82,26 @@ function listOutboundCampaigns() {
   sheet.appendRow([response.getContentText()]);
 }
 
+/**
+ * One-off helper: checks a specific call's real status directly via GET,
+ * to see whether NLPearl actually completed the call even though our
+ * Call/Lead webhook never arrived. Paste a call id into CALL_ID_TO_CHECK
+ * before running.
+ */
+function checkCallStatus() {
+  const CALL_ID_TO_CHECK = '6a53311af56b3a971e406b73';
+
+  const response = UrlFetchApp.fetch('https://api.nlpearl.ai/v1/Call/' + CALL_ID_TO_CHECK, {
+    method: 'get',
+    headers: { Authorization: getNlpearlAuthHeader_() },
+    muteHttpExceptions: true
+  });
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('NLPearlCampaigns') || ss.insertSheet('NLPearlCampaigns');
+  sheet.appendRow(['call status check', response.getContentText()]);
+}
+
 function sendMessages() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
   const data = sheet.getDataRange().getValues();
