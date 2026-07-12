@@ -77,6 +77,16 @@ function getContactsSheet_(ss) {
 }
 
 /**
+ * Compares phone numbers by their last 9 digits, so "052-7810099",
+ * "0527810099" and "+972527810099" (all the same Israeli number in
+ * different formats) are recognized as equal.
+ */
+function phoneSuffix_(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  return digits.slice(-9);
+}
+
+/**
  * One-off helper: lists NLPearl outbound campaigns (with their real
  * outboundId, distinct from the Pearl/agent id) into a "NLPearlCampaigns"
  * tab, since the Pearl id shown in the platform URL is NOT the outboundId
@@ -258,7 +268,7 @@ function handleInforuWebhook_(ss, payload) {
   const entry = payload.Data && payload.Data[0];
   if (!entry) return;
 
-  const incomingPhone = String(entry.Value).replace(/\D/g, '');
+  const incomingPhone = phoneSuffix_(entry.Value);
   const incomingText = entry.Message;
 
   const sheet = getContactsSheet_(ss);
@@ -271,7 +281,7 @@ function handleInforuWebhook_(ss, payload) {
   if (phoneCol === -1 || replyCol === -1) return;
 
   for (let i = 1; i < data.length; i++) {
-    const sheetPhone = String(data[i][phoneCol]).replace(/\D/g, '');
+    const sheetPhone = phoneSuffix_(data[i][phoneCol]);
     if (sheetPhone && sheetPhone === incomingPhone) {
       const rowIndex = i + 1;
       sheet.getRange(rowIndex, replyCol + 1).setValue(incomingText);
@@ -284,7 +294,7 @@ function handleInforuWebhook_(ss, payload) {
 function handleNlpearlWebhook_(ss, payload) {
   // Match by phone ("to") rather than id - the id returned by Make Call
   // and the id in the Call Webhook payload are different NLPearl concepts.
-  const incomingPhone = String(payload.to || '').replace(/\D/g, '');
+  const incomingPhone = phoneSuffix_(payload.to);
   if (!incomingPhone) return;
 
   const sheet = getContactsSheet_(ss);
@@ -297,7 +307,7 @@ function handleNlpearlWebhook_(ss, payload) {
   if (phoneCol === -1 || resultCol === -1) return;
 
   for (let i = 1; i < data.length; i++) {
-    const sheetPhone = String(data[i][phoneCol]).replace(/\D/g, '');
+    const sheetPhone = phoneSuffix_(data[i][phoneCol]);
     if (sheetPhone && sheetPhone === incomingPhone) {
       const rowIndex = i + 1;
       const info = (payload.collectedInfo || []).map(item => item.name + ': ' + item.value).join(', ');
