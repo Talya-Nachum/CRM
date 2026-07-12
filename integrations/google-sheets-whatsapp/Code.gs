@@ -38,7 +38,7 @@ const REPLY_DATE_HEADER = 'תאריך תשובה';
 const SENT_STATUS = 'נשלח וואטסאפ';
 
 // --- NLPearl (voice calls) ---
-const NLPEARL_API_BASE = 'https://api.nlpearl.ai/v1/Outbound/';
+const NLPEARL_API_BASE = 'https://api.nlpearl.ai/v2/Outbound/';
 const DEFAULT_OUTBOUND_ID = '6a27c37ce83373643a10ae63';
 
 const CAMPAIGN_HEADER = 'מזהה קמפיין';
@@ -105,7 +105,7 @@ function listOutboundCampaigns() {
 function checkCallStatus() {
   const CALL_ID_TO_CHECK = '6a53311af56b3a971e406b73';
 
-  const response = UrlFetchApp.fetch('https://api.nlpearl.ai/v1/Call/' + CALL_ID_TO_CHECK, {
+  const response = UrlFetchApp.fetch('https://api.nlpearl.ai/v2/Call/' + CALL_ID_TO_CHECK, {
     method: 'get',
     headers: { Authorization: getNlpearlAuthHeader_() },
     muteHttpExceptions: true
@@ -198,12 +198,12 @@ function startCalls() {
     if (!phone || callStatus === CALL_SENT_STATUS) continue;
 
     const payload = {
-      To: String(phone),
-      ExternalId: String(phone).replace(/\D/g, '') + '-' + Date.now(),
-      CallData: { firstName: name }
+      phoneNumber: String(phone),
+      externalId: String(phone).replace(/\D/g, '') + '-' + Date.now(),
+      callData: { firstName: name }
     };
 
-    const response = UrlFetchApp.fetch(NLPEARL_API_BASE + outboundId + '/Call', {
+    const response = UrlFetchApp.fetch(NLPEARL_API_BASE + outboundId + '/Lead', {
       method: 'post',
       contentType: 'application/json',
       headers: { Authorization: getNlpearlAuthHeader_() },
@@ -211,11 +211,18 @@ function startCalls() {
       muteHttpExceptions: true
     });
 
-    const result = JSON.parse(response.getContentText());
+    const responseText = response.getContentText();
     const success = response.getResponseCode() < 300;
-    sheet.getRange(rowIndex, callStatusCol + 1).setValue(success ? CALL_SENT_STATUS : 'שגיאה: ' + response.getContentText());
+    sheet.getRange(rowIndex, callStatusCol + 1).setValue(success ? CALL_SENT_STATUS : 'שגיאה: ' + responseText);
     if (success && leadIdCol !== -1) {
-      sheet.getRange(rowIndex, leadIdCol + 1).setValue(result.id || result.leadId || '');
+      let leadId = responseText;
+      try {
+        const parsed = JSON.parse(responseText);
+        leadId = parsed.leadId || parsed.id || responseText;
+      } catch (err) {
+        // response was plain text (the lead id itself) - use as-is
+      }
+      sheet.getRange(rowIndex, leadIdCol + 1).setValue(leadId);
     }
   }
 }
