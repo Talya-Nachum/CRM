@@ -165,7 +165,7 @@ function startCalls() {
 
     const payload = {
       To: String(phone),
-      ExternalId: String(phone).replace(/\D/g, ''),
+      ExternalId: String(phone).replace(/\D/g, '') + '-' + Date.now(),
       CallData: { firstName: name }
     };
 
