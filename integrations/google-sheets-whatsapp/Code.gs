@@ -179,9 +179,7 @@ function startCalls() {
 
     const result = JSON.parse(response.getContentText());
     const success = response.getResponseCode() < 300;
-    sheet.getRange(rowIndex, callStatusCol + 1).setValue(
-      success ? CALL_SENT_STATUS + ' | ' + response.getContentText() : 'שגיאה: ' + response.getContentText()
-    );
+    sheet.getRange(rowIndex, callStatusCol + 1).setValue(success ? CALL_SENT_STATUS : 'שגיאה: ' + response.getContentText());
     if (success && leadIdCol !== -1) {
       sheet.getRange(rowIndex, leadIdCol + 1).setValue(result.id || result.leadId || '');
     }
