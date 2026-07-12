@@ -252,12 +252,16 @@ function doPost(e) {
   const logSheet = ss.getSheetByName('WebhookLog') || ss.insertSheet('WebhookLog');
   logSheet.appendRow([new Date(), e.postData.contents]);
 
-  const payload = JSON.parse(e.postData.contents);
+  try {
+    const payload = JSON.parse(e.postData.contents);
 
-  if (payload.Data) {
-    handleInforuWebhook_(ss, payload);
-  } else if (payload.pearlId) {
-    handleNlpearlWebhook_(ss, payload);
+    if (payload.Data) {
+      handleInforuWebhook_(ss, payload);
+    } else if (payload.pearlId) {
+      handleNlpearlWebhook_(ss, payload);
+    }
+  } catch (err) {
+    logSheet.appendRow([new Date(), 'ERROR: ' + err.message + ' | ' + err.stack]);
   }
 
   return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
