@@ -258,23 +258,26 @@ function handleInforuWebhook_(ss, payload) {
 }
 
 function handleNlpearlWebhook_(ss, payload) {
-  // Lead Webhook: top-level "id" is the lead id. Call Webhook: "leadId" refers to it.
-  const leadId = payload.leadId || payload.id;
-  if (!leadId) return;
+  // Match by phone ("to") rather than id - the id returned by Make Call
+  // and the id in the Call Webhook payload are different NLPearl concepts.
+  const incomingPhone = String(payload.to || '').replace(/\D/g, '');
+  if (!incomingPhone) return;
 
   const sheet = ss.getSheets()[0];
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const leadIdCol = headers.indexOf(CALL_LEAD_ID_HEADER);
+  const phoneCol = headers.indexOf(PHONE_HEADER);
   const resultCol = headers.indexOf(CALL_RESULT_HEADER);
   const dateCol = headers.indexOf(CALL_DATE_HEADER);
 
-  if (leadIdCol === -1 || resultCol === -1) return;
+  if (phoneCol === -1 || resultCol === -1) return;
 
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][leadIdCol]) === String(leadId)) {
+    const sheetPhone = String(data[i][phoneCol]).replace(/\D/g, '');
+    if (sheetPhone && sheetPhone === incomingPhone) {
       const rowIndex = i + 1;
-      const summary = payload.collectedData ? JSON.stringify(payload.collectedData) : ('סטטוס: ' + payload.status);
+      const info = (payload.collectedInfo || []).map(item => item.name + ': ' + item.value).join(', ');
+      const summary = info || ('סטטוס: ' + payload.status);
       sheet.getRange(rowIndex, resultCol + 1).setValue(summary);
       if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
       break;
