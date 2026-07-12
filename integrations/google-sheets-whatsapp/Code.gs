@@ -292,9 +292,9 @@ function handleInforuWebhook_(ss, payload) {
 }
 
 function handleNlpearlWebhook_(ss, payload) {
-  // Match by phone ("to") rather than id - the id returned by Make Call
-  // and the id in the Call Webhook payload are different NLPearl concepts.
-  const incomingPhone = phoneSuffix_(payload.to);
+  // Call Webhook uses "to" + "collectedInfo" (array of {id,name,value}).
+  // Lead Webhook uses "phoneNumber" + "collectedData" (plain object).
+  const incomingPhone = phoneSuffix_(payload.to || payload.phoneNumber);
   if (!incomingPhone) return;
 
   const sheet = getContactsSheet_(ss);
@@ -310,7 +310,12 @@ function handleNlpearlWebhook_(ss, payload) {
     const sheetPhone = phoneSuffix_(data[i][phoneCol]);
     if (sheetPhone && sheetPhone === incomingPhone) {
       const rowIndex = i + 1;
-      const info = (payload.collectedInfo || []).map(item => item.name + ': ' + item.value).join(', ');
+      let info = '';
+      if (Array.isArray(payload.collectedInfo)) {
+        info = payload.collectedInfo.map(item => item.name + ': ' + item.value).join(', ');
+      } else if (payload.collectedData && typeof payload.collectedData === 'object') {
+        info = Object.keys(payload.collectedData).map(k => k + ': ' + payload.collectedData[k]).join(', ');
+      }
       const summary = info || ('סטטוס: ' + payload.status);
       sheet.getRange(rowIndex, resultCol + 1).setValue(summary);
       if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
