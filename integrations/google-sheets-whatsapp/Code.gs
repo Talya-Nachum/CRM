@@ -44,7 +44,7 @@ const DEFAULT_OUTBOUND_ID = '6a27be5ae83373643a10ae34'; // Pearl id (v2 path par
 const CAMPAIGN_HEADER = 'מזהה קמפיין';
 const CALL_STATUS_HEADER = 'סטטוס שיחה';
 const CALL_LEAD_ID_HEADER = 'מזהה ליד NLPearl';
-const CALL_RESULT_HEADER = 'תוצאת שיחה';
+const CALL_RESULT_HEADER = 'תוצאות שיחה';
 const CALL_DATE_HEADER = 'תאריך שיחה';
 const CALL_SENT_STATUS = 'שיחה נשלחה';
 
