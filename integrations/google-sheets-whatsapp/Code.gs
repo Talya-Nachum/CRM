@@ -197,9 +197,12 @@ function startCalls() {
 
     if (!phone || callStatus === CALL_SENT_STATUS) continue;
 
+    const digits = String(phone).replace(/\D/g, '');
+    const internationalPhone = digits.startsWith('0') ? '+972' + digits.slice(1) : '+' + digits;
+
     const payload = {
-      phoneNumber: String(phone),
-      externalId: String(phone).replace(/\D/g, '') + '-' + Date.now(),
+      phoneNumber: internationalPhone,
+      externalId: digits + '-' + Date.now(),
       callData: { firstName: name }
     };
 
