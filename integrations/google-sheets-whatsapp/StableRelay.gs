@@ -20,6 +20,8 @@
  */
 function doPost(e) {
   const targetUrl = PropertiesService.getScriptProperties().getProperty('TARGET_URL');
+  Logger.log('incoming: ' + e.postData.contents.slice(0, 300));
+  Logger.log('forwarding to: ' + targetUrl);
 
   const response = UrlFetchApp.fetch(targetUrl, {
     method: 'post',
@@ -27,6 +29,9 @@ function doPost(e) {
     payload: e.postData.contents,
     muteHttpExceptions: true
   });
+
+  Logger.log('target response code: ' + response.getResponseCode());
+  Logger.log('target response: ' + response.getContentText().slice(0, 300));
 
   return ContentService.createTextOutput(response.getContentText())
     .setMimeType(ContentService.MimeType.JSON);
