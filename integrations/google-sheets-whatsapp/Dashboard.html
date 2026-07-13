@@ -316,6 +316,8 @@
 
 <script>
   let currentData = null;
+  let currentTabName = null;
+  const AUTO_REFRESH_MS = 30000;
 
   function loadTabs() {
     google.script.run.withSuccessHandler(renderTabs).withFailureHandler(showError).getCampaignNames();
@@ -342,9 +344,12 @@
     loadCampaign(names[0]);
   }
 
-  function loadCampaign(name) {
-    document.getElementById('chartTitle').textContent = 'פילוח סטטוס - ' + name;
-    document.getElementById('tableBody').innerHTML = '<tr><td colspan="6" class="loading-state">טוען נתונים...</td></tr>';
+  function loadCampaign(name, silent) {
+    currentTabName = name;
+    if (!silent) {
+      document.getElementById('chartTitle').textContent = 'פילוח סטטוס - ' + name;
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="6" class="loading-state">טוען נתונים...</td></tr>';
+    }
     google.script.run.withSuccessHandler(renderCampaign).withFailureHandler(showError).getCampaignData(name);
   }
 
@@ -461,4 +466,10 @@
   }
 
   loadTabs();
+
+  // רענון אוטומטי: כל 30 שניות טוענים מחדש את נתוני הטאב הפעיל (בלי לגעת
+  // ברשימת הטאבים עצמה, כדי לא "לקפוץ" למשתמש בזמן שהוא מסתכל).
+  setInterval(function () {
+    if (currentTabName) loadCampaign(currentTabName, true);
+  }, AUTO_REFRESH_MS);
 </script>
