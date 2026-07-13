@@ -413,6 +413,76 @@
     padding: 24px 0;
     text-align: center;
   }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 12, 30, 0.45);
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 10;
+  }
+
+  .modal-overlay.show { display: flex; }
+
+  .modal-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 22px 24px;
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .modal-card h3 {
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 800;
+  }
+
+  .modal-label {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-weight: 700;
+    margin-top: 10px;
+  }
+
+  .modal-input {
+    padding: 9px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    margin-top: 4px;
+  }
+
+  .modal-input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .modal-error {
+    color: var(--bad);
+    font-size: 12.5px;
+    font-weight: 700;
+    min-height: 16px;
+    margin-top: 8px;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
 </style>
 
 <div class="page">
@@ -448,6 +518,7 @@
       <h2>אנשי קשר</h2>
       <div class="table-toolbar">
         <input type="text" class="search-input" id="searchInput" placeholder="חיפוש לפי שם או טלפון...">
+        <button class="btn btn-accent" id="addContactBtn" type="button">➕ הוספת איש קשר</button>
         <button class="btn" id="exportBtn" type="button">📥 ייצוא לאקסל</button>
       </div>
       <div class="table-scroll">
@@ -456,6 +527,7 @@
             <tr>
               <th>שם פרטי</th>
               <th>טלפון נייד</th>
+              <th>מקור ליד</th>
               <th>סטטוס</th>
               <th>תשובת לקוח</th>
               <th>סטטוס שיחה</th>
@@ -467,6 +539,23 @@
       </div>
     </div>
   </section>
+</div>
+
+<div class="modal-overlay" id="addModal">
+  <div class="modal-card">
+    <h3>הוספת איש קשר - <span id="addModalTab"></span></h3>
+    <label class="modal-label" for="addName">שם פרטי</label>
+    <input type="text" class="modal-input" id="addName" placeholder="למשל: דניאל">
+    <label class="modal-label" for="addPhone">טלפון נייד</label>
+    <input type="tel" class="modal-input" id="addPhone" placeholder="למשל: 0521234567">
+    <label class="modal-label" for="addSource">מקור ליד</label>
+    <input type="text" class="modal-input" id="addSource" placeholder="למשל: פייסבוק, המלצה, אתר">
+    <div class="modal-error" id="addError"></div>
+    <div class="modal-actions">
+      <button class="btn" id="addCancelBtn" type="button">ביטול</button>
+      <button class="btn btn-accent" id="addSaveBtn" type="button">הוספה</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -496,9 +585,14 @@
       tabsEl.innerHTML = '<span class="empty-state">לא נמצא אף טאב קמפיין (חסרה עמודת "טלפון נייד")</span>';
       return;
     }
-    names.forEach(function (name, i) {
+
+    // אם הכתובת הגיעה עם ?tab=<שם> (לינק ששותף מטאב ספציפי) - פותחים ישר בו.
+    const requestedTab = new URLSearchParams(window.location.search).get('tab');
+    const startTab = requestedTab && names.indexOf(requestedTab) !== -1 ? requestedTab : names[0];
+
+    names.forEach(function (name) {
       const btn = document.createElement('button');
-      btn.className = 'tab' + (i === 0 ? ' active' : '');
+      btn.className = 'tab' + (name === startTab ? ' active' : '');
       btn.textContent = name;
       btn.addEventListener('click', function () {
         document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
@@ -507,14 +601,14 @@
       });
       tabsEl.appendChild(btn);
     });
-    loadCampaign(names[0]);
+    loadCampaign(startTab);
   }
 
   function loadCampaign(name, silent) {
     currentTabName = name;
     if (!silent) {
       document.getElementById('chartTitle').textContent = 'פילוח סטטוס - ' + name;
-      document.getElementById('tableBody').innerHTML = '<tr><td colspan="6" class="loading-state">טוען נתונים...</td></tr>';
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="loading-state">טוען נתונים...</td></tr>';
     }
     google.script.run.withSuccessHandler(renderCampaign).withFailureHandler(showError).getCampaignData(name);
   }
@@ -577,13 +671,14 @@
   function renderRows(rows) {
     const tbody = document.getElementById('tableBody');
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">לא נמצאו אנשי קשר</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">לא נמצאו אנשי קשר</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(function (r) {
       return '<tr class="' + (r._isNew ? 'row-new' : '') + '">' +
         '<td class="name-cell">' + escapeHtml_(r.name) + '</td>' +
         '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>' +
+        '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>' +
         '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>' +
         '<td class="reply-cell">' + (r.reply ? escapeHtml_(r.reply) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>' +
         '<td>' + pill_(r.callStatus, r.callStatusClass, '—') + '</td>' +
@@ -622,11 +717,11 @@
           String(r.phone || '').toLowerCase().indexOf(q) !== -1;
       });
 
-      const headers = ['שם פרטי', 'טלפון נייד', 'סטטוס', 'תשובת לקוח', 'סטטוס שיחה', 'תוצאות שיחה'];
+      const headers = ['שם פרטי', 'טלפון נייד', 'מקור ליד', 'סטטוס', 'תשובת לקוח', 'סטטוס שיחה', 'תוצאות שיחה'];
       const cell_ = function (v) { return '<td>' + escapeHtml_(v === undefined || v === null ? '' : v) + '</td>'; };
       const headRow = '<tr>' + headers.map(function (h) { return '<th>' + escapeHtml_(h) + '</th>'; }).join('') + '</tr>';
       const bodyRows = rows.map(function (r) {
-        return '<tr>' + [r.name, r.phone, r.status, r.reply, r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
+        return '<tr>' + [r.name, r.phone, r.source, r.status, r.reply, r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
       }).join('');
 
       // "אקסל" אמיתי (xlsx) דורש ספרייה חיצונית שלא ניתן לטעון כאן; טבלת HTML
@@ -647,9 +742,66 @@
     });
   }
 
+  function setupAddContact_() {
+    const modal = document.getElementById('addModal');
+    const nameInput = document.getElementById('addName');
+    const phoneInput = document.getElementById('addPhone');
+    const sourceInput = document.getElementById('addSource');
+    const errorEl = document.getElementById('addError');
+    const saveBtn = document.getElementById('addSaveBtn');
+
+    function openModal() {
+      document.getElementById('addModalTab').textContent = currentTabName || '';
+      nameInput.value = '';
+      phoneInput.value = '';
+      sourceInput.value = '';
+      errorEl.textContent = '';
+      modal.classList.add('show');
+      nameInput.focus();
+    }
+
+    function closeModal() {
+      modal.classList.remove('show');
+    }
+
+    function save() {
+      const name = nameInput.value.trim();
+      const phone = phoneInput.value.trim();
+      const source = sourceInput.value.trim();
+      if (!phone) {
+        errorEl.textContent = 'חובה להזין מספר טלפון';
+        return;
+      }
+      if (!currentTabName) {
+        errorEl.textContent = 'לא נבחר קמפיין';
+        return;
+      }
+      saveBtn.disabled = true;
+      errorEl.textContent = '';
+      google.script.run
+        .withSuccessHandler(function () {
+          saveBtn.disabled = false;
+          closeModal();
+          loadCampaign(currentTabName);
+        })
+        .withFailureHandler(function (err) {
+          saveBtn.disabled = false;
+          errorEl.textContent = 'שגיאה: ' + (err.message || err);
+        })
+        .addContact(currentTabName, name, phone, source);
+    }
+
+    document.getElementById('addContactBtn').addEventListener('click', openModal);
+    document.getElementById('addCancelBtn').addEventListener('click', closeModal);
+    saveBtn.addEventListener('click', save);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+    phoneInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+  }
+
   function setupShare_() {
     document.getElementById('shareBtn').addEventListener('click', function () {
-      const url = window.location.href;
+      const base = window.location.href.split('?')[0];
+      const url = currentTabName ? base + '?tab=' + encodeURIComponent(currentTabName) : base;
       const toast = document.getElementById('copyToast');
       const showToast = function () {
         toast.classList.add('show');
@@ -741,6 +893,7 @@
   loadTabs();
   setupSearch_();
   setupExport_();
+  setupAddContact_();
   setupShare_();
 
   // רענון אוטומטי: כל 30 שניות טוענים מחדש את נתוני הטאב הפעיל (בלי לגעת

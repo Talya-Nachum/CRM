@@ -35,6 +35,7 @@ const DEFAULT_TEMPLATE_ID = '267627';
 
 const PHONE_HEADER = 'טלפון נייד';
 const NAME_HEADER = 'שם פרטי';
+const SOURCE_HEADER = 'מקור ליד';
 const TEMPLATE_HEADER = 'מספר תבנית';
 const STATUS_HEADER = 'סטטוס';
 const REPLY_HEADER = 'תשובת לקוח';
@@ -409,6 +410,41 @@ function getCampaignNames() {
   });
 }
 
+/**
+ * מוסיפה איש קשר חדש לטאב קמפיין, מהדשבורד (בלי לפתוח את הגיליון).
+ * מספר התבנית / מזהה הסוכנת נשארים ריקים בשורה החדשה - הם יורשים
+ * אוטומטית את ברירת המחדל של הטאב (שורה 2) כשמריצים שליחה, בדיוק כמו
+ * שורה שנוספה ידנית. מקור הליד נכתב רק אם יש בטאב עמודת "מקור ליד".
+ */
+function addContact(sheetName, name, phone, source) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet || !isCampaignSheet_(sheet)) {
+    throw new Error('הטאב "' + sheetName + '" לא נמצא או אינו טאב קמפיין');
+  }
+
+  const headers = sheet.getDataRange().getValues()[0];
+  const phoneCol = headers.indexOf(PHONE_HEADER);
+  const nameCol = headers.indexOf(NAME_HEADER);
+  const sourceCol = headers.indexOf(SOURCE_HEADER);
+  if (phoneCol === -1) {
+    throw new Error('לא נמצאה עמודת "' + PHONE_HEADER + '" בטאב הזה');
+  }
+
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) {
+    throw new Error('מספר טלפון לא תקין');
+  }
+
+  const row = new Array(headers.length).fill('');
+  row[phoneCol] = phone;
+  if (nameCol !== -1) row[nameCol] = name || '';
+  if (sourceCol !== -1) row[sourceCol] = source || '';
+
+  sheet.appendRow(row);
+  return { success: true };
+}
+
 function classifyStatus_(value) {
   if (!value) return 'pending';
   if (String(value).indexOf('שגיאה') === 0) return 'bad';
@@ -449,6 +485,7 @@ function getCampaignData(sheetName) {
 
   const phoneCol = headers.indexOf(PHONE_HEADER);
   const nameCol = headers.indexOf(NAME_HEADER);
+  const sourceCol = headers.indexOf(SOURCE_HEADER);
   const statusCol = headers.indexOf(STATUS_HEADER);
   const replyCol = headers.indexOf(REPLY_HEADER);
   const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
@@ -480,6 +517,7 @@ function getCampaignData(sheetName) {
     rows.push({
       name: nameCol !== -1 ? row[nameCol] : '',
       phone: phone,
+      source: sourceCol !== -1 ? row[sourceCol] : '',
       status: status,
       statusClass: classifyStatus_(status),
       reply: reply,
