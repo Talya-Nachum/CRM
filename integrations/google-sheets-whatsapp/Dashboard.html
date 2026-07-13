@@ -1,0 +1,464 @@
+<!--
+  Live campaign dashboard. Served by doGet() in Code.gs at the same /exec
+  URL used for webhooks (GET shows this page, POST still goes to doPost).
+  Pulls real data from the spreadsheet via google.script.run - no data is
+  hardcoded here.
+-->
+<style>
+  :root {
+    --bg: #f2eee6;
+    --surface: #ffffff;
+    --surface-2: #e8e1d3;
+    --border: #d8cfbd;
+    --text: #201d18;
+    --text-muted: #766e5e;
+    --accent: #1d6e77;
+    --accent-soft: #dcecec;
+    --accent-ink: #0f4247;
+    --good: #2f8f5b;
+    --good-soft: #e2f2e8;
+    --bad: #c4433a;
+    --bad-soft: #fbe6e4;
+    --pending: #8a8272;
+    --pending-soft: #ece7db;
+    --shadow: 0 1px 2px rgba(32,29,24,0.06), 0 8px 24px -12px rgba(32,29,24,0.18);
+    --radius: 14px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191a;
+      --surface: #1f2224;
+      --surface-2: #262a2c;
+      --border: #34393c;
+      --text: #ece9e2;
+      --text-muted: #9a978e;
+      --accent: #4fb8c2;
+      --accent-soft: #1d3538;
+      --accent-ink: #bdeaee;
+      --good: #58b782;
+      --good-soft: #1c3226;
+      --bad: #e2685e;
+      --bad-soft: #3a2220;
+      --pending: #a9a397;
+      --pending-soft: #2c2a24;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.6);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Arial Hebrew", "Rubik", Arial, sans-serif;
+    direction: rtl;
+    line-height: 1.5;
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px 24px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  header.top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  header.top h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  header.top .sub {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .tab {
+    flex: 0 0 auto;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+  }
+
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .stat .label {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+
+  .stat .value {
+    font-size: 30px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat .value.good { color: var(--good); }
+  .stat .value.bad { color: var(--bad); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  @media (max-width: 820px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px 20px;
+  }
+
+  .card h2 {
+    margin: 0 0 14px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .chart-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .legend {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .legend-row .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+  }
+
+  .legend-row .name { flex: 1; color: var(--text-muted); }
+  .legend-row .n { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .table-scroll { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    min-width: 640px;
+  }
+
+  thead th {
+    text-align: right;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 700;
+    padding: 0 10px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tbody td {
+    padding: 11px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-2); }
+
+  .name-cell { font-weight: 600; }
+  .phone-cell { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.pending { background: var(--pending-soft); color: var(--pending); }
+
+  .reply-cell {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-muted);
+  }
+
+  .empty-state, .loading-state {
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 24px 0;
+    text-align: center;
+  }
+</style>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1 id="appTitle">ניהול קמפיינים</h1>
+      <div class="sub">וואטסאפ + שיחות קוליות, לפי טאב = קמפיין</div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" aria-label="בחירת קמפיין">
+    <span class="loading-state">טוען קמפיינים...</span>
+  </nav>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="layout">
+    <div class="card chart-wrap">
+      <h2 style="align-self:flex-start;" id="chartTitle">פילוח סטטוס</h2>
+      <canvas id="donut" width="220" height="220" role="img"></canvas>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="card">
+      <h2>אנשי קשר</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>שם פרטי</th>
+              <th>טלפון נייד</th>
+              <th>סטטוס</th>
+              <th>תשובת לקוח</th>
+              <th>סטטוס שיחה</th>
+              <th>תוצאות שיחה</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  let currentData = null;
+
+  function loadTabs() {
+    google.script.run.withSuccessHandler(renderTabs).withFailureHandler(showError).getCampaignNames();
+  }
+
+  function renderTabs(names) {
+    const tabsEl = document.getElementById('tabs');
+    tabsEl.innerHTML = '';
+    if (!names || !names.length) {
+      tabsEl.innerHTML = '<span class="empty-state">לא נמצא אף טאב קמפיין (חסרה עמודת "טלפון נייד")</span>';
+      return;
+    }
+    names.forEach(function (name, i) {
+      const btn = document.createElement('button');
+      btn.className = 'tab' + (i === 0 ? ' active' : '');
+      btn.textContent = name;
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+        btn.classList.add('active');
+        loadCampaign(name);
+      });
+      tabsEl.appendChild(btn);
+    });
+    loadCampaign(names[0]);
+  }
+
+  function loadCampaign(name) {
+    document.getElementById('chartTitle').textContent = 'פילוח סטטוס - ' + name;
+    document.getElementById('tableBody').innerHTML = '<tr><td colspan="6" class="loading-state">טוען נתונים...</td></tr>';
+    google.script.run.withSuccessHandler(renderCampaign).withFailureHandler(showError).getCampaignData(name);
+  }
+
+  function renderCampaign(data) {
+    currentData = data;
+    if (!data) return;
+
+    const stats = [
+      { label: 'סה"כ אנשי קשר', value: data.total },
+      { label: 'הודעות וואטסאפ נשלחו', value: data.sent, cls: 'good' },
+      { label: 'תגובות התקבלו', value: data.replies },
+      { label: 'שיחות בוצעו', value: data.callsSent },
+      { label: 'שגיאות שליחה', value: data.errors, cls: 'bad' }
+    ];
+    document.getElementById('stats').innerHTML = stats.map(function (s) {
+      return '<div class="stat"><span class="label">' + s.label + '</span>' +
+        '<span class="value ' + (s.cls || '') + '">' + s.value + '</span></div>';
+    }).join('');
+
+    document.getElementById('legend').innerHTML =
+      '<div class="legend-row"><span class="swatch" style="background:var(--good)"></span><span class="name">נשלח וואטסאפ</span><span class="n">' + data.sent + '</span></div>' +
+      '<div class="legend-row"><span class="swatch" style="background:var(--pending)"></span><span class="name">ממתין לשליחה</span><span class="n">' + data.pending + '</span></div>' +
+      '<div class="legend-row"><span class="swatch" style="background:var(--bad)"></span><span class="name">שגיאה</span><span class="n">' + data.errors + '</span></div>';
+
+    drawDonut(data.sent, data.pending, data.errors);
+
+    const tbody = document.getElementById('tableBody');
+    if (!data.rows.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">אין עדיין אנשי קשר בטאב הזה</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.rows.map(function (r) {
+      return '<tr>' +
+        '<td class="name-cell">' + escapeHtml_(r.name) + '</td>' +
+        '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>' +
+        '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>' +
+        '<td class="reply-cell">' + (r.reply ? escapeHtml_(r.reply) : '—') + '</td>' +
+        '<td>' + pill_(r.callStatus, r.callStatusClass, '—') + '</td>' +
+        '<td class="reply-cell">' + (r.callResult ? escapeHtml_(r.callResult) : '—') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function pill_(value, cls, emptyLabel) {
+    const label = value ? escapeHtml_(value) : emptyLabel;
+    return '<span class="pill ' + cls + '">' + label + '</span>';
+  }
+
+  function escapeHtml_(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function showError(err) {
+    document.getElementById('tabs').innerHTML = '<span class="empty-state">שגיאה בטעינת הנתונים: ' + escapeHtml_(err.message || err) + '</span>';
+  }
+
+  function drawDonut(sent, pending, errors) {
+    const canvas = document.getElementById('donut');
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const size = 220;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+
+    const styles = getComputedStyle(document.documentElement);
+    const good = styles.getPropertyValue('--good').trim();
+    const pendingColor = styles.getPropertyValue('--pending').trim();
+    const bad = styles.getPropertyValue('--bad').trim();
+    const text = styles.getPropertyValue('--text').trim();
+    const textMuted = styles.getPropertyValue('--text-muted').trim();
+
+    const data = [
+      { v: sent, c: good },
+      { v: pending, c: pendingColor },
+      { v: errors, c: bad }
+    ];
+    const total = data.reduce(function (s, d) { return s + d.v; }, 0) || 1;
+
+    const cx = size / 2, cy = size / 2, rOuter = 92, rInner = 60;
+    let start = -Math.PI / 2;
+
+    ctx.clearRect(0, 0, size, size);
+
+    data.forEach(function (seg) {
+      if (!seg.v) return;
+      const angle = (seg.v / total) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, rOuter, start, start + angle);
+      ctx.closePath();
+      ctx.fillStyle = seg.c;
+      ctx.fill();
+      start += angle;
+    });
+
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(cx, cy, rInner, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = text;
+    ctx.font = '800 26px "Segoe UI", Arial, sans-serif';
+    ctx.fillText(Math.round((sent / total) * 100) + '%', cx, cy - 6);
+    ctx.fillStyle = textMuted;
+    ctx.font = '600 11px "Segoe UI", Arial, sans-serif';
+    ctx.fillText('נשלחו בהצלחה', cx, cy + 16);
+  }
+
+  loadTabs();
+</script>

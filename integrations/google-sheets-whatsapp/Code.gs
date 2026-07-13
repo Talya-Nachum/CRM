@@ -378,3 +378,84 @@ function handleNlpearlWebhook_(ss, payload) {
     }
   }
 }
+
+/**
+ * Visual dashboard (Dashboard.html), served at the same /exec URL via GET
+ * (doPost above keeps handling webhook POSTs on that same URL).
+ */
+function doGet(e) {
+  return HtmlService.createHtmlOutputFromFile('Dashboard')
+    .setTitle('ניהול קמפיינים')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function getCampaignNames() {
+  return getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet()).map(function (sheet) {
+    return sheet.getName();
+  });
+}
+
+function classifyStatus_(value) {
+  if (!value) return 'pending';
+  if (String(value).indexOf('שגיאה') === 0) return 'bad';
+  return 'good';
+}
+
+function getCampaignData(sheetName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return null;
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  const phoneCol = headers.indexOf(PHONE_HEADER);
+  const nameCol = headers.indexOf(NAME_HEADER);
+  const statusCol = headers.indexOf(STATUS_HEADER);
+  const replyCol = headers.indexOf(REPLY_HEADER);
+  const callStatusCol = headers.indexOf(CALL_STATUS_HEADER);
+  const callResultCol = headers.indexOf(CALL_RESULT_HEADER);
+
+  let sent = 0, errors = 0, replies = 0, callsSent = 0;
+  const rows = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const phone = phoneCol !== -1 ? row[phoneCol] : '';
+    if (!phone) continue;
+
+    const status = statusCol !== -1 ? String(row[statusCol] || '') : '';
+    const reply = replyCol !== -1 ? row[replyCol] : '';
+    const callStatus = callStatusCol !== -1 ? String(row[callStatusCol] || '') : '';
+    const callResult = callResultCol !== -1 ? row[callResultCol] : '';
+
+    if (status === SENT_STATUS) sent++;
+    if (status.indexOf('שגיאה') === 0) errors++;
+    if (reply) replies++;
+    if (callStatus === CALL_SENT_STATUS) callsSent++;
+
+    rows.push({
+      name: nameCol !== -1 ? row[nameCol] : '',
+      phone: phone,
+      status: status,
+      statusClass: classifyStatus_(status),
+      reply: reply,
+      callStatus: callStatus,
+      callStatusClass: classifyStatus_(callStatus),
+      callResult: callResult
+    });
+  }
+
+  const total = rows.length;
+  const pending = Math.max(total - sent - errors, 0);
+
+  return {
+    total: total,
+    sent: sent,
+    errors: errors,
+    replies: replies,
+    callsSent: callsSent,
+    pending: pending,
+    rows: rows
+  };
+}
