@@ -1,36 +1,35 @@
 /**
- * Google Sheets <-> InforU WhatsApp + NLPearl voice call integration.
+ * אינטגרציה: Google Sheets <-> וואטסאפ (InforU) + שיחות קוליות (NLPearl).
  *
- * Multi-campaign model: every tab (sheet) whose header row includes
- * טלפון נייד is treated as a separate campaign. The template id / outbound
- * (Pearl) id for a tab is taken from its own row 2 (first data row) and
- * applied to every row in that tab, unless a specific row overrides it.
- * To add a new campaign: duplicate a tab, clear the data rows, set the
- * template/campaign id once in row 2, and add contacts - no code changes,
- * no redeploy.
+ * מודל רב-קמפיינים: כל טאב (גיליון) שיש בעמודת הכותרת שלו "טלפון נייד"
+ * נחשב קמפיין נפרד. מספר התבנית / מזהה הסוכנת של הטאב נלקח משורה 2
+ * (השורה הראשונה עם נתונים) וחל על כל שאר השורות בטאב, אלא אם שורה
+ * ספציפית מגדירה ערך אחר משלה.
+ * להוספת קמפיין חדש: לשכפל טאב, לנקות את שורות הנתונים, למלא בשורה 2
+ * את מספר התבנית/מזהה הקמפיין הרצויים, ולהוסיף אנשי קשר - בלי לגעת בקוד.
  *
- * Setup:
- * 1. Extensions > Apps Script, paste this file as Code.gs.
- * 2. Project Settings > Script Properties, add:
- *      INFORU_USERNAME    = <the InforU API username>
- *      INFORU_TOKEN       = <the InforU API token>
- *      NLPEARL_ACCOUNT_ID = <NLPearl account id, from platform.nlpearl.ai/app/settings/api>
- *      NLPEARL_SECRET_KEY = <NLPearl API secret key, same settings page>
- * 3. Run sendMessages / startCalls (or attach a time-based trigger) to process
- *    any row whose respective status column is still empty, across every
- *    campaign tab.
+ * התקנה:
+ * 1. Extensions > Apps Script, להדביק את הקובץ הזה בתור Code.gs.
+ * 2. Project Settings > Script Properties, להוסיף:
+ *      INFORU_USERNAME    = שם המשתמש של אינפוריו
+ *      INFORU_TOKEN       = הטוקן של אינפוריו
+ *      NLPEARL_ACCOUNT_ID = מזהה החשבון ב-NLPearl (מתוך platform.nlpearl.ai/app/settings/api)
+ *      NLPEARL_SECRET_KEY = מפתח ה-API הסודי של NLPearl, מאותו עמוד הגדרות
+ * 3. להריץ sendMessages / startCalls (או לחבר טריגר זמן) כדי לעבד כל שורה
+ *    שעדיין אין לה סטטוס, בכל טאבי הקמפיינים. אפשר גם להשתמש בתפריט
+ *    "קמפיינים" בגיליון כדי להריץ טאב בודד בלבד.
  * 4. Deploy > Manage deployments > Web app: Execute as "Me", Who has access "Anyone"
- *    (not "Anyone with Google account" - external servers have no Google login).
- *    Give the resulting /exec URL (or the StableRelay URL in front of it) to
- *    InforU as their reply webhook, and to NLPearl as both the Lead Webhook
- *    and Call Webhook URL (Pearl settings > Overview > Webhooks).
+ *    (לא "Anyone with Google account" - לשרתים חיצוניים אין חשבון גוגל).
+ *    את כתובת ה-/exec שמתקבלת (או כתובת ה-StableRelay שמולה) לשלוח גם
+ *    לאינפוריו כ-webhook לתשובות, וגם ל-NLPearl כ-Lead Webhook וכ-Call Webhook
+ *    (הגדרות הסוכנת > Overview > Webhooks).
  *
- * Required headers per campaign tab: טלפון נייד, שם פרטי, מספר תבנית, סטטוס,
- * תשובת לקוח, תאריך תשובה, מזהה קמפיין, סטטוס שיחה, מזהה ליד NLPearl,
+ * כותרות עמודות נדרשות בכל טאב קמפיין: טלפון נייד, שם פרטי, מספר תבנית,
+ * סטטוס, תשובת לקוח, תאריך תשובה, מזהה קמפיין, סטטוס שיחה, מזהה ליד NLPearl,
  * תוצאות שיחה, תאריך שיחה.
  */
 
-// --- InforU (WhatsApp) ---
+// --- אינפוריו (וואטסאפ) ---
 const INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
 const DEFAULT_TEMPLATE_ID = '267627';
 
@@ -42,9 +41,9 @@ const REPLY_HEADER = 'תשובת לקוח';
 const REPLY_DATE_HEADER = 'תאריך תשובה';
 const SENT_STATUS = 'נשלח וואטסאפ';
 
-// --- NLPearl (voice calls) ---
+// --- NLPearl (שיחות קוליות) ---
 const NLPEARL_API_BASE = 'https://api.nlpearl.ai/v2/Outbound/';
-const DEFAULT_OUTBOUND_ID = '6a27be5ae83373643a10ae34'; // Pearl id (v2 path param), not the outbound campaign id
+const DEFAULT_OUTBOUND_ID = '6a27be5ae83373643a10ae34'; // מזהה ה-Pearl (הפרמטר שב-v2), לא מזהה קמפיין ה-Outbound
 
 const CAMPAIGN_HEADER = 'מזהה קמפיין';
 const CALL_STATUS_HEADER = 'סטטוס שיחה';
@@ -53,8 +52,8 @@ const CALL_RESULT_HEADER = 'תוצאות שיחה';
 const CALL_DATE_HEADER = 'תאריך שיחה';
 const CALL_SENT_STATUS = 'שיחה נשלחה';
 
-// Tabs that are utility/log tabs, never treated as a campaign even if they
-// happen to contain a טלפון נייד-like column.
+// טאבים שהם עזר/לוג בלבד, לעולם לא נחשבים קמפיין גם אם במקרה יש בהם
+// עמודה שנראית כמו טלפון נייד.
 const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns'];
 
 function getInforuAuthHeader_() {
@@ -72,9 +71,8 @@ function getNlpearlAuthHeader_() {
 }
 
 /**
- * Custom "קמפיינים" menu, so a single tab can be run on its own instead of
- * always running every campaign tab at once. Appears automatically whenever
- * the spreadsheet is opened (or reloaded).
+ * תפריט "קמפיינים" מותאם אישית - כדי שאפשר יהיה להריץ טאב בודד במקום
+ * תמיד להריץ את כל טאבי הקמפיינים ביחד. מופיע אוטומטית בכל פתיחה של הגיליון.
  */
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -116,16 +114,16 @@ function startCallsActiveTab() {
 }
 
 /**
- * Every tab whose header row includes טלפון נייד is a campaign tab.
+ * כל טאב שבשורת הכותרות שלו יש עמודת "טלפון נייד" נחשב טאב קמפיין.
  */
 function getCampaignSheets_(ss) {
   return ss.getSheets().filter(isCampaignSheet_);
 }
 
 /**
- * Compares phone numbers by their last 9 digits, so "052-7810099",
- * "0527810099" and "+972527810099" (all the same Israeli number in
- * different formats) are recognized as equal.
+ * משווה מספרי טלפון לפי 9 הספרות האחרונות, כך ש-"052-7810099",
+ * "0527810099" ו-"+972527810099" (אותו מספר ישראלי בפורמטים שונים)
+ * מזוהים כזהים.
  */
 function phoneSuffix_(phone) {
   const digits = String(phone || '').replace(/\D/g, '');
@@ -133,10 +131,10 @@ function phoneSuffix_(phone) {
 }
 
 /**
- * One-off helper: lists NLPearl outbound campaigns (with their real
- * outboundId, distinct from the Pearl/agent id) into a "NLPearlCampaigns"
- * tab, since the Pearl id shown in the platform URL is NOT the outboundId
- * the Make Call API expects.
+ * כלי עזר חד-פעמי: מציג את כל קמפייני ה-Outbound של NLPearl (עם ה-
+ * outboundId האמיתי שלהם, שונה ממזהה ה-Pearl/הסוכנת) בטאב "NLPearlCampaigns",
+ * כי מזהה ה-Pearl שמופיע בכתובת ה-URL בפלטפורמה הוא לא ה-outboundId
+ * שממשק Make Call מצפה לו.
  */
 function listOutboundCampaigns() {
   const response = UrlFetchApp.fetch('https://api.nlpearl.ai/v1/Outbound', {
@@ -153,8 +151,8 @@ function listOutboundCampaigns() {
 }
 
 /**
- * One-off helper: checks a specific call's real status directly via GET.
- * Paste a call id into CALL_ID_TO_CHECK before running.
+ * כלי עזר חד-פעמי: בודק את הסטטוס האמיתי של שיחה ספציפית ישירות מול NLPearl.
+ * להדביק מזהה שיחה בתוך CALL_ID_TO_CHECK לפני ההרצה.
  */
 function checkCallStatus() {
   const CALL_ID_TO_CHECK = '6a53311af56b3a971e406b73';
@@ -185,7 +183,7 @@ function sendMessagesInSheet_(sheet) {
 
   if (phoneCol === -1 || nameCol === -1 || statusCol === -1) return;
 
-  // Tab-wide default: whatever is in row 2 (first data row) of this tab.
+  // ברירת מחדל לכל הטאב: מה שכתוב בשורה 2 (השורה הראשונה עם נתונים) של הטאב הזה.
   const sheetTemplateId = (templateCol !== -1 && data[1] && data[1][templateCol])
     ? String(data[1][templateCol]) : DEFAULT_TEMPLATE_ID;
 
@@ -242,7 +240,7 @@ function startCallsInSheet_(sheet) {
 
   if (phoneCol === -1 || callStatusCol === -1) return;
 
-  // Tab-wide default: whatever is in row 2 (first data row) of this tab.
+  // ברירת מחדל לכל הטאב: מה שכתוב בשורה 2 (השורה הראשונה עם נתונים) של הטאב הזה.
   const sheetOutboundId = (campaignCol !== -1 && data[1] && data[1][campaignCol])
     ? String(data[1][campaignCol]) : DEFAULT_OUTBOUND_ID;
 
@@ -282,7 +280,7 @@ function startCallsInSheet_(sheet) {
         const parsed = JSON.parse(responseText);
         leadId = parsed.leadId || parsed.id || responseText;
       } catch (err) {
-        // response was plain text (the lead id itself) - use as-is
+        // התשובה הייתה טקסט רגיל (מזהה הליד עצמו) - להשתמש בו כמו שהוא
       }
       sheet.getRange(rowIndex, leadIdCol + 1).setValue(leadId);
     }
@@ -290,10 +288,10 @@ function startCallsInSheet_(sheet) {
 }
 
 /**
- * Routes both webhook sources across every campaign tab:
- * - InforU posts: { "Data": [ { "Value": "<phone>", "Message": "<reply text>", ... } ] }
- * - NLPearl posts a Lead/Call object directly (has "pearlId").
- * Every call is also appended raw to a WebhookLog tab for troubleshooting.
+ * מנתב שתי מקורות ה-Webhook, על פני כל טאבי הקמפיינים:
+ * - אינפוריו שולח: { "Data": [ { "Value": "<טלפון>", "Message": "<טקסט התשובה>", ... } ] }
+ * - NLPearl שולח אובייקט Lead/Call ישירות (יש בו "pearlId").
+ * כל קריאה נכנסת נרשמת גם גולמית בטאב WebhookLog לצורך דיבוג.
  */
 function doPost(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -346,10 +344,9 @@ function handleInforuWebhook_(ss, payload) {
 }
 
 function handleNlpearlWebhook_(ss, payload) {
-  // Only handle Call Webhook events (identified by "to") for the result column -
-  // Lead Webhook events (identified by "phoneNumber" instead) don't carry the
-  // human-readable outcome (tags/summary) and would overwrite a good result
-  // with less useful raw data.
+  // מטפלים רק באירועי Call Webhook (מזוהים לפי "to") לצורך עמודת התוצאה -
+  // אירועי Lead Webhook (מזוהים לפי "phoneNumber" במקום) לא נושאים את
+  // התוצאה הקריאה (tags/summary) ורק היו דורסים תוצאה טובה בנתונים גולמיים פחות שימושיים.
   if (!payload.to) return;
 
   const incomingPhone = phoneSuffix_(payload.to);
@@ -380,8 +377,8 @@ function handleNlpearlWebhook_(ss, payload) {
 }
 
 /**
- * Visual dashboard (Dashboard.html), served at the same /exec URL via GET
- * (doPost above keeps handling webhook POSTs on that same URL).
+ * הדשבורד החזותי (Dashboard.html), מוגש באותה כתובת /exec דרך GET
+ * (doPost למעלה ממשיך לטפל בבקשות POST של ה-Webhook באותה כתובת בדיוק).
  */
 function doGet(e) {
   return HtmlService.createHtmlOutputFromFile('Dashboard')
