@@ -72,14 +72,54 @@ function getNlpearlAuthHeader_() {
 }
 
 /**
+ * Custom "קמפיינים" menu, so a single tab can be run on its own instead of
+ * always running every campaign tab at once. Appears automatically whenever
+ * the spreadsheet is opened (or reloaded).
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('קמפיינים')
+    .addItem('📤 שלח הודעות וואטסאפ - לטאב הנוכחי בלבד', 'sendMessagesActiveTab')
+    .addItem('📞 התחל שיחות - לטאב הנוכחי בלבד', 'startCallsActiveTab')
+    .addSeparator()
+    .addItem('📤 שלח הודעות וואטסאפ - לכל הקמפיינים', 'sendMessages')
+    .addItem('📞 התחל שיחות - לכל הקמפיינים', 'startCalls')
+    .addToUi();
+}
+
+function isCampaignSheet_(sheet) {
+  if (NON_CAMPAIGN_SHEETS_.indexOf(sheet.getName()) !== -1) return false;
+  const headers = sheet.getDataRange().getValues()[0] || [];
+  return headers.indexOf(PHONE_HEADER) !== -1;
+}
+
+function sendMessagesActiveTab() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const ui = SpreadsheetApp.getUi();
+  if (!isCampaignSheet_(sheet)) {
+    ui.alert('הטאב הנוכחי ("' + sheet.getName() + '") אינו טאב קמפיין - חסרה בו עמודת "טלפון נייד". עברי לטאב הקמפיין הרצוי ונסי שוב.');
+    return;
+  }
+  sendMessagesInSheet_(sheet);
+  ui.alert('הודעות וואטסאפ נשלחו לטאב "' + sheet.getName() + '".');
+}
+
+function startCallsActiveTab() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const ui = SpreadsheetApp.getUi();
+  if (!isCampaignSheet_(sheet)) {
+    ui.alert('הטאב הנוכחי ("' + sheet.getName() + '") אינו טאב קמפיין - חסרה בו עמודת "טלפון נייד". עברי לטאב הקמפיין הרצוי ונסי שוב.');
+    return;
+  }
+  startCallsInSheet_(sheet);
+  ui.alert('שיחות הותחלו לטאב "' + sheet.getName() + '".');
+}
+
+/**
  * Every tab whose header row includes טלפון נייד is a campaign tab.
  */
 function getCampaignSheets_(ss) {
-  return ss.getSheets().filter(function (sheet) {
-    if (NON_CAMPAIGN_SHEETS_.indexOf(sheet.getName()) !== -1) return false;
-    const headers = sheet.getDataRange().getValues()[0] || [];
-    return headers.indexOf(PHONE_HEADER) !== -1;
-  });
+  return ss.getSheets().filter(isCampaignSheet_);
 }
 
 /**
