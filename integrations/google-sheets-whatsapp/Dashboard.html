@@ -237,10 +237,16 @@
     font-size: 26px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .stat .value.good { color: var(--good); }
   .stat .value.bad { color: var(--bad); }
+
+  .stat .value.small {
+    font-size: 15px;
+    letter-spacing: -0.01em;
+  }
 
   .layout {
     display: grid;
@@ -442,7 +448,7 @@
       <h2>אנשי קשר</h2>
       <div class="table-toolbar">
         <input type="text" class="search-input" id="searchInput" placeholder="חיפוש לפי שם או טלפון...">
-        <button class="btn" id="exportBtn" type="button">📥 ייצוא ל-CSV</button>
+        <button class="btn" id="exportBtn" type="button">📥 ייצוא לאקסל</button>
       </div>
       <div class="table-scroll">
         <table>
@@ -528,8 +534,8 @@
       { label: 'תגובות התקבלו', value: data.replies, icon: 'reply', fg: 'var(--accent)', bg: 'var(--accent-soft)' },
       { label: 'שיחות בוצעו (סוכנת AI)', value: data.callsSent, icon: 'bot', fg: 'var(--pending)', bg: 'var(--pending-soft)' },
       { label: 'שגיאות שליחה', value: data.errors, cls: 'bad', icon: 'alert', fg: 'var(--bad)', bg: 'var(--bad-soft)' },
-      { label: 'פעילות היום', value: data.activityToday, icon: 'bolt', fg: 'var(--accent)', bg: 'var(--accent-soft)' },
-      { label: 'ימי פעילות', value: daysLabel, icon: 'calendar', fg: 'var(--text-muted)', bg: 'var(--surface-2)' }
+      { label: 'פעילות היום', value: data.activityToday || 0, icon: 'bolt', fg: 'var(--accent)', bg: 'var(--accent-soft)' },
+      { label: 'ימי פעילות', value: daysLabel, cls: 'small', icon: 'calendar', fg: 'var(--text-muted)', bg: 'var(--surface-2)' }
     ];
     document.getElementById('stats').innerHTML = stats.map(function (s) {
       return '<div class="stat">' +
@@ -617,21 +623,23 @@
       });
 
       const headers = ['שם פרטי', 'טלפון נייד', 'סטטוס', 'תשובת לקוח', 'סטטוס שיחה', 'תוצאות שיחה'];
-      const csvRows = [headers].concat(rows.map(function (r) {
-        return [r.name, r.phone, r.status, r.reply, r.callStatus, r.callResult];
-      }));
-      const csv = csvRows.map(function (row) {
-        return row.map(function (cell) {
-          const v = String(cell === undefined || cell === null ? '' : cell).replace(/"/g, '""');
-          return '"' + v + '"';
-        }).join(',');
-      }).join('\r\n');
+      const cell_ = function (v) { return '<td>' + escapeHtml_(v === undefined || v === null ? '' : v) + '</td>'; };
+      const headRow = '<tr>' + headers.map(function (h) { return '<th>' + escapeHtml_(h) + '</th>'; }).join('') + '</tr>';
+      const bodyRows = rows.map(function (r) {
+        return '<tr>' + [r.name, r.phone, r.status, r.reply, r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
+      }).join('');
 
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      // "אקסל" אמיתי (xlsx) דורש ספרייה חיצונית שלא ניתן לטעון כאן; טבלת HTML
+      // עם סיומת .xls נפתחת ישירות באקסל כגליון אלקטרוני רגיל, כולל עברית.
+      const html = '<html><head><meta charset="UTF-8"></head><body dir="rtl">' +
+        '<table border="1"><thead>' + headRow + '</thead><tbody>' + bodyRows + '</tbody></table>' +
+        '</body></html>';
+
+      const blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = (currentTabName || 'קמפיין') + '.csv';
+      a.download = (currentTabName || 'קמפיין') + '.xls';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
