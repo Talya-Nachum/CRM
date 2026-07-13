@@ -35,6 +35,9 @@ const DEFAULT_TEMPLATE_ID = '267627';
 
 const PHONE_HEADER = 'טלפון נייד';
 const NAME_HEADER = 'שם פרטי';
+const COMPANY_HEADER = 'שם חברה';
+const TITLE_HEADER = 'תפקיד';
+const EMAIL_HEADER = 'אימייל';
 const SOURCE_HEADER = 'מקור ליד';
 const TEMPLATE_HEADER = 'מספר תבנית';
 const STATUS_HEADER = 'סטטוס';
@@ -397,9 +400,15 @@ function handleNlpearlWebhook_(ss, payload) {
 /**
  * הדשבורד החזותי (Dashboard.html), מוגש באותה כתובת /exec דרך GET
  * (doPost למעלה ממשיך לטפל בבקשות POST של ה-Webhook באותה כתובת בדיוק).
+ * משתמשים בתבנית (לא בקובץ סטטי) כדי להזריק את כתובת ה-/exec האמיתית -
+ * הדף עצמו רץ בתוך iframe מבודד בדומיין אחר (googleusercontent.com),
+ * כך ש-window.location.href בצד הלקוח לא נותן את הכתובת הציבורית הנכונה
+ * לשיתוף.
  */
 function doGet(e) {
-  return HtmlService.createHtmlOutputFromFile('Dashboard')
+  const template = HtmlService.createTemplateFromFile('Dashboard');
+  template.baseUrl = ScriptApp.getService().getUrl();
+  return template.evaluate()
     .setTitle('ניהול קמפיינים')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -412,11 +421,13 @@ function getCampaignNames() {
 
 /**
  * מוסיפה איש קשר חדש לטאב קמפיין, מהדשבורד (בלי לפתוח את הגיליון).
+ * fields = { name, phone, company, title, email, source } - כל שדה נכתב
+ * רק אם יש בטאב עמודה מתאימה לו (אם אין, פשוט מתעלמים ממנו).
  * מספר התבנית / מזהה הסוכנת נשארים ריקים בשורה החדשה - הם יורשים
  * אוטומטית את ברירת המחדל של הטאב (שורה 2) כשמריצים שליחה, בדיוק כמו
- * שורה שנוספה ידנית. מקור הליד נכתב רק אם יש בטאב עמודת "מקור ליד".
+ * שורה שנוספה ידנית.
  */
-function addContact(sheetName, name, phone, source) {
+function addContact(sheetName, fields) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet || !isCampaignSheet_(sheet)) {
@@ -425,21 +436,29 @@ function addContact(sheetName, name, phone, source) {
 
   const headers = sheet.getDataRange().getValues()[0];
   const phoneCol = headers.indexOf(PHONE_HEADER);
-  const nameCol = headers.indexOf(NAME_HEADER);
-  const sourceCol = headers.indexOf(SOURCE_HEADER);
   if (phoneCol === -1) {
     throw new Error('לא נמצאה עמודת "' + PHONE_HEADER + '" בטאב הזה');
   }
 
-  const digits = String(phone || '').replace(/\D/g, '');
+  const digits = String((fields && fields.phone) || '').replace(/\D/g, '');
   if (!digits) {
     throw new Error('מספר טלפון לא תקין');
   }
 
+  const columnByField = {
+    name: NAME_HEADER,
+    company: COMPANY_HEADER,
+    title: TITLE_HEADER,
+    email: EMAIL_HEADER,
+    source: SOURCE_HEADER
+  };
+
   const row = new Array(headers.length).fill('');
-  row[phoneCol] = phone;
-  if (nameCol !== -1) row[nameCol] = name || '';
-  if (sourceCol !== -1) row[sourceCol] = source || '';
+  row[phoneCol] = fields.phone;
+  Object.keys(columnByField).forEach(function (key) {
+    const col = headers.indexOf(columnByField[key]);
+    if (col !== -1) row[col] = (fields && fields[key]) || '';
+  });
 
   sheet.appendRow(row);
   return { success: true };
@@ -485,6 +504,9 @@ function getCampaignData(sheetName) {
 
   const phoneCol = headers.indexOf(PHONE_HEADER);
   const nameCol = headers.indexOf(NAME_HEADER);
+  const companyCol = headers.indexOf(COMPANY_HEADER);
+  const titleCol = headers.indexOf(TITLE_HEADER);
+  const emailCol = headers.indexOf(EMAIL_HEADER);
   const sourceCol = headers.indexOf(SOURCE_HEADER);
   const statusCol = headers.indexOf(STATUS_HEADER);
   const replyCol = headers.indexOf(REPLY_HEADER);
@@ -517,6 +539,9 @@ function getCampaignData(sheetName) {
     rows.push({
       name: nameCol !== -1 ? row[nameCol] : '',
       phone: phone,
+      company: companyCol !== -1 ? row[companyCol] : '',
+      title: titleCol !== -1 ? row[titleCol] : '',
+      email: emailCol !== -1 ? row[emailCol] : '',
       source: sourceCol !== -1 ? row[sourceCol] : '',
       status: status,
       statusClass: classifyStatus_(status),

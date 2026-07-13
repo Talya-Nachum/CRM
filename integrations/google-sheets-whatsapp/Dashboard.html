@@ -435,6 +435,8 @@
     padding: 22px 24px;
     width: 100%;
     max-width: 360px;
+    max-height: 90vh;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -525,8 +527,11 @@
         <table>
           <thead>
             <tr>
-              <th>שם פרטי</th>
+              <th>שם חברה</th>
+              <th>שם איש קשר</th>
+              <th>תפקיד</th>
               <th>טלפון נייד</th>
+              <th>אימייל</th>
               <th>מקור ליד</th>
               <th>סטטוס</th>
               <th>תשובת לקוח</th>
@@ -544,10 +549,16 @@
 <div class="modal-overlay" id="addModal">
   <div class="modal-card">
     <h3>הוספת איש קשר - <span id="addModalTab"></span></h3>
-    <label class="modal-label" for="addName">שם פרטי</label>
+    <label class="modal-label" for="addCompany">שם חברה</label>
+    <input type="text" class="modal-input" id="addCompany" placeholder="למשל: מיטוב מכירות">
+    <label class="modal-label" for="addName">שם איש קשר</label>
     <input type="text" class="modal-input" id="addName" placeholder="למשל: דניאל">
+    <label class="modal-label" for="addTitle">תפקיד</label>
+    <input type="text" class="modal-input" id="addTitle" placeholder="למשל: מנהל שיווק">
     <label class="modal-label" for="addPhone">טלפון נייד</label>
     <input type="tel" class="modal-input" id="addPhone" placeholder="למשל: 0521234567">
+    <label class="modal-label" for="addEmail">אימייל</label>
+    <input type="email" class="modal-input" id="addEmail" placeholder="למשל: daniel@example.com">
     <label class="modal-label" for="addSource">מקור ליד</label>
     <input type="text" class="modal-input" id="addSource" placeholder="למשל: פייסבוק, המלצה, אתר">
     <div class="modal-error" id="addError"></div>
@@ -559,6 +570,10 @@
 </div>
 
 <script>
+  // הכתובת הציבורית האמיתית (/exec), מוזרקת מהשרת - לא סומכים על
+  // window.location.href כי הדף רץ בתוך iframe מבודד בדומיין אחר.
+  const BASE_URL = '<?!= baseUrl ?>';
+
   let currentData = null;
   let currentTabName = null;
   let rowSnapshots = {}; // { tabName: { phone: {reply, callResult} } } - לזיהוי "תגובה חדשה"
@@ -608,7 +623,7 @@
     currentTabName = name;
     if (!silent) {
       document.getElementById('chartTitle').textContent = 'פילוח סטטוס - ' + name;
-      document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="loading-state">טוען נתונים...</td></tr>';
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="loading-state">טוען נתונים...</td></tr>';
     }
     google.script.run.withSuccessHandler(renderCampaign).withFailureHandler(showError).getCampaignData(name);
   }
@@ -671,13 +686,16 @@
   function renderRows(rows) {
     const tbody = document.getElementById('tableBody');
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">לא נמצאו אנשי קשר</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="empty-state">לא נמצאו אנשי קשר</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(function (r) {
       return '<tr class="' + (r._isNew ? 'row-new' : '') + '">' +
+        '<td class="reply-cell">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>' +
         '<td class="name-cell">' + escapeHtml_(r.name) + '</td>' +
+        '<td class="reply-cell">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>' +
         '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>' +
+        '<td class="reply-cell">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>' +
         '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>' +
         '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>' +
         '<td class="reply-cell">' + (r.reply ? escapeHtml_(r.reply) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>' +
@@ -717,11 +735,11 @@
           String(r.phone || '').toLowerCase().indexOf(q) !== -1;
       });
 
-      const headers = ['שם פרטי', 'טלפון נייד', 'מקור ליד', 'סטטוס', 'תשובת לקוח', 'סטטוס שיחה', 'תוצאות שיחה'];
+      const headers = ['שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס', 'תשובת לקוח', 'סטטוס שיחה', 'תוצאות שיחה'];
       const cell_ = function (v) { return '<td>' + escapeHtml_(v === undefined || v === null ? '' : v) + '</td>'; };
       const headRow = '<tr>' + headers.map(function (h) { return '<th>' + escapeHtml_(h) + '</th>'; }).join('') + '</tr>';
       const bodyRows = rows.map(function (r) {
-        return '<tr>' + [r.name, r.phone, r.source, r.status, r.reply, r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
+        return '<tr>' + [r.company, r.name, r.title, r.phone, r.email, r.source, r.status, r.reply, r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
       }).join('');
 
       // "אקסל" אמיתי (xlsx) דורש ספרייה חיצונית שלא ניתן לטעון כאן; טבלת HTML
@@ -744,20 +762,22 @@
 
   function setupAddContact_() {
     const modal = document.getElementById('addModal');
+    const companyInput = document.getElementById('addCompany');
     const nameInput = document.getElementById('addName');
+    const titleInput = document.getElementById('addTitle');
     const phoneInput = document.getElementById('addPhone');
+    const emailInput = document.getElementById('addEmail');
     const sourceInput = document.getElementById('addSource');
     const errorEl = document.getElementById('addError');
     const saveBtn = document.getElementById('addSaveBtn');
+    const allInputs = [companyInput, nameInput, titleInput, phoneInput, emailInput, sourceInput];
 
     function openModal() {
       document.getElementById('addModalTab').textContent = currentTabName || '';
-      nameInput.value = '';
-      phoneInput.value = '';
-      sourceInput.value = '';
+      allInputs.forEach(function (input) { input.value = ''; });
       errorEl.textContent = '';
       modal.classList.add('show');
-      nameInput.focus();
+      companyInput.focus();
     }
 
     function closeModal() {
@@ -765,9 +785,7 @@
     }
 
     function save() {
-      const name = nameInput.value.trim();
       const phone = phoneInput.value.trim();
-      const source = sourceInput.value.trim();
       if (!phone) {
         errorEl.textContent = 'חובה להזין מספר טלפון';
         return;
@@ -776,6 +794,14 @@
         errorEl.textContent = 'לא נבחר קמפיין';
         return;
       }
+      const fields = {
+        company: companyInput.value.trim(),
+        name: nameInput.value.trim(),
+        title: titleInput.value.trim(),
+        phone: phone,
+        email: emailInput.value.trim(),
+        source: sourceInput.value.trim()
+      };
       saveBtn.disabled = true;
       errorEl.textContent = '';
       google.script.run
@@ -788,7 +814,7 @@
           saveBtn.disabled = false;
           errorEl.textContent = 'שגיאה: ' + (err.message || err);
         })
-        .addContact(currentTabName, name, phone, source);
+        .addContact(currentTabName, fields);
     }
 
     document.getElementById('addContactBtn').addEventListener('click', openModal);
@@ -800,8 +826,7 @@
 
   function setupShare_() {
     document.getElementById('shareBtn').addEventListener('click', function () {
-      const base = window.location.href.split('?')[0];
-      const url = currentTabName ? base + '?tab=' + encodeURIComponent(currentTabName) : base;
+      const url = currentTabName ? BASE_URL + '?tab=' + encodeURIComponent(currentTabName) : BASE_URL;
       const toast = document.getElementById('copyToast');
       const showToast = function () {
         toast.classList.add('show');
