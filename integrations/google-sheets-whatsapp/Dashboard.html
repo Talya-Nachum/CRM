@@ -6,42 +6,42 @@
 -->
 <style>
   :root {
-    --bg: #f2eee6;
+    --bg: #f5eefb;
     --surface: #ffffff;
-    --surface-2: #e8e1d3;
-    --border: #d8cfbd;
-    --text: #201d18;
-    --text-muted: #766e5e;
-    --accent: #1d6e77;
-    --accent-soft: #dcecec;
-    --accent-ink: #0f4247;
-    --good: #2f8f5b;
-    --good-soft: #e2f2e8;
-    --bad: #c4433a;
-    --bad-soft: #fbe6e4;
-    --pending: #8a8272;
-    --pending-soft: #ece7db;
-    --shadow: 0 1px 2px rgba(32,29,24,0.06), 0 8px 24px -12px rgba(32,29,24,0.18);
+    --surface-2: #ede3f7;
+    --border: #ddc9ef;
+    --text: #241934;
+    --text-muted: #7c6b93;
+    --accent: #6b2fa0;
+    --accent-soft: #ead9f7;
+    --accent-ink: #4a1f70;
+    --good: #2f9e52;
+    --good-soft: #e1f5e7;
+    --bad: #d64545;
+    --bad-soft: #fbe4e2;
+    --pending: #d97f1f;
+    --pending-soft: #fbedda;
+    --shadow: 0 1px 2px rgba(74,31,112,0.08), 0 8px 24px -12px rgba(74,31,112,0.22);
     --radius: 14px;
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #17191a;
-      --surface: #1f2224;
-      --surface-2: #262a2c;
-      --border: #34393c;
-      --text: #ece9e2;
-      --text-muted: #9a978e;
-      --accent: #4fb8c2;
-      --accent-soft: #1d3538;
-      --accent-ink: #bdeaee;
-      --good: #58b782;
-      --good-soft: #1c3226;
-      --bad: #e2685e;
-      --bad-soft: #3a2220;
-      --pending: #a9a397;
-      --pending-soft: #2c2a24;
+      --bg: #1c1626;
+      --surface: #241c33;
+      --surface-2: #2e2440;
+      --border: #3c2f52;
+      --text: #ede6f7;
+      --text-muted: #a697c2;
+      --accent: #b07ee0;
+      --accent-soft: #3a2a55;
+      --accent-ink: #e4d3fb;
+      --good: #5fc583;
+      --good-soft: #1f3a2a;
+      --bad: #e8776b;
+      --bad-soft: #3a211e;
+      --pending: #f0a94e;
+      --pending-soft: #3a2a16;
       --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.6);
     }
   }
@@ -84,6 +84,18 @@
   header.top .sub {
     color: var(--text-muted);
     font-size: 14px;
+  }
+
+  .brand-logo-text {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.01em;
+  }
+
+  .brand-logo {
+    height: 40px;
+    width: auto;
   }
 
   .tabs {
@@ -278,6 +290,8 @@
       <h1 id="appTitle">ניהול קמפיינים</h1>
       <div class="sub">וואטסאפ + שיחות קוליות, לפי טאב = קמפיין</div>
     </div>
+    <!-- כשיהיה קובץ לוגו: להחליף את השורה למטה ב-<img src="data:image/png;base64,..." class="brand-logo" alt="מיטוב מכירות"> -->
+    <div class="brand-logo-text">מיטוב מכירות</div>
   </header>
 
   <nav class="tabs" id="tabs" aria-label="בחירת קמפיין">
