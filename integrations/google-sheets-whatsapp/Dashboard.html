@@ -94,6 +94,12 @@
   }
 
   .brand-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .brand-logo img {
     height: 40px;
     width: auto;
   }
@@ -290,8 +296,15 @@
       <h1 id="appTitle">ניהול קמפיינים</h1>
       <div class="sub">וואטסאפ + שיחות קוליות, לפי טאב = קמפיין</div>
     </div>
-    <!-- כשיהיה קובץ לוגו: להחליף את השורה למטה ב-<img src="data:image/png;base64,..." class="brand-logo" alt="מיטוב מכירות"> -->
-    <div class="brand-logo-text">מיטוב מכירות</div>
+    <!-- קירוב זמני של סמל הלוגו. כשיהיה קובץ לוגו אמיתי - להחליף את כל ה-div הזה
+         ב-<img src="data:image/png;base64,..." class="brand-logo" alt="מיטוב מכירות"> -->
+    <div class="brand-logo">
+      <svg width="30" height="30" viewBox="0 0 100 100" aria-hidden="true">
+        <path d="M50 6 L94 82 L6 82 Z" fill="#2E8C86" />
+        <path d="M50 6 L58 82 L6 82 Z" fill="#F0793C" />
+      </svg>
+      <span class="brand-logo-text">מיטוב מכירות</span>
+    </div>
   </header>
 
   <nav class="tabs" id="tabs" aria-label="בחירת קמפיין">
