@@ -168,6 +168,19 @@ function checkCallStatus() {
   sheet.appendRow(['call status check', response.getContentText()]);
 }
 
+/**
+ * שומר ב-Script Properties את התאריך שבו קמפיין (טאב) הופעל לראשונה
+ * (שליחת הודעות או התחלת שיחות) - לצורך "כמה ימים הקמפיין פעיל" בדשבורד.
+ * לא דורס תאריך שכבר נשמר.
+ */
+function recordCampaignStart_(sheetName) {
+  const props = PropertiesService.getScriptProperties();
+  const key = 'CAMPAIGN_START_' + sheetName;
+  if (!props.getProperty(key)) {
+    props.setProperty(key, new Date().toISOString());
+  }
+}
+
 function sendMessages() {
   getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet()).forEach(sendMessagesInSheet_);
 }
@@ -182,6 +195,8 @@ function sendMessagesInSheet_(sheet) {
   const templateCol = headers.indexOf(TEMPLATE_HEADER);
 
   if (phoneCol === -1 || nameCol === -1 || statusCol === -1) return;
+
+  recordCampaignStart_(sheet.getName());
 
   // ברירת מחדל לכל הטאב: מה שכתוב בשורה 2 (השורה הראשונה עם נתונים) של הטאב הזה.
   const sheetTemplateId = (templateCol !== -1 && data[1] && data[1][templateCol])
@@ -239,6 +254,8 @@ function startCallsInSheet_(sheet) {
   const leadIdCol = headers.indexOf(CALL_LEAD_ID_HEADER);
 
   if (phoneCol === -1 || callStatusCol === -1) return;
+
+  recordCampaignStart_(sheet.getName());
 
   // ברירת מחדל לכל הטאב: מה שכתוב בשורה 2 (השורה הראשונה עם נתונים) של הטאב הזה.
   const sheetOutboundId = (campaignCol !== -1 && data[1] && data[1][campaignCol])
@@ -398,6 +415,30 @@ function classifyStatus_(value) {
   return 'good';
 }
 
+/**
+ * בודק אם תאריך נתון (אובייקט Date מהגיליון) חל היום, לפי לוח השנה של
+ * אזור הזמן של הסקריפט.
+ */
+function isToday_(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return false;
+  const today = new Date();
+  return date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate();
+}
+
+/**
+ * כמה ימים עברו מאז שהקמפיין (הטאב) הופעל לראשונה (ראו recordCampaignStart_).
+ * מחזיר null אם הקמפיין עדיין לא רץ אף פעם.
+ */
+function daysActive_(sheetName) {
+  const startIso = PropertiesService.getScriptProperties().getProperty('CAMPAIGN_START_' + sheetName);
+  if (!startIso) return null;
+  const start = new Date(startIso);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor((Date.now() - start.getTime()) / msPerDay) + 1;
+}
+
 function getCampaignData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
@@ -410,10 +451,12 @@ function getCampaignData(sheetName) {
   const nameCol = headers.indexOf(NAME_HEADER);
   const statusCol = headers.indexOf(STATUS_HEADER);
   const replyCol = headers.indexOf(REPLY_HEADER);
+  const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
   const callStatusCol = headers.indexOf(CALL_STATUS_HEADER);
   const callResultCol = headers.indexOf(CALL_RESULT_HEADER);
+  const callDateCol = headers.indexOf(CALL_DATE_HEADER);
 
-  let sent = 0, errors = 0, replies = 0, callsSent = 0;
+  let sent = 0, errors = 0, replies = 0, callsSent = 0, activityToday = 0;
   const rows = [];
 
   for (let i = 1; i < data.length; i++) {
@@ -423,13 +466,16 @@ function getCampaignData(sheetName) {
 
     const status = statusCol !== -1 ? String(row[statusCol] || '') : '';
     const reply = replyCol !== -1 ? row[replyCol] : '';
+    const replyDate = replyDateCol !== -1 ? row[replyDateCol] : null;
     const callStatus = callStatusCol !== -1 ? String(row[callStatusCol] || '') : '';
     const callResult = callResultCol !== -1 ? row[callResultCol] : '';
+    const callDate = callDateCol !== -1 ? row[callDateCol] : null;
 
     if (status === SENT_STATUS) sent++;
     if (status.indexOf('שגיאה') === 0) errors++;
     if (reply) replies++;
     if (callStatus === CALL_SENT_STATUS) callsSent++;
+    if (isToday_(replyDate) || isToday_(callDate)) activityToday++;
 
     rows.push({
       name: nameCol !== -1 ? row[nameCol] : '',
@@ -453,6 +499,8 @@ function getCampaignData(sheetName) {
     replies: replies,
     callsSent: callsSent,
     pending: pending,
+    activityToday: activityToday,
+    daysActive: daysActive_(sheetName),
     rows: rows
   };
 }
