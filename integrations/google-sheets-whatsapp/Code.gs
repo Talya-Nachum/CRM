@@ -61,9 +61,11 @@ const CALL_SENT_STATUS = 'שיחה נשלחה';
 const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns'];
 
 // --- Wix (לידים מטופס באתר) ---
-// שם הטאב שאליו נכנסים לידים חדשים מ-Wix. חייב להיות טאב קמפיין רגיל
+// שם הטאב שאליו נכנסים לידים חדשים מ-Wix - זהו טאב הקמפיין הקיים
+// "AI2NADLAN אודי גת" (בבקשת הלקוחה, כדי שהלידים מהאתר יצטרפו ישירות
+// לקמפיין הפעיל ולא ישבו בטאב נפרד). חייב להיות טאב קמפיין רגיל
 // (עם עמודת "טלפון נייד") בשם הזה בדיוק.
-const WIX_LEADS_SHEET_NAME = 'לידים מאתר';
+const WIX_LEADS_SHEET_NAME = 'AI2NADLAN אודי גת';
 const WIX_SOURCE_LABEL = 'אתר (Wix)';
 
 function getInforuAuthHeader_() {
@@ -450,12 +452,17 @@ function handleWixWebhook_(ss, payload) {
 
   if (!phone) return; // אין טלפון בליד - אין מה לרשום
 
+  // מוסיפים לתווית המקור גם את שם הטופס הספציפי מ-Wix (formName), כדי
+  // להבדיל בין "צרו קשר כללי" ל"רשימת המתנה" וכל טופס עתידי נוסף באתר.
+  const formName = data.formName || '';
+  const source = formName ? (WIX_SOURCE_LABEL + ' - ' + formName) : WIX_SOURCE_LABEL;
+
   addContactRow_(sheet, {
     name: name,
     company: company,
     phone: phone,
     email: email,
-    source: WIX_SOURCE_LABEL
+    source: source
   });
 }
 
