@@ -38,7 +38,7 @@ const NAME_HEADER = 'שם פרטי';
 const COMPANY_HEADER = 'שם חברה';
 const TITLE_HEADER = 'תפקיד';
 const EMAIL_HEADER = 'אימייל';
-const SOURCE_HEADER = 'מקור ליד';
+const SOURCE_HEADER = 'מקור הליד';
 const TEMPLATE_HEADER = 'מספר תבנית';
 const STATUS_HEADER = 'סטטוס';
 const REPLY_HEADER = 'תשובת לקוח';
@@ -519,7 +519,12 @@ function addContactRow_(sheet, fields) {
     if (col !== -1) row[col] = (fields && fields[key]) || '';
   });
 
-  sheet.appendRow(row);
+  const targetRow = sheet.getLastRow() + 1;
+  // כופה פורמט טקסט על תא הטלפון לפני הכתיבה - אחרת גוגל שיטס עלול לפרש
+  // מספר שמתחיל ב-"+" (כמו שמגיע מ-Wix, לדוגמה "+972501234567") כניסיון
+  // לנוסחה ולזרוק #ERROR!, גם אם עמודת הטלפון לא הוגדרה ידנית כטקסט.
+  sheet.getRange(targetRow, phoneCol + 1).setNumberFormat('@');
+  sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
 }
 
 function classifyStatus_(value) {
