@@ -407,11 +407,20 @@ function handleNlpearlWebhook_(ss, payload) {
 }
 
 /**
+ * מנקה תווית לצורך השוואה: מוריד גרשיים/גרש (רגילים ועבריים), רווחים
+ * כפולים/ירידות שורה, ורישיות - כדי ש-"דוא\"ל" ו-"טלפון נייד\n" יתאימו
+ * גם עם ההבדלים הקטנים ש-Wix מוסיף.
+ */
+function normalizeLabel_(s) {
+  return String(s || '').replace(/["'״׳]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/**
  * מוסיף ליד חדש שהגיע מ-Wix Automations (טופס באתר) לטאב WIX_LEADS_SHEET_NAME.
- * מבנה ה-JSON המדויק ש-Wix שולח משתנה לפי סוג הטופס/האוטומציה, אז הפונקציה
- * מנסה כמה מסלולים נפוצים לשליפת שם/טלפון/אימייל. אם משהו לא נתפס נכון -
- * הבדיקה הראשונה תיכנס לטאב WebhookLog ואפשר יהיה לדייק את השליפה לפי
- * המבנה האמיתי שרואים שם.
+ * מבוסס על מבנה JSON אמיתי שנבדק משני הטפסים באתר (ai2nadlan.co.il).
+ * חשוב: contact.name ב-Wix הוא **תמיד** תעתיק לאנגלית (למשל "Tal"), גם
+ * כשהוזן שם בעברית בפועל - לכן מעדיפים את הערך האמיתי מתוך ה-submissions
+ * (מה שהוקלד בטופס) ורק אם הוא חסר נופלים חזרה ל-contact.name.
  */
 function handleWixWebhook_(ss, payload) {
   const sheet = ss.getSheetByName(WIX_LEADS_SHEET_NAME);
@@ -419,29 +428,31 @@ function handleWixWebhook_(ss, payload) {
 
   const data = payload.data || {};
   const contact = data.contact || {};
-  const submissions = data.submissionData || data.submissions || data.fields || [];
+  const submissions = data.submissions || data.submissionData || data.fields || [];
 
-  const findSubmission_ = function (labelGuesses) {
+  const bySubmissionLabel_ = function (candidates) {
+    const wanted = candidates.map(normalizeLabel_);
     for (let i = 0; i < submissions.length; i++) {
       const item = submissions[i];
-      const label = String((item && (item.label || item.name || item.key)) || '').toLowerCase();
-      for (let j = 0; j < labelGuesses.length; j++) {
-        if (label.indexOf(labelGuesses[j]) !== -1) return item.value;
-      }
+      const label = normalizeLabel_(item && (item.label || item.name || item.key));
+      if (wanted.indexOf(label) !== -1) return item.value;
     }
     return '';
   };
 
-  const contactName = contact.name && (contact.name.first || contact.name.formatted || contact.name);
+  const firstName = bySubmissionLabel_(['שם פרטי']) || (contact.name && contact.name.first) || '';
+  const lastName = bySubmissionLabel_(['שם משפחה']) || (contact.name && contact.name.last) || '';
+  const name = (firstName + ' ' + lastName).trim();
 
-  const phone = contact.phone || findSubmission_(['phone', 'טלפון', 'נייד']) || '';
-  const name = contactName || findSubmission_(['name', 'שם']) || '';
-  const email = contact.email || findSubmission_(['email', 'מייל', 'אימייל']) || '';
+  const company = bySubmissionLabel_(['שם חברה', 'company']);
+  const email = contact.email || bySubmissionLabel_(['דואל', 'אימייל', 'מייל', 'email']);
+  const phone = contact.phone || bySubmissionLabel_(['טלפון נייד', 'טלפון', 'נייד', 'phone']);
 
   if (!phone) return; // אין טלפון בליד - אין מה לרשום
 
   addContactRow_(sheet, {
     name: name,
+    company: company,
     phone: phone,
     email: email,
     source: WIX_SOURCE_LABEL
