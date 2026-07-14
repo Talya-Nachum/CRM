@@ -60,6 +60,12 @@ const CALL_SENT_STATUS = 'שיחה נשלחה';
 // עמודה שנראית כמו טלפון נייד.
 const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns'];
 
+// --- Wix (לידים מטופס באתר) ---
+// שם הטאב שאליו נכנסים לידים חדשים מ-Wix. חייב להיות טאב קמפיין רגיל
+// (עם עמודת "טלפון נייד") בשם הזה בדיוק.
+const WIX_LEADS_SHEET_NAME = 'לידים מאתר';
+const WIX_SOURCE_LABEL = 'אתר (Wix)';
+
 function getInforuAuthHeader_() {
   const props = PropertiesService.getScriptProperties();
   const username = props.getProperty('INFORU_USERNAME');
@@ -309,9 +315,10 @@ function startCallsInSheet_(sheet) {
 }
 
 /**
- * מנתב שתי מקורות ה-Webhook, על פני כל טאבי הקמפיינים:
+ * מנתב שלושה מקורות ה-Webhook, על פני כל טאבי הקמפיינים:
  * - אינפוריו שולח: { "Data": [ { "Value": "<טלפון>", "Message": "<טקסט התשובה>", ... } ] }
  * - NLPearl שולח אובייקט Lead/Call ישירות (יש בו "pearlId").
+ * - Wix Automations שולח ליד חדש מטופס באתר, עטוף במפתח עליון "data".
  * כל קריאה נכנסת נרשמת גם גולמית בטאב WebhookLog לצורך דיבוג.
  */
 function doPost(e) {
@@ -326,6 +333,8 @@ function doPost(e) {
       handleInforuWebhook_(ss, payload);
     } else if (payload.pearlId) {
       handleNlpearlWebhook_(ss, payload);
+    } else if (payload.data) {
+      handleWixWebhook_(ss, payload);
     }
   } catch (err) {
     logSheet.appendRow([new Date(), 'ERROR: ' + err.message + ' | ' + err.stack]);
@@ -398,6 +407,48 @@ function handleNlpearlWebhook_(ss, payload) {
 }
 
 /**
+ * מוסיף ליד חדש שהגיע מ-Wix Automations (טופס באתר) לטאב WIX_LEADS_SHEET_NAME.
+ * מבנה ה-JSON המדויק ש-Wix שולח משתנה לפי סוג הטופס/האוטומציה, אז הפונקציה
+ * מנסה כמה מסלולים נפוצים לשליפת שם/טלפון/אימייל. אם משהו לא נתפס נכון -
+ * הבדיקה הראשונה תיכנס לטאב WebhookLog ואפשר יהיה לדייק את השליפה לפי
+ * המבנה האמיתי שרואים שם.
+ */
+function handleWixWebhook_(ss, payload) {
+  const sheet = ss.getSheetByName(WIX_LEADS_SHEET_NAME);
+  if (!sheet || !isCampaignSheet_(sheet)) return;
+
+  const data = payload.data || {};
+  const contact = data.contact || {};
+  const submissions = data.submissionData || data.submissions || data.fields || [];
+
+  const findSubmission_ = function (labelGuesses) {
+    for (let i = 0; i < submissions.length; i++) {
+      const item = submissions[i];
+      const label = String((item && (item.label || item.name || item.key)) || '').toLowerCase();
+      for (let j = 0; j < labelGuesses.length; j++) {
+        if (label.indexOf(labelGuesses[j]) !== -1) return item.value;
+      }
+    }
+    return '';
+  };
+
+  const contactName = contact.name && (contact.name.first || contact.name.formatted || contact.name);
+
+  const phone = contact.phone || findSubmission_(['phone', 'טלפון', 'נייד']) || '';
+  const name = contactName || findSubmission_(['name', 'שם']) || '';
+  const email = contact.email || findSubmission_(['email', 'מייל', 'אימייל']) || '';
+
+  if (!phone) return; // אין טלפון בליד - אין מה לרשום
+
+  addContactRow_(sheet, {
+    name: name,
+    phone: phone,
+    email: email,
+    source: WIX_SOURCE_LABEL
+  });
+}
+
+/**
  * הדשבורד החזותי (Dashboard.html), מוגש באותה כתובת /exec דרך GET
  * (doPost למעלה ממשיך לטפל בבקשות POST של ה-Webhook באותה כתובת בדיוק).
  * משתמשים בתבנית (לא בקובץ סטטי) כדי להזריק את כתובת ה-/exec האמיתית -
@@ -433,11 +484,19 @@ function addContact(sheetName, fields) {
   if (!sheet || !isCampaignSheet_(sheet)) {
     throw new Error('הטאב "' + sheetName + '" לא נמצא או אינו טאב קמפיין');
   }
+  addContactRow_(sheet, fields);
+  return { success: true };
+}
 
+/**
+ * הלוגיקה המשותפת שכותבת שורת איש-קשר חדשה לטאב - משמשת גם את addContact
+ * (מהדשבורד) וגם את handleWixWebhook_ (לידים אוטומטיים מהאתר).
+ */
+function addContactRow_(sheet, fields) {
   const headers = sheet.getDataRange().getValues()[0];
   const phoneCol = headers.indexOf(PHONE_HEADER);
   if (phoneCol === -1) {
-    throw new Error('לא נמצאה עמודת "' + PHONE_HEADER + '" בטאב הזה');
+    throw new Error('לא נמצאה עמודת "' + PHONE_HEADER + '" בטאב "' + sheet.getName() + '"');
   }
 
   const digits = String((fields && fields.phone) || '').replace(/\D/g, '');
@@ -461,7 +520,6 @@ function addContact(sheetName, fields) {
   });
 
   sheet.appendRow(row);
-  return { success: true };
 }
 
 function classifyStatus_(value) {
