@@ -402,11 +402,10 @@
 
   .reply-cell {
     max-width: 220px;
-    max-height: 90px;
-    overflow-y: auto;
-    white-space: pre-line;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--text-muted);
-    line-height: 1.5;
   }
 
   .empty-state, .loading-state {
@@ -700,7 +699,7 @@
         '<td class="reply-cell">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>' +
         '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>' +
         '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>' +
-        '<td class="reply-cell">' + (r.reply ? escapeHtml_(r.reply) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>' +
+        '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>' +
         '<td>' + pill_(r.callStatus, r.callStatusClass, '—') + '</td>' +
         '<td class="reply-cell">' + (r.callResult ? escapeHtml_(r.callResult) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>' +
         '</tr>';
@@ -713,7 +712,18 @@
   }
 
   function escapeHtml_(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /**
+   * מציגה בטבלה רק את שורת התשובה האחרונה (לא את כל השרשור), כדי שהתא
+   * לא יהיה עמוס - ההיסטוריה המלאה עדיין נשמרת בגיליון עצמו ומיוצאת
+   * במלואה בייצוא לאקסל (ראו setupExport_, שמשתמש ב-r.reply המלא).
+   */
+  function lastReplyLine_(text) {
+    const lines = String(text).split('\n').filter(function (l) { return l.trim(); });
+    return lines.length ? lines[lines.length - 1] : '';
   }
 
   function setupSearch_() {
