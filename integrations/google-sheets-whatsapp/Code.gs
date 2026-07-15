@@ -45,6 +45,7 @@ const REPLY_HEADER = 'תשובת לקוח';
 const FIRST_REPLY_HEADER = 'תגובה ראשונית';
 const REPLY_DATE_HEADER = 'תאריך תשובה';
 const SENT_STATUS = 'נשלח וואטסאפ';
+const APPROVED_STATUS = 'מאושר לשליחה';
 
 // --- NLPearl (שיחות קוליות) ---
 const NLPEARL_API_BASE = 'https://api.nlpearl.ai/v2/Outbound/';
@@ -247,7 +248,10 @@ function sendMessagesInSheet_(sheet) {
     const templateId = (templateCol !== -1 && row[templateCol]) ? String(row[templateCol]) : sheetTemplateId;
     const rowIndex = i + 1;
 
-    if (!phone || status === SENT_STATUS) continue;
+    // שולחים רק לשורה שסומנה ידנית כ"מאושר לשליחה" - כדי לאפשר להעלות
+    // רשימה שלמה (למשל 300 אנשי קשר) ולשלוח בפעימות נשלטות, על ידי
+    // שינוי הסטטוס רק לחלק מהשורות בכל פעם.
+    if (!phone || status !== APPROVED_STATUS) continue;
 
     recordLastContact_(phone, sheet.getName());
 
