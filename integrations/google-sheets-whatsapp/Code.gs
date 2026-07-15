@@ -42,6 +42,7 @@ const SOURCE_HEADER = 'מקור הליד';
 const TEMPLATE_HEADER = 'מספר תבנית';
 const STATUS_HEADER = 'סטטוס';
 const REPLY_HEADER = 'תשובת לקוח';
+const FIRST_REPLY_HEADER = 'תגובה ראשונית';
 const REPLY_DATE_HEADER = 'תאריך תשובה';
 const SENT_STATUS = 'נשלח וואטסאפ';
 
@@ -407,6 +408,7 @@ function handleInforuWebhook_(ss, payload) {
       const phoneCol = headers.indexOf(PHONE_HEADER);
       const replyCol = headers.indexOf(REPLY_HEADER);
       const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
+      const firstReplyCol = headers.indexOf(FIRST_REPLY_HEADER);
       if (phoneCol === -1 || replyCol === -1) continue;
 
       for (let i = 1; i < data.length; i++) {
@@ -419,6 +421,13 @@ function handleInforuWebhook_(ss, payload) {
           const combined = existingReply ? (existingReply + '\n' + newEntry) : newEntry;
           sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
           if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
+          // התגובה הראשונה של הלקוח (למשל לחיצה על "פגישה" / "לא מעוניין"
+          // בתפריט הראשוני) נשמרת פעם אחת בלבד בעמודה נפרדת - לא נדרסת
+          // בהמשך השיחה עם הבוט האוטומטי, כדי שיהיה אפשר לראות אותה
+          // במבט אחד בדשבורד, בלי כל השרשור.
+          if (firstReplyCol !== -1 && !data[i][firstReplyCol]) {
+            sheet.getRange(rowIndex, firstReplyCol + 1).setValue(incomingText);
+          }
           return;
         }
       }
@@ -650,6 +659,7 @@ function getCampaignData(sheetName) {
   const sourceCol = headers.indexOf(SOURCE_HEADER);
   const statusCol = headers.indexOf(STATUS_HEADER);
   const replyCol = headers.indexOf(REPLY_HEADER);
+  const firstReplyCol = headers.indexOf(FIRST_REPLY_HEADER);
   const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
   const callStatusCol = headers.indexOf(CALL_STATUS_HEADER);
   const callResultCol = headers.indexOf(CALL_RESULT_HEADER);
@@ -665,6 +675,7 @@ function getCampaignData(sheetName) {
 
     const status = statusCol !== -1 ? String(row[statusCol] || '') : '';
     const reply = replyCol !== -1 ? row[replyCol] : '';
+    const firstReply = firstReplyCol !== -1 ? row[firstReplyCol] : '';
     const replyDate = replyDateCol !== -1 ? row[replyDateCol] : null;
     const callStatus = callStatusCol !== -1 ? String(row[callStatusCol] || '') : '';
     const callResult = callResultCol !== -1 ? row[callResultCol] : '';
@@ -686,6 +697,7 @@ function getCampaignData(sheetName) {
       status: status,
       statusClass: classifyStatus_(status),
       reply: reply,
+      firstReply: firstReply,
       callStatus: callStatus,
       callStatusClass: classifyStatus_(callStatus),
       callResult: callResult

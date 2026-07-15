@@ -535,6 +535,7 @@
               <th>אימייל</th>
               <th>מקור ליד</th>
               <th>סטטוס</th>
+              <th>תגובה ראשונית</th>
               <th>תשובת לקוח</th>
               <th>סטטוס שיחה</th>
               <th>תוצאות שיחה</th>
@@ -624,7 +625,7 @@
     currentTabName = name;
     if (!silent) {
       document.getElementById('chartTitle').textContent = 'פילוח סטטוס - ' + name;
-      document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" class="loading-state">טוען נתונים...</td></tr>';
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="11" class="loading-state">טוען נתונים...</td></tr>';
     }
     google.script.run.withSuccessHandler(renderCampaign).withFailureHandler(showError).getCampaignData(name);
   }
@@ -687,7 +688,7 @@
   function renderRows(rows) {
     const tbody = document.getElementById('tableBody');
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty-state">לא נמצאו אנשי קשר</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="empty-state">לא נמצאו אנשי קשר</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(function (r) {
@@ -699,6 +700,7 @@
         '<td class="reply-cell">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>' +
         '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>' +
         '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>' +
+        '<td class="reply-cell">' + (r.firstReply ? escapeHtml_(r.firstReply) : '—') + '</td>' +
         '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>' +
         '<td>' + pill_(r.callStatus, r.callStatusClass, '—') + '</td>' +
         '<td class="reply-cell">' + (r.callResult ? escapeHtml_(r.callResult) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>' +
@@ -747,11 +749,11 @@
           String(r.phone || '').toLowerCase().indexOf(q) !== -1;
       });
 
-      const headers = ['שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס', 'תשובת לקוח', 'סטטוס שיחה', 'תוצאות שיחה'];
+      const headers = ['שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס', 'תגובה ראשונית', 'תשובת לקוח', 'סטטוס שיחה', 'תוצאות שיחה'];
       const cell_ = function (v) { return '<td>' + escapeHtml_(v === undefined || v === null ? '' : v) + '</td>'; };
       const headRow = '<tr>' + headers.map(function (h) { return '<th>' + escapeHtml_(h) + '</th>'; }).join('') + '</tr>';
       const bodyRows = rows.map(function (r) {
-        return '<tr>' + [r.company, r.name, r.title, r.phone, r.email, r.source, r.status, r.reply, r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
+        return '<tr>' + [r.company, r.name, r.title, r.phone, r.email, r.source, r.status, r.firstReply, r.reply, r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
       }).join('');
 
       // "אקסל" אמיתי (xlsx) דורש ספרייה חיצונית שלא ניתן לטעון כאן; טבלת HTML
