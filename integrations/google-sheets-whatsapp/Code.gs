@@ -193,6 +193,30 @@ function recordCampaignStart_(sheetName) {
   }
 }
 
+/**
+ * שומר לאיזה טאב-קמפיין נשלחה לאחרונה הודעה/שיחה למספר טלפון נתון.
+ * חיוני כי אותו מספר טלפון יכול (למשל למטרות בדיקה, או אם אותו לקוח
+ * אמיתי נמצא בכמה קמפיינים) להופיע בכמה טאבים במקביל - בלי המיפוי הזה,
+ * webhook של תשובה נכנסת לא היה יודע לאיזה טאב היא שייכת, ועלול לעדכן
+ * טאב לא-קשור רק כי גם בו יש שורה עם אותו מספר.
+ */
+function recordLastContact_(phone, sheetName) {
+  const suffix = phoneSuffix_(phone);
+  if (!suffix) return;
+  PropertiesService.getScriptProperties().setProperty('LAST_CONTACT_' + suffix, sheetName);
+}
+
+/**
+ * מחזיר את טאב הקמפיין שאליו נשלחה לאחרונה הודעה/שיחה למספר הטלפון הזה
+ * (ראו recordLastContact_), אם קיים ותקין - אחרת null.
+ */
+function lastContactSheet_(ss, phoneSuffixValue) {
+  const sheetName = PropertiesService.getScriptProperties().getProperty('LAST_CONTACT_' + phoneSuffixValue);
+  if (!sheetName) return null;
+  const sheet = ss.getSheetByName(sheetName);
+  return (sheet && isCampaignSheet_(sheet)) ? sheet : null;
+}
+
 function sendMessages() {
   getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet()).forEach(sendMessagesInSheet_);
 }
@@ -223,6 +247,8 @@ function sendMessagesInSheet_(sheet) {
     const rowIndex = i + 1;
 
     if (!phone || status === SENT_STATUS) continue;
+
+    recordLastContact_(phone, sheet.getName());
 
     const payload = {
       Data: {
@@ -282,6 +308,8 @@ function startCallsInSheet_(sheet) {
     const rowIndex = i + 1;
 
     if (!phone || callStatus === CALL_SENT_STATUS) continue;
+
+    recordLastContact_(phone, sheet.getName());
 
     const digits = String(phone).replace(/\D/g, '');
     const internationalPhone = digits.startsWith('0') ? '+972' + digits.slice(1) : '+' + digits;
@@ -353,6 +381,12 @@ function doPost(e) {
  * השנייה (ולא "יתנגשו" ותיכתב תשובה לא-אחרונה), ומצרפים כל תשובה
  * לעמודת "תשובת לקוח" (עם שעה) במקום לדרוס את הקודמת - כדי לשמור את
  * כל השיחה, לא רק את ההודעה האחרונה.
+ *
+ * מחפשים קודם כל רק בטאב שאליו נשלחה לאחרונה הודעה למספר הזה
+ * (lastContactSheet_) - כדי שתשובה תעדכן אך ורק את הקמפיין הרלוונטי,
+ * גם אם באותו מספר טלפון נעשה שימוש (למשל לבדיקות) בכמה טאבים במקביל.
+ * רק אם אין מיפוי כזה (למשל שורה שנוספה ידנית ומעולם לא נשלחה אליה
+ * הודעה מהמערכת) נופלים חזרה לחיפוש בכל טאבי הקמפיינים.
  */
 function handleInforuWebhook_(ss, payload) {
   const entry = payload.Data && payload.Data[0];
@@ -365,7 +399,8 @@ function handleInforuWebhook_(ss, payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    const sheets = getCampaignSheets_(ss);
+    const tracked = lastContactSheet_(ss, incomingPhone);
+    const sheets = tracked ? [tracked] : getCampaignSheets_(ss);
     for (const sheet of sheets) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
@@ -393,6 +428,11 @@ function handleInforuWebhook_(ss, payload) {
   }
 }
 
+/**
+ * כמו ב-handleInforuWebhook_ למעלה: מחפשים קודם רק בטאב שאליו הותחלה
+ * לאחרונה שיחה למספר הזה (lastContactSheet_), כדי שתוצאת שיחה תעדכן
+ * רק את הקמפיין הרלוונטי ולא כל טאב אחר שבו קיים במקרה אותו מספר.
+ */
 function handleNlpearlWebhook_(ss, payload) {
   // מטפלים רק באירועי Call Webhook (מזוהים לפי "to") לצורך עמודת התוצאה -
   // אירועי Lead Webhook (מזוהים לפי "phoneNumber" במקום) לא נושאים את
@@ -402,7 +442,8 @@ function handleNlpearlWebhook_(ss, payload) {
   const incomingPhone = phoneSuffix_(payload.to);
   if (!incomingPhone) return;
 
-  const sheets = getCampaignSheets_(ss);
+  const tracked = lastContactSheet_(ss, incomingPhone);
+  const sheets = tracked ? [tracked] : getCampaignSheets_(ss);
   for (const sheet of sheets) {
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
