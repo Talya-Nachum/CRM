@@ -346,6 +346,14 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+/**
+ * הבוט של אינפוריו יכול לשלוח כמה הודעות MO ברצף מהיר מאוד (שיחה
+ * אוטומטית עם הלקוח) - כל הודעה מגיעה כקריאת webhook נפרדת. משתמשים
+ * ב-LockService כדי שקריאות שמגיעות כמעט באותו רגע יעובדו אחת אחרי
+ * השנייה (ולא "יתנגשו" ותיכתב תשובה לא-אחרונה), ומצרפים כל תשובה
+ * לעמודת "תשובת לקוח" (עם שעה) במקום לדרוס את הקודמת - כדי לשמור את
+ * כל השיחה, לא רק את ההודעה האחרונה.
+ */
 function handleInforuWebhook_(ss, payload) {
   const entry = payload.Data && payload.Data[0];
   if (!entry) return;
@@ -354,24 +362,34 @@ function handleInforuWebhook_(ss, payload) {
   const incomingText = entry.Message;
   if (!incomingPhone) return;
 
-  const sheets = getCampaignSheets_(ss);
-  for (const sheet of sheets) {
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const phoneCol = headers.indexOf(PHONE_HEADER);
-    const replyCol = headers.indexOf(REPLY_HEADER);
-    const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
-    if (phoneCol === -1 || replyCol === -1) continue;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheets = getCampaignSheets_(ss);
+    for (const sheet of sheets) {
+      const data = sheet.getDataRange().getValues();
+      const headers = data[0];
+      const phoneCol = headers.indexOf(PHONE_HEADER);
+      const replyCol = headers.indexOf(REPLY_HEADER);
+      const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
+      if (phoneCol === -1 || replyCol === -1) continue;
 
-    for (let i = 1; i < data.length; i++) {
-      const sheetPhone = phoneSuffix_(data[i][phoneCol]);
-      if (sheetPhone && sheetPhone === incomingPhone) {
-        const rowIndex = i + 1;
-        sheet.getRange(rowIndex, replyCol + 1).setValue(incomingText);
-        if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
-        return;
+      for (let i = 1; i < data.length; i++) {
+        const sheetPhone = phoneSuffix_(data[i][phoneCol]);
+        if (sheetPhone && sheetPhone === incomingPhone) {
+          const rowIndex = i + 1;
+          const existingReply = data[i][replyCol];
+          const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM HH:mm');
+          const newEntry = timestamp + ' - ' + incomingText;
+          const combined = existingReply ? (existingReply + '\n' + newEntry) : newEntry;
+          sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
+          if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
+          return;
+        }
       }
     }
+  } finally {
+    lock.releaseLock();
   }
 }
 

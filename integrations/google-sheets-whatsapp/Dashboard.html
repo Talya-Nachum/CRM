@@ -402,9 +402,11 @@
 
   .reply-cell {
     max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-height: 90px;
+    overflow-y: auto;
+    white-space: pre-line;
     color: var(--text-muted);
+    line-height: 1.5;
   }
 
   .empty-state, .loading-state {
