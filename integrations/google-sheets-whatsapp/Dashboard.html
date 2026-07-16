@@ -1070,16 +1070,18 @@
           String(r.phone || '').toLowerCase().indexOf(q) !== -1;
       });
 
-      // "תשובת לקוח" בגיליון היא שרשור מצטבר של כל ההודעות עם חותמות זמן
-      // בתוך התא - לא ניתן לסינון נקי באקסל. לכן בייצוא מפרידים לשתי
-      // עמודות: תאריך/שעה של התשובה האחרונה (ערך תאריך אמיתי, ניתן למיון/
-      // סינון), והתשובה האחרונה עצמה בלי חותמת הזמן המוטמעת.
-      const headers = ['שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס', 'תגובה ראשונית', 'תאריך ושעת תשובה', 'תשובת לקוח', 'סטטוס שיחה', 'תוצאות שיחה'];
+      // "תשובת לקוח" בגיליון היא שרשור מצטבר של כל ההודעות. לייצוא בונים
+      // גם עמודה נקייה לסינון (תאריך/שעה נפרד + התשובה האחרונה בלבד) וגם
+      // עמודה עם כל השרשור המלא (שורה לכל הודעה) - כדי שלא יאבד מידע.
+      const headers = ['שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס', 'תגובה ראשונית', 'תאריך ושעת תשובה', 'תשובה אחרונה', 'היסטוריית שיחה מלאה', 'סטטוס שיחה', 'תוצאות שיחה'];
       const cell_ = function (v) { return '<td>' + escapeHtml_(v === undefined || v === null ? '' : v) + '</td>'; };
+      const cellHtml_ = function (v) { return '<td>' + v + '</td>'; };
       const headRow = '<tr>' + headers.map(function (h) { return '<th>' + escapeHtml_(h) + '</th>'; }).join('') + '</tr>';
       const bodyRows = rows.map(function (r) {
         const cleanReply = r.reply ? stripTimestampPrefix_(lastReplyLine_(r.reply)) : '';
-        return '<tr>' + [r.company, r.name, r.title, r.phone, r.email, r.source, r.status, r.firstReply, r.replyDate, cleanReply, r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
+        const fullHistory = r.reply ? escapeHtml_(r.reply).replace(/\n/g, '<br>') : '';
+        return '<tr>' + [r.company, r.name, r.title, r.phone, r.email, r.source, r.status, r.firstReply, r.replyDate, cleanReply].map(cell_).join('') +
+          cellHtml_(fullHistory) + [r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
       }).join('');
 
       // "אקסל" אמיתי (xlsx) דורש ספרייה חיצונית שלא ניתן לטעון כאן; טבלת HTML
