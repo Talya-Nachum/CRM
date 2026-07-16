@@ -600,10 +600,19 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+/**
+ * רשימת שמות הטאבים להצגה כטאבים בדשבורד. טאב שהוסתר בגיליון
+ * (לחיצה ימנית על הטאב > הסתרת גיליון) לא יופיע כאן - זו בדרך כלל
+ * הכוונה כשמסתירים קמפיין (בלי למחוק אותו). שליחה/שיחה על כל הקמפיינים
+ * (sendMessages/startCalls) לא מושפעת מזה ועדיין מריצה גם על טאבים
+ * מוסתרים, למקרה שרוצים להמשיך לעבד אותם בלי להציג אותם בדשבורד.
+ */
 function getCampaignNames() {
-  return getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet()).map(function (sheet) {
-    return sheet.getName();
-  });
+  return getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet())
+    .filter(function (sheet) { return !sheet.isSheetHidden(); })
+    .map(function (sheet) {
+      return sheet.getName();
+    });
 }
 
 /**
