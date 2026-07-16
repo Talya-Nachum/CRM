@@ -219,6 +219,48 @@ function lastContactSheet_(ss, phoneSuffixValue) {
   return (sheet && isCampaignSheet_(sheet)) ? sheet : null;
 }
 
+/**
+ * סופרת אירועי פעילות (תשובת וואטסאפ / תוצאת שיחה) ביום הנוכחי, לכל
+ * טאב קמפיין - לצורך גרף המגמה של 7 הימים האחרונים בדשבורד. נשמר
+ * ב-Script Properties כ-JSON קטן {"yyyy-MM-dd": count, ...}, עם ניקוי
+ * ימים ישנים מ-30 יום ומעלה כדי שלא יתפח בלי גבול.
+ */
+function recordDailyActivity_(sheetName) {
+  const props = PropertiesService.getScriptProperties();
+  const key = 'DAILY_ACTIVITY_' + sheetName;
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  let data = {};
+  try { data = JSON.parse(props.getProperty(key) || '{}'); } catch (err) { data = {}; }
+  data[today] = (data[today] || 0) + 1;
+  const days = Object.keys(data).sort();
+  if (days.length > 30) {
+    days.slice(0, days.length - 30).forEach(function (d) { delete data[d]; });
+  }
+  props.setProperty(key, JSON.stringify(data));
+}
+
+/**
+ * מחזירה מערך של 7 הימים האחרונים (כולל היום) עם כמות הפעילות של כל
+ * יום, לצורך גרף המגמה בדשבורד. ימים שעדיין לא נצברה בהם פעילות מאז
+ * שהמעקב הזה נוסף יופיעו כ-0 - זה נתון אמיתי, לא מדומה.
+ */
+function dailyActivityTrend_(sheetName) {
+  const props = PropertiesService.getScriptProperties();
+  const key = 'DAILY_ACTIVITY_' + sheetName;
+  let data = {};
+  try { data = JSON.parse(props.getProperty(key) || '{}'); } catch (err) { data = {}; }
+
+  const trend = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dayKey = Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const label = Utilities.formatDate(d, Session.getScriptTimeZone(), 'dd/MM');
+    trend.push({ date: dayKey, label: label, count: data[dayKey] || 0 });
+  }
+  return trend;
+}
+
 function sendMessages() {
   getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet()).forEach(sendMessagesInSheet_);
 }
@@ -427,6 +469,7 @@ function handleInforuWebhook_(ss, payload) {
           const combined = existingReply ? (existingReply + '\n' + incomingText) : incomingText;
           sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
           if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
+          recordDailyActivity_(sheet.getName());
           // התגובה הראשונה של הלקוח (למשל לחיצה על "פגישה" / "לא מעוניין"
           // בתפריט הראשוני) נשמרת פעם אחת בלבד בעמודה נפרדת - לא נדרסת
           // בהמשך השיחה עם הבוט האוטומטי, כדי שיהיה אפשר לראות אותה
@@ -476,6 +519,7 @@ function handleNlpearlWebhook_(ss, payload) {
           : (payload.summary || 'סטטוס: ' + payload.status);
         sheet.getRange(rowIndex, resultCol + 1).setValue(summary);
         if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
+        recordDailyActivity_(sheet.getName());
         return;
       }
     }
@@ -725,7 +769,8 @@ function getCampaignData(sheetName) {
     activityToday: activityToday,
     daysActive: daysActive_(sheetName),
     rows: rows,
-    replyBreakdown: replyBreakdown_(rows)
+    replyBreakdown: replyBreakdown_(rows),
+    trend: dailyActivityTrend_(sheetName)
   };
 }
 
