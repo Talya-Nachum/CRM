@@ -420,9 +420,10 @@ function handleInforuWebhook_(ss, payload) {
         if (sheetPhone && sheetPhone === incomingPhone) {
           const rowIndex = i + 1;
           const existingReply = data[i][replyCol];
-          const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM HH:mm');
-          const newEntry = timestamp + ' - ' + incomingText;
-          const combined = existingReply ? (existingReply + '\n' + newEntry) : newEntry;
+          // בלי חותמת זמן בתוך הטקסט - כדי שהעמודה תישאר טקסט נקי שאפשר
+          // לסנן/למיין (גם בגיליון עצמו וגם בייצוא לאקסל). מועד התשובה
+          // האחרונה נשמר בנפרד בעמודת "תאריך תשובה".
+          const combined = existingReply ? (existingReply + '\n' + incomingText) : incomingText;
           sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
           if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
           // התגובה הראשונה של הלקוח (למשל לחיצה על "פגישה" / "לא מעוניין"
