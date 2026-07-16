@@ -28,6 +28,13 @@
     --bad-soft: #fbe4e2;
     --pending: #d97f1f;
     --pending-soft: #fbedda;
+    --cat-1: #2a78d6;
+    --cat-2: #008300;
+    --cat-3: #e87ba4;
+    --cat-4: #eda100;
+    --cat-5: #1baf7a;
+    --cat-6: #eb6834;
+    --cat-muted: #9a8fb0;
     --shadow: 0 1px 2px rgba(74,31,112,0.08), 0 8px 24px -12px rgba(74,31,112,0.22);
     --radius: 14px;
   }
@@ -49,6 +56,13 @@
       --bad-soft: #3a211e;
       --pending: #f0a94e;
       --pending-soft: #3a2a16;
+      --cat-1: #3987e5;
+      --cat-2: #008300;
+      --cat-3: #d55181;
+      --cat-4: #c98500;
+      --cat-5: #199e70;
+      --cat-6: #d95926;
+      --cat-muted: #6f6485;
       --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -16px rgba(0,0,0,0.6);
     }
   }
@@ -512,7 +526,7 @@
 
   <section class="layout">
     <div class="card chart-wrap">
-      <h2 style="align-self:flex-start;" id="chartTitle">פילוח סטטוס</h2>
+      <h2 style="align-self:flex-start;" id="chartTitle">פילוח תגובות</h2>
       <canvas id="donut" width="220" height="220" role="img"></canvas>
       <div class="legend" id="legend"></div>
     </div>
@@ -526,21 +540,7 @@
       </div>
       <div class="table-scroll">
         <table>
-          <thead>
-            <tr>
-              <th>שם חברה</th>
-              <th>שם איש קשר</th>
-              <th>תפקיד</th>
-              <th>טלפון נייד</th>
-              <th>אימייל</th>
-              <th>מקור ליד</th>
-              <th>סטטוס</th>
-              <th>תגובה ראשונית</th>
-              <th>תשובת לקוח</th>
-              <th>סטטוס שיחה</th>
-              <th>תוצאות שיחה</th>
-            </tr>
-          </thead>
+          <thead id="tableHead"></thead>
           <tbody id="tableBody"></tbody>
         </table>
       </div>
@@ -579,6 +579,7 @@
   let currentData = null;
   let currentTabName = null;
   let rowSnapshots = {}; // { tabName: { phone: {reply, callResult} } } - לזיהוי "תגובה חדשה"
+  let visibleColumns = []; // מחושב מחדש בכל טעינת קמפיין - ראו computeVisibleColumns_
   const AUTO_REFRESH_MS = 30000;
 
   const ICONS = {
@@ -624,7 +625,7 @@
   function loadCampaign(name, silent) {
     currentTabName = name;
     if (!silent) {
-      document.getElementById('chartTitle').textContent = 'פילוח סטטוס - ' + name;
+      document.getElementById('chartTitle').textContent = 'פילוח תגובות - ' + name;
       document.getElementById('tableBody').innerHTML = '<tr><td colspan="11" class="loading-state">טוען נתונים...</td></tr>';
     }
     google.script.run.withSuccessHandler(renderCampaign).withFailureHandler(showError).getCampaignData(name);
@@ -645,7 +646,6 @@
       { label: 'תגובות התקבלו', value: data.replies, icon: 'reply', fg: 'var(--accent)', bg: 'var(--accent-soft)' },
       { label: 'שיחות בוצעו (סוכנת AI)', value: data.callsSent, icon: 'bot', fg: 'var(--pending)', bg: 'var(--pending-soft)' },
       { label: 'שגיאות שליחה', value: data.errors, cls: 'bad', icon: 'alert', fg: 'var(--bad)', bg: 'var(--bad-soft)' },
-      { label: 'פעילות היום', value: data.activityToday || 0, icon: 'bolt', fg: 'var(--accent)', bg: 'var(--accent-soft)' },
       { label: 'ימי פעילות', value: daysLabel, cls: 'small', icon: 'calendar', fg: 'var(--text-muted)', bg: 'var(--surface-2)' }
     ];
     document.getElementById('stats').innerHTML = stats.map(function (s) {
@@ -655,12 +655,25 @@
         '<span class="value ' + (s.cls || '') + '">' + s.value + '</span></div></div>';
     }).join('');
 
-    document.getElementById('legend').innerHTML =
-      '<div class="legend-row"><span class="swatch" style="background:var(--good)"></span><span class="name">נשלח וואטסאפ</span><span class="n">' + data.sent + '</span></div>' +
-      '<div class="legend-row"><span class="swatch" style="background:var(--pending)"></span><span class="name">ממתין לשליחה</span><span class="n">' + data.pending + '</span></div>' +
-      '<div class="legend-row"><span class="swatch" style="background:var(--bad)"></span><span class="name">שגיאה</span><span class="n">' + data.errors + '</span></div>';
+    const breakdown = colorizeBreakdown_(data.replyBreakdown || []);
+    document.getElementById('legend').innerHTML = breakdown.map(function (e) {
+      return '<div class="legend-row"><span class="swatch" style="background:' + e.color + '"></span><span class="name">' + escapeHtml_(e.label) + '</span><span class="n">' + e.count + '</span></div>';
+    }).join('');
+    drawBreakdown_(breakdown);
 
-    drawDonut(data.sent, data.pending, data.errors);
+    // ממיינים כך שתשובות חדשות תמיד למעלה, אחריהן מי שכבר ענה, ולבסוף
+    // מי שעדיין לא ענה בתחתית - כדי שהעין תלך ישר למה שדורש תשומת לב.
+    // כותבים חזרה ל-data.rows (לא רק למשתנה מקומי) כדי שגם החיפוש
+    // (setupSearch_, שמסנן מתוך currentData.rows) יכבד את הסדר הזה.
+    data.rows = data.rows.slice().sort(function (a, b) {
+      const aNew = a._isNew ? 1 : 0, bNew = b._isNew ? 1 : 0;
+      if (aNew !== bNew) return bNew - aNew;
+      const aReplied = a.reply ? 1 : 0, bReplied = b.reply ? 1 : 0;
+      return bReplied - aReplied;
+    });
+
+    visibleColumns = computeVisibleColumns_(data.rows);
+    renderTableHead_(visibleColumns);
 
     document.getElementById('searchInput').value = '';
     renderRows(data.rows);
@@ -685,25 +698,56 @@
     rowSnapshots[currentTabName] = newSnap;
   }
 
+  /**
+   * הגדרת כל העמודות האפשריות בטבלה. עמודות עם always:true מוצגות
+   * תמיד; שאר העמודות מוצגות רק אם יש לפחות שורה אחת עם ערך בהן
+   * (ראו computeVisibleColumns_) - כדי לא להציג עמודות ריקות לגמרי.
+   */
+  const COLUMN_DEFS = [
+    { key: 'company', label: 'שם חברה', always: false, hasValue: function (r) { return !!r.company; },
+      cell: function (r) { return '<td class="reply-cell">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
+    { key: 'name', label: 'שם איש קשר', always: true,
+      cell: function (r) { return '<td class="name-cell">' + escapeHtml_(r.name) + '</td>'; } },
+    { key: 'title', label: 'תפקיד', always: false, hasValue: function (r) { return !!r.title; },
+      cell: function (r) { return '<td class="reply-cell">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>'; } },
+    { key: 'phone', label: 'טלפון נייד', always: true,
+      cell: function (r) { return '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>'; } },
+    { key: 'email', label: 'אימייל', always: false, hasValue: function (r) { return !!r.email; },
+      cell: function (r) { return '<td class="reply-cell">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>'; } },
+    { key: 'source', label: 'מקור ליד', always: false, hasValue: function (r) { return !!r.source; },
+      cell: function (r) { return '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>'; } },
+    { key: 'status', label: 'סטטוס', always: true,
+      cell: function (r) { return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>'; } },
+    { key: 'firstReply', label: 'תגובה ראשונית', always: false, hasValue: function (r) { return !!r.firstReply; },
+      cell: function (r) { return '<td class="reply-cell">' + (r.firstReply ? escapeHtml_(r.firstReply) : '—') + '</td>'; } },
+    { key: 'reply', label: 'תשובת לקוח', always: false, hasValue: function (r) { return !!r.reply; },
+      cell: function (r) { return '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
+    { key: 'callStatus', label: 'סטטוס שיחה', always: false, hasValue: function (r) { return !!r.callStatus; },
+      cell: function (r) { return '<td>' + pill_(r.callStatus, r.callStatusClass, '—') + '</td>'; } },
+    { key: 'callResult', label: 'תוצאות שיחה', always: false, hasValue: function (r) { return !!r.callResult; },
+      cell: function (r) { return '<td class="reply-cell">' + (r.callResult ? escapeHtml_(r.callResult) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } }
+  ];
+
+  function computeVisibleColumns_(rows) {
+    return COLUMN_DEFS.filter(function (col) {
+      return col.always || rows.some(col.hasValue);
+    });
+  }
+
+  function renderTableHead_(columns) {
+    document.getElementById('tableHead').innerHTML =
+      '<tr>' + columns.map(function (c) { return '<th>' + escapeHtml_(c.label) + '</th>'; }).join('') + '</tr>';
+  }
+
   function renderRows(rows) {
     const tbody = document.getElementById('tableBody');
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="11" class="empty-state">לא נמצאו אנשי קשר</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="' + visibleColumns.length + '" class="empty-state">לא נמצאו אנשי קשר</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(function (r) {
       return '<tr class="' + (r._isNew ? 'row-new' : '') + '">' +
-        '<td class="reply-cell">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>' +
-        '<td class="name-cell">' + escapeHtml_(r.name) + '</td>' +
-        '<td class="reply-cell">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>' +
-        '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>' +
-        '<td class="reply-cell">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>' +
-        '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>' +
-        '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>' +
-        '<td class="reply-cell">' + (r.firstReply ? escapeHtml_(r.firstReply) : '—') + '</td>' +
-        '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>' +
-        '<td>' + pill_(r.callStatus, r.callStatusClass, '—') + '</td>' +
-        '<td class="reply-cell">' + (r.callResult ? escapeHtml_(r.callResult) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>' +
+        visibleColumns.map(function (c) { return c.cell(r); }).join('') +
         '</tr>';
     }).join('');
   }
@@ -884,7 +928,23 @@
     document.getElementById('tabs').innerHTML = '<span class="empty-state">שגיאה בטעינת הנתונים: ' + escapeHtml_(err.message || err) + '</span>';
   }
 
-  function drawDonut(sent, pending, errors) {
+  /**
+   * מצמידה צבע לכל קטגוריית תגובה - קטגוריות רגילות מקבלות את צבעי
+   * הפילוח הקטגוריאליים (--cat-1..6) לפי הסדר, ו"טרם ענו" (מסומנת
+   * muted מהשרת) מקבלת תמיד צבע אפרפר ניטרלי, כדי שתובלט כקבוצה שונה
+   * מהותית (מי שעדיין לא הגיב) ולא כעוד תשובה בין השאר.
+   */
+  function colorizeBreakdown_(entries) {
+    const styles = getComputedStyle(document.documentElement);
+    const catColors = [1, 2, 3, 4, 5, 6].map(function (n) { return styles.getPropertyValue('--cat-' + n).trim(); });
+    const mutedColor = styles.getPropertyValue('--cat-muted').trim();
+    let idx = 0;
+    return entries.map(function (e) {
+      return { label: e.label, count: e.count, muted: !!e.muted, color: e.muted ? mutedColor : catColors[idx++ % catColors.length] };
+    });
+  }
+
+  function drawBreakdown_(entries) {
     const canvas = document.getElementById('donut');
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
@@ -897,33 +957,31 @@
     ctx.scale(dpr, dpr);
 
     const styles = getComputedStyle(document.documentElement);
-    const good = styles.getPropertyValue('--good').trim();
-    const pendingColor = styles.getPropertyValue('--pending').trim();
-    const bad = styles.getPropertyValue('--bad').trim();
+    const bg = styles.getPropertyValue('--bg').trim();
     const text = styles.getPropertyValue('--text').trim();
     const textMuted = styles.getPropertyValue('--text-muted').trim();
 
-    const data = [
-      { v: sent, c: good },
-      { v: pending, c: pendingColor },
-      { v: errors, c: bad }
-    ];
-    const total = data.reduce(function (s, d) { return s + d.v; }, 0) || 1;
+    const total = entries.reduce(function (s, e) { return s + e.count; }, 0) || 1;
+    const repliedTotal = entries.reduce(function (s, e) { return s + (e.muted ? 0 : e.count); }, 0);
 
     const cx = size / 2, cy = size / 2, rOuter = 92, rInner = 60;
     let start = -Math.PI / 2;
 
     ctx.clearRect(0, 0, size, size);
 
-    data.forEach(function (seg) {
-      if (!seg.v) return;
-      const angle = (seg.v / total) * Math.PI * 2;
+    entries.forEach(function (seg) {
+      if (!seg.count) return;
+      const angle = (seg.count / total) * Math.PI * 2;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, rOuter, start, start + angle);
       ctx.closePath();
-      ctx.fillStyle = seg.c;
+      ctx.fillStyle = seg.color;
       ctx.fill();
+      // רווח דק בין פלחים כדי שיהיו קריאים כנפרדים.
+      ctx.strokeStyle = bg;
+      ctx.lineWidth = 2;
+      ctx.stroke();
       start += angle;
     });
 
@@ -937,10 +995,10 @@
     ctx.textBaseline = 'middle';
     ctx.fillStyle = text;
     ctx.font = '800 26px "Segoe UI", Arial, sans-serif';
-    ctx.fillText(Math.round((sent / total) * 100) + '%', cx, cy - 6);
+    ctx.fillText(Math.round((repliedTotal / total) * 100) + '%', cx, cy - 6);
     ctx.fillStyle = textMuted;
     ctx.font = '600 11px "Segoe UI", Arial, sans-serif';
-    ctx.fillText('נשלחו בהצלחה', cx, cy + 16);
+    ctx.fillText('הגיבו', cx, cy + 16);
   }
 
   loadTabs();

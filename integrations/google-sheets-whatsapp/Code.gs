@@ -724,6 +724,47 @@ function getCampaignData(sheetName) {
     pending: pending,
     activityToday: activityToday,
     daysActive: daysActive_(sheetName),
-    rows: rows
+    rows: rows,
+    replyBreakdown: replyBreakdown_(rows)
   };
+}
+
+/**
+ * מפלח את אנשי הקשר לפי תוכן התגובה (לא לפי סטטוס שליחה) - כמה ענו
+ * "פגישה", כמה "לא מעוניין" וכו', לצורך גרף הפילוח בדשבורד. מבוסס על
+ * "תגובה ראשונית" (הלחיצה הראשונה), עם נפילה חזרה לשורה הראשונה של
+ * "תשובת לקוח" לשורות ישנות שנכתבו לפני שהעמודה הזו נוספה. מי שעדיין
+ * לא ענה בכלל מקובץ בנפרד תחת "טרם ענו". יותר מ-6 קטגוריות שונות
+ * מתקפלות ל"אחר", כדי שהגרף יישאר קריא.
+ */
+function replyBreakdown_(rows) {
+  const NO_REPLY_LABEL = 'טרם ענו';
+  const MAX_CATEGORIES = 6;
+
+  const counts = {};
+  rows.forEach(function (r) {
+    const key = r.firstReply || (r.reply ? String(r.reply).split('\n')[0] : '');
+    const label = key || NO_REPLY_LABEL;
+    counts[label] = (counts[label] || 0) + 1;
+  });
+
+  const noReplyCount = counts[NO_REPLY_LABEL] || 0;
+  delete counts[NO_REPLY_LABEL];
+
+  let entries = Object.keys(counts).map(function (label) {
+    return { label: label, count: counts[label] };
+  });
+  entries.sort(function (a, b) { return b.count - a.count; });
+
+  if (entries.length > MAX_CATEGORIES) {
+    const top = entries.slice(0, MAX_CATEGORIES - 1);
+    const otherCount = entries.slice(MAX_CATEGORIES - 1).reduce(function (s, e) { return s + e.count; }, 0);
+    entries = top.concat([{ label: 'אחר', count: otherCount }]);
+  }
+
+  if (noReplyCount) {
+    entries.push({ label: NO_REPLY_LABEL, count: noReplyCount, muted: true });
+  }
+
+  return entries;
 }
