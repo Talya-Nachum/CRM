@@ -244,13 +244,14 @@ function sendMessagesInSheet_(sheet) {
     const row = data[i];
     const phone = String(row[phoneCol]).replace(/\D/g, '');
     const name = row[nameCol];
-    const status = row[statusCol];
+    const status = String(row[statusCol] || '').trim();
     const templateId = (templateCol !== -1 && row[templateCol]) ? String(row[templateCol]) : sheetTemplateId;
     const rowIndex = i + 1;
 
     // שולחים רק לשורה שסומנה ידנית כ"מאושר לשליחה" - כדי לאפשר להעלות
     // רשימה שלמה (למשל 300 אנשי קשר) ולשלוח בפעימות נשלטות, על ידי
-    // שינוי הסטטוס רק לחלק מהשורות בכל פעם.
+    // שינוי הסטטוס רק לחלק מהשורות בכל פעם. trim() כדי שרווח מיותר
+    // בתא (בהקלדה/הדבקה) לא ימנע שליחה.
     if (!phone || status !== APPROVED_STATUS) continue;
 
     recordLastContact_(phone, sheet.getName());
