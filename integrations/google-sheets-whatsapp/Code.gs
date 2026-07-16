@@ -701,6 +701,8 @@ function getCampaignData(sheetName) {
       status: status,
       statusClass: classifyStatus_(status),
       reply: reply,
+      replyDate: (replyDate instanceof Date && !isNaN(replyDate.getTime()))
+        ? Utilities.formatDate(replyDate, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
       firstReply: firstReply,
       callStatus: callStatus,
       callStatusClass: classifyStatus_(callStatus),
