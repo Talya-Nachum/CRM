@@ -977,8 +977,9 @@
     <label class="modal-label">עדכון סטטוס</label>
     <input type="text" class="modal-input" id="crmStatusText" placeholder="סטטוס חדש, למשל: טופל">
 
-    <label class="modal-label">הערה חדשה</label>
-    <textarea class="modal-input crm-note-input" id="crmNoteText" placeholder="לכתוב הערה..."></textarea>
+    <label class="modal-label">הערות (החדשה למעלה)</label>
+    <div class="crm-note-history" id="crmNoteHistory"></div>
+    <textarea class="modal-input crm-note-input" id="crmNoteText" placeholder="לכתוב הערה חדשה..."></textarea>
 
     <div class="modal-error" id="crmError"></div>
 
@@ -986,9 +987,6 @@
       <button class="btn" id="crmCloseBtn" type="button">סגירה</button>
       <button class="btn btn-accent" id="crmSaveBtn" type="button">שמור וסגור</button>
     </div>
-
-    <label class="modal-label">היסטוריית הערות (החדשה למעלה)</label>
-    <div class="crm-note-history" id="crmNoteHistory"></div>
   </div>
 </div>
 
