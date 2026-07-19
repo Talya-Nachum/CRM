@@ -411,7 +411,21 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
+    padding: 5px 6px;
+    margin: 0 -6px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
   }
+
+  .legend-row:hover { background: var(--surface-2); }
+
+  .legend-row.active {
+    background: var(--accent-soft);
+    font-weight: 700;
+  }
+
+  .legend-row.active .name { color: var(--accent-ink); }
 
   .legend-row .swatch {
     width: 11px;
@@ -422,6 +436,29 @@
 
   .legend-row .name { flex: 1; color: var(--text-muted); }
   .legend-row .n { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  .filter-chip button {
+    border: none;
+    background: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+  }
 
   .trend-section {
     width: 100%;
@@ -710,6 +747,7 @@
         <button class="btn" id="exportBtn" type="button">📥 ייצוא לאקסל</button>
         <button class="btn btn-accent" id="addContactBtn" type="button">➕ הוספת איש קשר</button>
         <input type="text" class="search-input" id="searchInput" placeholder="חיפוש לפי שם או טלפון...">
+        <span id="activeFilterChip"></span>
       </div>
       <div class="table-scroll">
         <table>
@@ -755,7 +793,10 @@
   let rowSnapshots = {}; // { tabName: { phone: {reply, callResult} } } - לזיהוי "תגובה חדשה"
   let visibleColumns = []; // מחושב מחדש בכל טעינת קמפיין - ראו computeVisibleColumns_
   let currentPage = 1;
-  let currentRows = []; // רשימת השורות המלאה (אחרי סינון חיפוש) שעליה מבוססת הדפדוף
+  let currentRows = []; // רשימת השורות המלאה (אחרי סינון) שעליה מבוססת הדפדוף
+  let activeCategoryFilter = null; // { kind: 'named'|'other'|'noreply', label } - סינון לפי לחיצה על פילוח התגובות
+  let currentBreakdown = []; // הפילוח האחרון שצויר, לצורך סימון השורה הפעילה בלג'נד
+  let namedCategoryLabels = []; // תוויות הקטגוריות "האמיתיות" (לא "אחר"/"טרם ענו") - לחישוב סינון "אחר"
   const PAGE_SIZE = 10;
   const AUTO_REFRESH_MS = 30000;
 
@@ -844,16 +885,19 @@
     }).join('');
 
     const breakdown = colorizeBreakdown_(data.replyBreakdown || []);
-    document.getElementById('legend').innerHTML = breakdown.map(function (e) {
-      return '<div class="legend-row"><span class="swatch" style="background:' + e.color + '"></span><span class="name">' + escapeHtml_(e.label) + '</span><span class="n">' + e.count + '</span></div>';
+    currentBreakdown = breakdown;
+    namedCategoryLabels = breakdown.filter(function (e) { return !e.muted && e.label !== 'אחר'; }).map(function (e) { return e.label; });
+    document.getElementById('legend').innerHTML = breakdown.map(function (e, i) {
+      return '<div class="legend-row" data-idx="' + i + '"><span class="swatch" style="background:' + e.color + '"></span><span class="name">' + escapeHtml_(e.label) + '</span><span class="n">' + e.count + '</span></div>';
     }).join('');
+    setupLegendClicks_();
     drawBreakdown_(breakdown);
     drawTrend_(data.trend || []);
 
     // ממיינים כך שתשובות חדשות תמיד למעלה, אחריהן מי שכבר ענה, ולבסוף
     // מי שעדיין לא ענה בתחתית - כדי שהעין תלך ישר למה שדורש תשומת לב.
-    // כותבים חזרה ל-data.rows (לא רק למשתנה מקומי) כדי שגם החיפוש
-    // (setupSearch_, שמסנן מתוך currentData.rows) יכבד את הסדר הזה.
+    // כותבים חזרה ל-data.rows (לא רק למשתנה מקומי) כדי שגם הסינון
+    // (applyFilters_, שמסנן מתוך currentData.rows) יכבד את הסדר הזה.
     data.rows = data.rows.slice().sort(function (a, b) {
       const aNew = a._isNew ? 1 : 0, bNew = b._isNew ? 1 : 0;
       if (aNew !== bNew) return bNew - aNew;
@@ -864,22 +908,14 @@
     visibleColumns = computeVisibleColumns_(data.rows);
     renderTableHead_(visibleColumns);
 
-    // ברענון שקט (כל 30 שניות) שומרים על החיפוש והעמוד הנוכחיים שהיא
-    // נמצאת בהם - לא קופצים לה חזרה לעמוד 1 באמצע צפייה. רק במעבר טאב
-    // (לא שקט) מתחילים מחדש מהעמוד הראשון בלי חיפוש.
-    const searchInput = document.getElementById('searchInput');
+    // ברענון שקט (כל 30 שניות) שומרים על החיפוש, הסינון לפי קטגוריה,
+    // והעמוד הנוכחיים - לא קופצים לה חזרה לעמוד 1 / מנקים סינון באמצע
+    // צפייה. רק במעבר טאב (לא שקט) מתחילים מחדש בלי סינון.
     if (!silent) {
-      searchInput.value = '';
-      currentPage = 1;
-      renderTable_(data.rows);
-    } else {
-      const q = searchInput.value.trim().toLowerCase();
-      const rows = !q ? data.rows : data.rows.filter(function (r) {
-        return String(r.name || '').toLowerCase().indexOf(q) !== -1 ||
-          String(r.phone || '').toLowerCase().indexOf(q) !== -1;
-      });
-      renderTable_(rows);
+      document.getElementById('searchInput').value = '';
+      activeCategoryFilter = null;
     }
+    applyFilters_(!silent);
   }
 
   /**
@@ -1049,15 +1085,82 @@
   }
 
   function setupSearch_() {
-    document.getElementById('searchInput').addEventListener('input', function (e) {
-      if (!currentData) return;
-      const q = e.target.value.trim().toLowerCase();
-      const filtered = !q ? currentData.rows : currentData.rows.filter(function (r) {
-        return String(r.name || '').toLowerCase().indexOf(q) !== -1 ||
-          String(r.phone || '').toLowerCase().indexOf(q) !== -1;
+    document.getElementById('searchInput').addEventListener('input', function () {
+      applyFilters_(true);
+    });
+  }
+
+  /**
+   * מחילה יחד את סינון החיפוש (טקסט חופשי) ואת סינון הקטגוריה (לחיצה
+   * על שורה בלג'נד של "פילוח תגובות") על השורות המלאות של הקמפיין,
+   * ומרנדרת מחדש את הטבלה + הדפדוף + הלג'נד (סימון השורה הפעילה).
+   */
+  function applyFilters_(resetPage) {
+    if (!currentData) return;
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
+    let rows = !q ? currentData.rows : currentData.rows.filter(function (r) {
+      return String(r.name || '').toLowerCase().indexOf(q) !== -1 ||
+        String(r.phone || '').toLowerCase().indexOf(q) !== -1;
+    });
+    if (activeCategoryFilter) {
+      rows = rows.filter(function (r) { return rowMatchesCategory_(r, activeCategoryFilter); });
+    }
+    if (resetPage) currentPage = 1;
+    renderTable_(rows);
+    renderActiveFilterChip_();
+    renderLegendActiveState_();
+  }
+
+  /**
+   * הקטגוריה של שורה - התגובה הראשונית אם יש, אחרת ההודעה הראשונה
+   * בשרשור, אחרת ריק (= "טרם ענו"). זהה ללוגיקה שמחשבת את replyBreakdown_
+   * בצד השרת (Code.gs), כדי שהלחיצה על הלג'נד תסנן בדיוק את מי שנספר
+   * תחת אותה קטגוריה בגרף.
+   */
+  function categoryOf_(r) {
+    return r.firstReply || (r.reply ? String(r.reply).split('\n')[0] : '') || '';
+  }
+
+  function rowMatchesCategory_(r, filter) {
+    const cat = categoryOf_(r);
+    if (filter.kind === 'noreply') return !cat;
+    if (filter.kind === 'other') return !!cat && namedCategoryLabels.indexOf(cat) === -1;
+    return cat === filter.label;
+  }
+
+  function setupLegendClicks_() {
+    document.querySelectorAll('#legend .legend-row').forEach(function (row) {
+      row.addEventListener('click', function () {
+        const idx = parseInt(row.getAttribute('data-idx'), 10);
+        const entry = currentBreakdown[idx];
+        if (!entry) return;
+        const kind = entry.muted ? 'noreply' : (entry.label === 'אחר' ? 'other' : 'named');
+        const isSame = activeCategoryFilter && activeCategoryFilter.kind === kind && activeCategoryFilter.label === entry.label;
+        activeCategoryFilter = isSame ? null : { kind: kind, label: entry.label };
+        applyFilters_(true);
       });
-      currentPage = 1;
-      renderTable_(filtered);
+    });
+  }
+
+  function renderActiveFilterChip_() {
+    const el = document.getElementById('activeFilterChip');
+    if (!el) return;
+    if (!activeCategoryFilter) { el.innerHTML = ''; return; }
+    el.innerHTML = '<span class="filter-chip">מסונן: ' + escapeHtml_(activeCategoryFilter.label) +
+      ' <button type="button" id="clearCategoryFilter">✕</button></span>';
+    document.getElementById('clearCategoryFilter').addEventListener('click', function () {
+      activeCategoryFilter = null;
+      applyFilters_(true);
+    });
+  }
+
+  function renderLegendActiveState_() {
+    document.querySelectorAll('#legend .legend-row').forEach(function (row) {
+      const idx = parseInt(row.getAttribute('data-idx'), 10);
+      const entry = currentBreakdown[idx];
+      const kind = entry && entry.muted ? 'noreply' : (entry && entry.label === 'אחר' ? 'other' : 'named');
+      const isActive = !!(activeCategoryFilter && entry && activeCategoryFilter.kind === kind && activeCategoryFilter.label === entry.label);
+      row.classList.toggle('active', isActive);
     });
   }
 
