@@ -48,6 +48,7 @@ const SOURCE_HEADER = 'מקור הליד';
 const TEMPLATE_HEADER = 'מספר תבנית';
 const STATUS_HEADER = 'סטטוס';
 const REPLY_HEADER = 'תשובת איש קשר';
+const REPLY_HEADER_LEGACY = 'תשובת לקוח'; // שם ישן - טאבים שטרם שונו ידנית
 const FIRST_REPLY_HEADER = 'סטטוס איש קשר';
 const REPLY_DATE_HEADER = 'תאריך תשובה';
 const SENT_STATUS = 'נשלח וואטסאפ';
@@ -144,6 +145,17 @@ function startCallsActiveTab() {
  */
 function getCampaignSheets_(ss) {
   return ss.getSheets().filter(isCampaignSheet_);
+}
+
+/**
+ * מוצאת עמודה לפי כותרת - וגם לפי שם ישן חלופי (legacy), למי שעדיין לא
+ * שינתה ידנית את הכותרת בטאב הזה לשם החדש. כך שני השמות עובדים בכל טאב
+ * בלי תלות אם היא כבר שינתה שם או לא.
+ */
+function findHeaderIndex_(headers, primary, legacy) {
+  const idx = headers.indexOf(primary);
+  if (idx !== -1) return idx;
+  return legacy ? headers.indexOf(legacy) : -1;
 }
 
 /**
@@ -500,7 +512,7 @@ function handleInforuWebhook_(ss, payload) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
       const phoneCol = headers.indexOf(PHONE_HEADER);
-      const replyCol = headers.indexOf(REPLY_HEADER);
+      const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
       const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
       if (phoneCol === -1 || replyCol === -1) continue;
 
@@ -935,7 +947,7 @@ function summarizeContact(sheetName, phone) {
   };
 
   const name = get_(NAME_HEADER);
-  const whatsappHistory = get_(REPLY_HEADER);
+  const whatsappHistory = get_(REPLY_HEADER) || get_(REPLY_HEADER_LEGACY);
   const callHistory = get_(CALL_RESULT_HEADER);
 
   if (!whatsappHistory && !callHistory) {
@@ -1013,7 +1025,7 @@ function getCampaignData(sheetName) {
   const emailCol = headers.indexOf(EMAIL_HEADER);
   const sourceCol = headers.indexOf(SOURCE_HEADER);
   const statusCol = headers.indexOf(STATUS_HEADER);
-  const replyCol = headers.indexOf(REPLY_HEADER);
+  const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
   const firstReplyCol = headers.indexOf(FIRST_REPLY_HEADER);
   const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
   const callStatusCol = headers.indexOf(CALL_STATUS_HEADER);
