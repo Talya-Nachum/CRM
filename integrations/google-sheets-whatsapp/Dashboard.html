@@ -1171,9 +1171,6 @@
     { key: 'source', label: 'מקור ליד', always: false, hasValue: function (r) { return !!r.source; },
       filterValue: function (r) { return r.source || ''; },
       cell: function (r) { return '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>'; } },
-    { key: 'status', label: 'סטטוס', always: true,
-      filterValue: function (r) { return r.status || ''; },
-      cell: function (r) { return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>'; } },
     { key: 'finalStatus', label: 'סטטוס איש קשר', always: true,
       filterValue: function (r) { return r.firstReply || r.status || ''; },
       cell: function (r) {
@@ -1197,7 +1194,7 @@
       cell: function (r) {
         const summary = parseNotesSummary_(r.userNotes);
         if (!summary) return '<td class="reply-cell">—</td>';
-        return '<td><span class="note-chip" data-phone="' + escapeHtml_(r.phone) + '">📝 ' + escapeHtml_(summary.lastAuthor) + ' (' + summary.count + ')</span></td>';
+        return '<td><span class="note-chip" data-phone="' + escapeHtml_(r.phone) + '" title="' + escapeHtml_(r.userNotes) + '">📝 ' + escapeHtml_(summary.lastAuthor) + ' (' + summary.count + ')</span></td>';
       } },
     { key: 'actions', label: '', always: true,
       cell: function (r) {
@@ -1573,13 +1570,13 @@
       // צבועות בירוק ועמודות שיחה/פרלה בכתום, כדי להבדיל בין הערוצים
       // במבט ראשון.
       const headers = [
-        'שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס',
+        'שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד',
         'סטטוס איש קשר (וואטסאפ)', 'תאריך עדכון (וואטסאפ)', 'תשובה אחרונה (וואטסאפ)', 'היסטוריית וואטסאפ מלאה',
         'סטטוס שיחה', 'תאריך עדכון (שיחה)', 'תוצאה אחרונה (שיחה)', 'היסטוריית שיחות מלאה',
         'סטטוס משתמש', 'הערות משתמש (הכל)'
       ];
-      const WHATS_FROM = 6, WHATS_TO = 10;
-      const CALL_FROM = 11, CALL_TO = 14;
+      const WHATS_FROM = 6, WHATS_TO = 9;
+      const CALL_FROM = 10, CALL_TO = 13;
       const headerBg_ = function (i) {
         if (i >= WHATS_FROM && i <= WHATS_TO) return '#A7F3D0';
         if (i >= CALL_FROM && i <= CALL_TO) return '#FED7AA';
@@ -1607,7 +1604,7 @@
 
         const values = [
           { text: r.company }, { text: r.name }, { text: r.title }, { text: r.phone },
-          { text: r.email }, { text: r.source }, { text: r.status },
+          { text: r.email }, { text: r.source },
           { text: finalWhats }, { text: r.replyDate }, { text: cleanReply }, { html: fullReplyHistory },
           { text: r.callStatus }, { text: r.callDate }, { text: cleanCallResult }, { html: fullCallHistory },
           { text: r.userStatus }, { html: fullNotes }
