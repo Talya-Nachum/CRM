@@ -15,6 +15,9 @@
  *      INFORU_TOKEN       = הטוקן של אינפוריו
  *      NLPEARL_ACCOUNT_ID = מזהה החשבון ב-NLPearl (מתוך platform.nlpearl.ai/app/settings/api)
  *      NLPEARL_SECRET_KEY = מפתח ה-API הסודי של NLPearl, מאותו עמוד הגדרות
+ *      GEMINI_API_KEY     = מפתח API של Google Gemini (מ-aistudio.google.com),
+ *                           לסיכום AI של שיחה עם ליד מהדשבורד - אופציונלי,
+ *                           נדרש רק אם משתמשים בכפתור "✨ סיכום AI"
  * 3. להריץ sendMessages / startCalls (או לחבר טריגר זמן) כדי לעבד כל שורה
  *    שעדיין אין לה סטטוס, בכל טאבי הקמפיינים. אפשר גם להשתמש בתפריט
  *    "קמפיינים" בגיליון כדי להריץ טאב בודד בלבד.
@@ -790,6 +793,65 @@ function lastExportTime_(sheetName) {
  */
 function recordExportTime(sheetName) {
   PropertiesService.getScriptProperties().setProperty('LAST_EXPORT_' + sheetName, new Date().toISOString());
+}
+
+/**
+ * מסכמת ב-AI (Google Gemini) את ההתכתבות בפועל עם הליד - היסטוריית
+ * וואטסאפ + היסטוריית שיחות (לא הערות הצוות הפנימיות) - למספר משפטים
+ * קצרים, כדי לדעת במבט אחד על מה מדובר בלי לקרוא את כל השרשור.
+ * דורש GEMINI_API_KEY ב-Script Properties (מ-aistudio.google.com).
+ */
+function summarizeContact(sheetName, phone) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  if (!apiKey) {
+    throw new Error('חסר מפתח GEMINI_API_KEY ב-Script Properties (Project Settings)');
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error('הטאב "' + sheetName + '" לא נמצא');
+
+  const found = findRowByPhone_(sheet, phone);
+  if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
+
+  const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
+  const get_ = function (header) {
+    const col = found.headers.indexOf(header);
+    return col !== -1 ? rowValues[col] : '';
+  };
+
+  const name = get_(NAME_HEADER);
+  const whatsappHistory = get_(REPLY_HEADER);
+  const callHistory = get_(CALL_RESULT_HEADER);
+
+  if (!whatsappHistory && !callHistory) {
+    throw new Error('אין עדיין שיחה עם הליד הזה לסכם');
+  }
+
+  const prompt = 'סכם ב-2-4 משפטים קצרים בעברית את מצב הליד הבא - מה הוא רוצה/מתעניין בו ומה הסטטוס שלו כרגע - על סמך ההתכתבות שלו:\n\n' +
+    (name ? 'שם: ' + name + '\n' : '') +
+    (whatsappHistory ? '\nשיחת וואטסאפ:\n' + whatsappHistory + '\n' : '') +
+    (callHistory ? '\nתוצאות שיחות טלפון:\n' + callHistory + '\n' : '');
+
+  const response = UrlFetchApp.fetch(
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey,
+    {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      muteHttpExceptions: true
+    }
+  );
+
+  const result = JSON.parse(response.getContentText());
+  const summary = result.candidates && result.candidates[0] && result.candidates[0].content &&
+    result.candidates[0].content.parts && result.candidates[0].content.parts[0] &&
+    result.candidates[0].content.parts[0].text;
+
+  if (!summary) {
+    throw new Error('לא התקבל סיכום מ-Gemini: ' + response.getContentText());
+  }
+  return summary.trim();
 }
 
 function classifyStatus_(value) {

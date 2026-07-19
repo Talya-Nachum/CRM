@@ -622,6 +622,22 @@
     justify-content: center;
   }
 
+  .action-btns { display: inline-flex; gap: 5px; }
+
+  .ai-summary-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1.5px solid var(--accent-2);
+    background: var(--accent-2-soft);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   tbody td {
     padding: 13px 10px;
     border-bottom: 1px solid var(--border);
@@ -820,6 +836,17 @@
   .row-2 { display: flex; gap: 8px; }
   .row-2 .modal-input { flex: 1; min-width: 0; }
 
+  .crm-ai-summary {
+    margin-top: 4px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--accent-2-soft);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
   .crm-note-input { min-height: 60px; resize: vertical; }
 
   .crm-note-history {
@@ -937,17 +964,23 @@
     <label class="modal-label">סטטוס נוכחי</label>
     <div class="crm-current-status" id="crmCurrentStatus">—</div>
 
-    <label class="modal-label">עדכון סטטוס</label>
-    <div class="row-2">
-      <select class="modal-input" id="crmStatusUser"></select>
-      <input type="text" class="modal-input" id="crmStatusText" placeholder="סטטוס חדש, למשל: טופל">
+    <label class="modal-label">✨ סיכום AI של השיחה</label>
+    <div class="crm-ai-summary" id="crmAiSummary">לא נוצר סיכום עדיין</div>
+    <div class="modal-error" id="crmAiError"></div>
+    <div class="modal-actions" style="justify-content:flex-start;">
+      <button class="btn" id="crmAiBtn" type="button">צור סיכום</button>
     </div>
+
+    <label class="modal-label">מבצע/ת העדכון</label>
+    <select class="modal-input" id="crmUser"></select>
+
+    <label class="modal-label">עדכון סטטוס</label>
+    <input type="text" class="modal-input" id="crmStatusText" placeholder="סטטוס חדש, למשל: טופל">
     <div class="modal-actions" style="justify-content:flex-start;">
       <button class="btn btn-accent" id="crmStatusSaveBtn" type="button">שמור סטטוס</button>
     </div>
 
     <label class="modal-label">הערה חדשה</label>
-    <select class="modal-input" id="crmNoteUser"></select>
     <textarea class="modal-input crm-note-input" id="crmNoteText" placeholder="לכתוב הערה..."></textarea>
     <div class="modal-actions" style="justify-content:flex-start;">
       <button class="btn btn-accent" id="crmNoteSaveBtn" type="button">שמור הערה</button>
@@ -1146,13 +1179,12 @@
     { key: 'status', label: 'סטטוס', always: true,
       filterValue: function (r) { return r.status || ''; },
       cell: function (r) { return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>'; } },
-    { key: 'finalStatus', label: 'סטטוס סופי', always: false,
-      hasValue: function (r) { return !!(r.firstReply || r.callFirstResult); },
-      filterValue: function (r) { return r.firstReply || r.callFirstResult || ''; },
+    { key: 'finalStatus', label: 'סטטוס סופי', always: true,
+      filterValue: function (r) { return r.firstReply || r.callFirstResult || r.status || ''; },
       cell: function (r) {
         if (r.firstReply) return '<td class="reply-cell">📱 ' + escapeHtml_(r.firstReply) + '</td>';
         if (r.callFirstResult) return '<td class="reply-cell">📞 ' + escapeHtml_(r.callFirstResult) + '</td>';
-        return '<td class="reply-cell">—</td>';
+        return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>';
       } },
     { key: 'reply', label: 'תשובת לקוח', always: false, hasValue: function (r) { return !!r.reply; },
       filterValue: function (r) { return r.reply ? lastReplyLine_(r.reply) : ''; },
@@ -1174,7 +1206,13 @@
         return '<td><span class="note-chip" data-phone="' + escapeHtml_(r.phone) + '">📝 ' + escapeHtml_(summary.lastAuthor) + ' (' + summary.count + ')</span></td>';
       } },
     { key: 'actions', label: '', always: true,
-      cell: function (r) { return '<td><button type="button" class="add-note-btn" data-phone="' + escapeHtml_(r.phone) + '" title="הערות וסטטוס">+</button></td>'; } }
+      cell: function (r) {
+        const p = escapeHtml_(r.phone);
+        return '<td><div class="action-btns">' +
+          '<button type="button" class="add-note-btn" data-phone="' + p + '" title="הערות וסטטוס">+</button>' +
+          '<button type="button" class="ai-summary-btn" data-phone="' + p + '" title="סיכום AI">✨</button>' +
+          '</div></td>';
+      } }
   ];
 
   function computeVisibleColumns_(rows) {
@@ -1322,8 +1360,13 @@
    * על שורה בלג'נד של "פילוח תגובות") על השורות המלאות של הקמפיין,
    * ומרנדרת מחדש את הטבלה + הדפדוף + הלג'נד (סימון השורה הפעילה).
    */
-  function applyFilters_(resetPage) {
-    if (!currentData) return;
+  /**
+   * מחשבת את השורות שנשארות אחרי כל הסינונים הפעילים (חיפוש + קטגוריה
+   * + עמודות) - משמשת גם את applyFilters_ (לתצוגה בטבלה) וגם את
+   * setupExport_ (כדי שהייצוא לאקסל יכבד בדיוק את מה שמסונן על המסך).
+   */
+  function getFilteredRows_() {
+    if (!currentData) return [];
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
     let rows = !q ? currentData.rows : currentData.rows.filter(function (r) {
       return String(r.name || '').toLowerCase().indexOf(q) !== -1 ||
@@ -1336,10 +1379,15 @@
       const allowed = columnFilters[key];
       const col = COLUMN_DEFS.filter(function (c) { return c.key === key; })[0];
       if (!allowed || !col) return;
-      rows = rows.filter(function (r) { return allowed.has(col.filterValue(r)); });
+      rows = rows.filter(function (r) { return allowed.has(String(col.filterValue(r))); });
     });
+    return rows;
+  }
+
+  function applyFilters_(resetPage) {
+    if (!currentData) return;
     if (resetPage) currentPage = 1;
-    renderTable_(rows);
+    renderTable_(getFilteredRows_());
     renderActiveFilterChip_();
     renderLegendActiveState_();
   }
@@ -1419,7 +1467,7 @@
 
     const counts = {};
     currentData.rows.forEach(function (r) {
-      const raw = col.filterValue(r);
+      const raw = String(col.filterValue(r) || '');
       const label = raw ? raw : '(ריק)';
       counts[label] = (counts[label] || 0) + 1;
     });
@@ -1484,39 +1532,65 @@
   function setupExport_() {
     document.getElementById('exportBtn').addEventListener('click', function () {
       if (!currentData) return;
-      const q = document.getElementById('searchInput').value.trim().toLowerCase();
-      const rows = !q ? currentData.rows : currentData.rows.filter(function (r) {
-        return String(r.name || '').toLowerCase().indexOf(q) !== -1 ||
-          String(r.phone || '').toLowerCase().indexOf(q) !== -1;
-      });
+      // מכבד את הסינון הפעיל על המסך (חיפוש + קטגוריה מהלג'נד + סינוני
+      // עמודות בסגנון אקסל) - לא מייצא סתם את כל השורות בקמפיין.
+      const rows = getFilteredRows_();
 
       // עמודות נקיות לסינון (סטטוס סופי + תאריך עדכון, לכל ערוץ בנפרד) וגם
       // עמודות עם ההיסטוריה המלאה - כדי שלא יאבד מידע. שורה שהתעדכנה מאז
-      // ההורדה הקודמת של הקובץ הזה מסומנת ברקע צהבהב (r.recentlyUpdated).
+      // ההורדה הקודמת של הקובץ הזה מסומנת ברקע צהבהב. עמודות וואטסאפ
+      // צבועות בירוק ועמודות שיחה/פרלה בכתום, כדי להבדיל בין הערוצים
+      // במבט ראשון.
       const headers = [
         'שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס',
         'סטטוס סופי (וואטסאפ)', 'תאריך עדכון (וואטסאפ)', 'תשובה אחרונה (וואטסאפ)', 'היסטוריית וואטסאפ מלאה',
         'סטטוס שיחה', 'סטטוס סופי (שיחה)', 'תאריך עדכון (שיחה)', 'תוצאה אחרונה (שיחה)', 'היסטוריית שיחות מלאה',
         'סטטוס משתמש', 'הערות משתמש (הכל)'
       ];
-      const cell_ = function (v) { return '<td>' + escapeHtml_(v === undefined || v === null ? '' : v) + '</td>'; };
-      const cellHtml_ = function (v) { return '<td>' + v + '</td>'; };
-      const headRow = '<tr>' + headers.map(function (h) { return '<th>' + escapeHtml_(h) + '</th>'; }).join('') + '</tr>';
+      const WHATS_FROM = 6, WHATS_TO = 10;
+      const CALL_FROM = 11, CALL_TO = 15;
+      const headerBg_ = function (i) {
+        if (i >= WHATS_FROM && i <= WHATS_TO) return '#A7F3D0';
+        if (i >= CALL_FROM && i <= CALL_TO) return '#FED7AA';
+        return '#F3F4F6';
+      };
+      const cellBg_ = function (i, recentlyUpdated) {
+        if (i >= WHATS_FROM && i <= WHATS_TO) return recentlyUpdated ? '#A7F3D0' : '#D1FAE5';
+        if (i >= CALL_FROM && i <= CALL_TO) return recentlyUpdated ? '#FED7AA' : '#FFEDD5';
+        return recentlyUpdated ? '#FEF3C7' : '';
+      };
+
+      const headRow = '<tr>' + headers.map(function (h, i) {
+        return '<th style="background:' + headerBg_(i) + ';">' + escapeHtml_(h) + '</th>';
+      }).join('') + '</tr>';
+
       const bodyRows = rows.map(function (r) {
         const cleanReply = r.reply ? stripTimestampPrefix_(lastReplyLine_(r.reply)) : '';
         const fullReplyHistory = r.reply ? escapeHtml_(r.reply).replace(/\n/g, '<br>') : '';
         const cleanCallResult = r.callResult ? lastReplyLine_(r.callResult) : '';
         const fullCallHistory = r.callResult ? escapeHtml_(r.callResult).replace(/\n/g, '<br>') : '';
         const fullNotes = r.userNotes ? escapeHtml_(r.userNotes).replace(/\n/g, '<br>') : '';
-        const trStyle = r.recentlyUpdated ? ' style="background:#FEF3C7;"' : '';
-        return '<tr' + trStyle + '>' +
-          [r.company, r.name, r.title, r.phone, r.email, r.source, r.status, r.firstReply, r.replyDate, cleanReply].map(cell_).join('') +
-          cellHtml_(fullReplyHistory) +
-          [r.callStatus, r.callFirstResult, r.callDate, cleanCallResult].map(cell_).join('') +
-          cellHtml_(fullCallHistory) +
-          [r.userStatus].map(cell_).join('') +
-          cellHtml_(fullNotes) +
-          '</tr>';
+        // אם עדיין אין תגובה/תוצאת שיחה - נופלים חזרה לסטטוס השליחה הבסיסי
+        // (למשל "נשלח וואטסאפ"), לעולם לא משאירים את התא ריק.
+        const finalWhats = r.firstReply || r.status || '';
+        const finalCall = r.callFirstResult || r.callStatus || '';
+
+        const values = [
+          { text: r.company }, { text: r.name }, { text: r.title }, { text: r.phone },
+          { text: r.email }, { text: r.source }, { text: r.status },
+          { text: finalWhats }, { text: r.replyDate }, { text: cleanReply }, { html: fullReplyHistory },
+          { text: r.callStatus }, { text: finalCall }, { text: r.callDate }, { text: cleanCallResult }, { html: fullCallHistory },
+          { text: r.userStatus }, { html: fullNotes }
+        ];
+
+        const tds = values.map(function (v, i) {
+          const bg = cellBg_(i, r.recentlyUpdated);
+          const style = bg ? ' style="background:' + bg + ';"' : '';
+          const content = v.html !== undefined ? v.html : escapeHtml_(v.text === undefined || v.text === null ? '' : v.text);
+          return '<td' + style + '>' + content + '</td>';
+        }).join('');
+
+        return '<tr>' + tds + '</tr>';
       }).join('');
 
       // "אקסל" אמיתי (xlsx) דורש ספרייה חיצונית שלא ניתן לטעון כאן; טבלת HTML
@@ -1615,14 +1689,16 @@
     const modal = document.getElementById('crmModal');
     const contactLabel = document.getElementById('crmModalContact');
     const currentStatusEl = document.getElementById('crmCurrentStatus');
-    const statusUserSel = document.getElementById('crmStatusUser');
+    const userSel = document.getElementById('crmUser');
     const statusText = document.getElementById('crmStatusText');
-    const noteUserSel = document.getElementById('crmNoteUser');
     const noteText = document.getElementById('crmNoteText');
     const errorEl = document.getElementById('crmError');
     const historyEl = document.getElementById('crmNoteHistory');
     const statusSaveBtn = document.getElementById('crmStatusSaveBtn');
     const noteSaveBtn = document.getElementById('crmNoteSaveBtn');
+    const aiSummaryEl = document.getElementById('crmAiSummary');
+    const aiErrorEl = document.getElementById('crmAiError');
+    const aiBtn = document.getElementById('crmAiBtn');
     let modalPhone = null;
 
     function populateUsers_(sel) {
@@ -1646,23 +1722,47 @@
       return currentData.rows.filter(function (r) { return r.phone === phone; })[0] || null;
     }
 
-    function openModal(phone) {
+    function openModal(phone, autoSummarize) {
       modalPhone = phone;
       const row = findRow_(phone);
       contactLabel.textContent = row ? [row.name, row.company, row.phone].filter(Boolean).join(' · ') : phone;
       currentStatusEl.textContent = (row && row.userStatus) || 'ללא סטטוס';
-      populateUsers_(statusUserSel);
-      populateUsers_(noteUserSel);
+      populateUsers_(userSel);
       statusText.value = '';
       noteText.value = '';
       errorEl.textContent = '';
+      aiSummaryEl.textContent = 'לא נוצר סיכום עדיין';
+      aiErrorEl.textContent = '';
       renderHistory_(row && row.userNotes);
       modal.classList.add('show');
+      if (autoSummarize) generateSummary_();
     }
 
     function closeModal() {
       modal.classList.remove('show');
       modalPhone = null;
+      errorEl.textContent = '';
+      aiErrorEl.textContent = '';
+    }
+
+    // מסכם עם Gemini את היסטוריית השיחה האמיתית (וואטסאפ + שיחות) של איש
+    // הקשר - לא את ההערות הפנימיות של הצוות.
+    function generateSummary_() {
+      if (!modalPhone || !currentTabName) return;
+      aiBtn.disabled = true;
+      aiErrorEl.textContent = '';
+      aiSummaryEl.textContent = 'מייצר סיכום...';
+      google.script.run
+        .withSuccessHandler(function (summary) {
+          aiBtn.disabled = false;
+          aiSummaryEl.textContent = summary || 'אין מספיק מידע לסיכום';
+        })
+        .withFailureHandler(function (err) {
+          aiBtn.disabled = false;
+          aiSummaryEl.textContent = 'לא נוצר סיכום עדיין';
+          aiErrorEl.textContent = 'שגיאה: ' + (err.message || err);
+        })
+        .summarizeContact(currentTabName, modalPhone);
     }
 
     // אחרי שמירה, מביאים מחדש את כל נתוני הקמפיין - גם כדי לרענן את
@@ -1693,7 +1793,7 @@
           statusSaveBtn.disabled = false;
           errorEl.textContent = 'שגיאה: ' + (err.message || err);
         })
-        .setUserStatus(currentTabName, modalPhone, statusUserSel.value, text);
+        .setUserStatus(currentTabName, modalPhone, userSel.value, text);
     }
 
     function saveNote() {
@@ -1712,18 +1812,25 @@
           noteSaveBtn.disabled = false;
           errorEl.textContent = 'שגיאה: ' + (err.message || err);
         })
-        .addUserNote(currentTabName, modalPhone, noteUserSel.value, text);
+        .addUserNote(currentTabName, modalPhone, userSel.value, text);
     }
 
     document.getElementById('tableBody').addEventListener('click', function (e) {
+      const aiTrigger = e.target.closest('.ai-summary-btn');
+      if (aiTrigger) {
+        const phone = aiTrigger.getAttribute('data-phone');
+        if (phone) openModal(phone, true);
+        return;
+      }
       const trigger = e.target.closest('.add-note-btn, .note-chip');
       if (!trigger) return;
       const phone = trigger.getAttribute('data-phone');
-      if (phone) openModal(phone);
+      if (phone) openModal(phone, false);
     });
     document.getElementById('crmCloseBtn').addEventListener('click', closeModal);
     statusSaveBtn.addEventListener('click', saveStatus);
     noteSaveBtn.addEventListener('click', saveNote);
+    aiBtn.addEventListener('click', function () { generateSummary_(); });
     modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
   }
 
