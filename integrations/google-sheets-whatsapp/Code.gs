@@ -445,12 +445,29 @@ function doPost(e) {
  * רק אם אין מיפוי כזה (למשל שורה שנוספה ידנית ומעולם לא נשלחה אליה
  * הודעה מהמערכת) נופלים חזרה לחיפוש בכל טאבי הקמפיינים.
  */
+/**
+ * שולפת את הטקסט של הכפתור שנלחץ, אם ההודעה הנכנסת היא בכלל תוצאה של
+ * לחיצה על כפתור תגובה מובנה (ולא הודעת טקסט חופשי שהלקוח הקליד).
+ * אינפוריו מסמן את זה בשדה AdditionalInfo (מחרוזת JSON) - יש בו
+ * "ButtonPayload" רק כשזו הייתה לחיצת כפתור אמיתית; בטקסט חופשי השדה
+ * הזה קיים אבל בלי ButtonPayload בכלל.
+ */
+function extractButtonPayload_(entry) {
+  try {
+    const info = JSON.parse(entry.AdditionalInfo || '{}');
+    return info.ButtonPayload || '';
+  } catch (e) {
+    return '';
+  }
+}
+
 function handleInforuWebhook_(ss, payload) {
   const entry = payload.Data && payload.Data[0];
   if (!entry) return;
 
   const incomingPhone = phoneSuffix_(entry.Value);
   const incomingText = entry.Message;
+  const buttonPayload = extractButtonPayload_(entry);
   if (!incomingPhone) return;
 
   const lock = LockService.getScriptLock();
@@ -474,17 +491,18 @@ function handleInforuWebhook_(ss, payload) {
           const existingReply = data[i][replyCol];
           // בלי חותמת זמן בתוך הטקסט - כדי שהעמודה תישאר טקסט נקי שאפשר
           // לסנן/למיין (גם בגיליון עצמו וגם בייצוא לאקסל). מועד התשובה
-          // האחרונה נשמר בנפרד בעמודת "תאריך תשובה".
+          // האחרונה נשמר בנפרד בעמודת "תאריך תשובה". כל הודעה נכנסת -
+          // כפתור או טקסט חופשי - נכנסת לשרשרת הזו במלואה.
           const combined = existingReply ? (existingReply + '\n' + incomingText) : incomingText;
           sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
           if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
           recordDailyActivity_(sheet.getName());
-          // התגובה הראשונה של הלקוח (למשל לחיצה על "פגישה" / "לא מעוניין"
-          // בתפריט הראשוני) נשמרת פעם אחת בלבד בעמודה נפרדת - לא נדרסת
-          // בהמשך השיחה עם הבוט האוטומטי, כדי שיהיה אפשר לראות אותה
-          // במבט אחד בדשבורד, בלי כל השרשור.
-          if (firstReplyCol !== -1 && !data[i][firstReplyCol]) {
-            sheet.getRange(rowIndex, firstReplyCol + 1).setValue(incomingText);
+          // "תגובה ראשונית" נקבעת רק מלחיצה אמיתית על כפתור (למשל "פגישה"
+          // / "לא מעוניין" בתפריט הראשוני) - לא מטקסט חופשי שהלקוח כותב,
+          // גם אם הוא הגיע קודם כרונולוגית. נשמרת פעם אחת בלבד, לא נדרסת
+          // בלחיצה נוספת בהמשך השיחה עם הבוט האוטומטי.
+          if (firstReplyCol !== -1 && buttonPayload && !data[i][firstReplyCol]) {
+            sheet.getRange(rowIndex, firstReplyCol + 1).setValue(buttonPayload);
           }
           return;
         }
@@ -713,6 +731,61 @@ function findRowByPhone_(sheet, phone) {
     }
   }
   return null;
+}
+
+/**
+ * כלי עזר חד-פעמי: משלים רטרואקטיבית את "תגובה ראשונית" לכל מי שכבר
+ * לחץ בעבר על כפתור תגובה (לפני שהתיקון ב-handleInforuWebhook_ נכנס),
+ * על סמך ה-JSON הגולמי שנשמר בטאב WebhookLog מאז ומתמיד. עוברים על
+ * הלוג מהישן לחדש, כך שהעדכון הראשון שנתפס לכל טלפון הוא באמת
+ * הלחיצה הראשונה - בדיוק כמו ההתנהגות הרגילה. אפשר להריץ שוב בבטחה,
+ * לא דורס ערך שכבר קיים בעמודה.
+ */
+function backfillFirstReplyFromWebhookLog() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName('WebhookLog');
+  if (!logSheet) throw new Error('לא נמצא טאב WebhookLog');
+
+  const rows = logSheet.getDataRange().getValues();
+  let updated = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i][1];
+    if (!raw) continue;
+
+    let payload;
+    try {
+      payload = JSON.parse(raw);
+    } catch (e) {
+      continue;
+    }
+    const entry = payload.Data && payload.Data[0];
+    if (!entry || !entry.Value) continue;
+
+    const buttonPayload = extractButtonPayload_(entry);
+    if (!buttonPayload) continue;
+
+    const phone = phoneSuffix_(entry.Value);
+    if (!phone) continue;
+
+    const tracked = lastContactSheet_(ss, phone);
+    const sheets = tracked ? [tracked] : getCampaignSheets_(ss);
+    for (const sheet of sheets) {
+      const found = findRowByPhone_(sheet, phone);
+      if (!found) continue;
+      const firstReplyCol = found.headers.indexOf(FIRST_REPLY_HEADER);
+      if (firstReplyCol === -1) continue;
+      const cell = sheet.getRange(found.rowIndex, firstReplyCol + 1);
+      if (!cell.getValue()) {
+        cell.setValue(buttonPayload);
+        updated++;
+      }
+      break;
+    }
+  }
+
+  Logger.log('הושלמו ' + updated + ' עדכונים רטרואקטיביים ל"תגובה ראשונית"');
+  return updated;
 }
 
 function validateTeamUser_(username) {
