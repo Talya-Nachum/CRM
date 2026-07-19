@@ -1172,19 +1172,12 @@
       filterValue: function (r) { return r.source || ''; },
       cell: function (r) { return '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>'; } },
     { key: 'finalStatus', label: 'סטטוס איש קשר', always: true,
-      // סדר עדיפות: לחיצה אמיתית על כפתור > תשובה חופשית בוואטסאפ (הגיע
-      // וענה, גם אם לא בלחיצת כפתור - לא סביר שייראה בדיוק כמו מי שלא ענה
-      // בכלל) > תוצאת שיחה (אם אין וואטסאפ בכלל) > סטטוס שליחה בסיסי.
-      filterValue: function (r) {
-        return r.firstReply
-          || (r.reply ? stripTimestampPrefix_(String(r.reply).split('\n')[0]) : '')
-          || (r.callResult ? lastReplyLine_(r.callResult) : '')
-          || r.status || '';
-      },
+      // רק לחיצה אמיתית על כפתור - לא תשובה חופשית. תשובה חופשית כבר
+      // מוצגת במלואה בעמודת "תשובת איש קשר" הנפרדת, אין צורך לשכפל אותה
+      // כאן; העמודה הזו נשארת שמורה אך ורק לבחירה הקטגורית מהכפתור.
+      filterValue: function (r) { return r.firstReply || r.status || ''; },
       cell: function (r) {
         if (r.firstReply) return '<td class="reply-cell">💬 ' + escapeHtml_(r.firstReply) + '</td>';
-        if (r.reply) return '<td class="reply-cell">💬 ' + escapeHtml_(stripTimestampPrefix_(String(r.reply).split('\n')[0])) + '</td>';
-        if (r.callResult) return '<td class="reply-cell">🤖 ' + escapeHtml_(lastReplyLine_(r.callResult)) + '</td>';
         return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>';
       } },
     { key: 'reply', label: 'תשובת איש קשר', always: false, hasValue: function (r) { return !!r.reply; },
@@ -1613,11 +1606,10 @@
         const cleanCallResult = r.callResult ? lastReplyLine_(r.callResult) : '';
         const fullCallHistory = r.callResult ? escapeHtml_(r.callResult).replace(/\n/g, '<br>') : '';
         const fullNotes = r.userNotes ? escapeHtml_(r.userNotes).replace(/\n/g, '<br>') : '';
-        // אם עדיין אין תגובה בכלל - נופלים חזרה לסטטוס השליחה הבסיסי (למשל
-        // "נשלח וואטסאפ"), לעולם לא משאירים את התא ריק. תשובה חופשית (בלי
-        // לחיצת כפתור) עדיין עדיפה על הסטטוס הבסיסי - מי שכן ענה לא צריך
-        // להיראות בדיוק כמו מי שלא ענה בכלל.
-        const finalWhats = r.firstReply || cleanReply || r.status || '';
+        // אם אין לחיצת כפתור - נופלים חזרה לסטטוס השליחה הבסיסי, לעולם לא
+        // משאירים את התא ריק. תשובה חופשית כבר מיוצאת בעמודות "תשובה
+        // אחרונה"/"היסטוריה מלאה" הנפרדות, אין צורך לשכפל אותה גם כאן.
+        const finalWhats = r.firstReply || r.status || '';
 
         const values = [
           { text: r.company }, { text: r.name }, { text: r.title }, { text: r.phone },
