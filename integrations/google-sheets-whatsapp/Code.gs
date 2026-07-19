@@ -55,8 +55,14 @@ const CAMPAIGN_HEADER = 'מזהה קמפיין';
 const CALL_STATUS_HEADER = 'סטטוס שיחה';
 const CALL_LEAD_ID_HEADER = 'מזהה ליד NLPearl';
 const CALL_RESULT_HEADER = 'תוצאות שיחה';
+const CALL_FIRST_RESULT_HEADER = 'תוצאה ראשונית (שיחה)';
 const CALL_DATE_HEADER = 'תאריך שיחה';
 const CALL_SENT_STATUS = 'שיחה נשלחה';
+
+// --- CRM פנימי (הערות וסטטוס ידניים של הצוות) ---
+const USER_STATUS_HEADER = 'סטטוס משתמש';
+const USER_NOTES_HEADER = 'הערות משתמש';
+const TEAM_USERS_ = ['מזי', 'טליה'];
 
 // טאבים שהם עזר/לוג בלבד, לעולם לא נחשבים קמפיין גם אם במקרה יש בהם
 // עמודה שנראית כמו טלפון נייד.
@@ -490,6 +496,9 @@ function handleInforuWebhook_(ss, payload) {
  * כמו ב-handleInforuWebhook_ למעלה: מחפשים קודם רק בטאב שאליו הותחלה
  * לאחרונה שיחה למספר הזה (lastContactSheet_), כדי שתוצאת שיחה תעדכן
  * רק את הקמפיין הרלוונטי ולא כל טאב אחר שבו קיים במקרה אותו מספר.
+ * "תוצאות שיחה" מצטברת (כל שיחה חדשה מתווספת לקיים, לא דורסת) - בדיוק
+ * כמו "תשובת לקוח" בוואטסאפ, כדי לשמור היסטוריה אם היו כמה שיחות/ניסיונות.
+ * "תוצאה ראשונית (שיחה)" נשמרת פעם אחת בלבד, כמו "תגובה ראשונית".
  */
 function handleNlpearlWebhook_(ss, payload) {
   // מטפלים רק באירועי Call Webhook (מזוהים לפי "to") לצורך עמודת התוצאה -
@@ -500,29 +509,41 @@ function handleNlpearlWebhook_(ss, payload) {
   const incomingPhone = phoneSuffix_(payload.to);
   if (!incomingPhone) return;
 
-  const tracked = lastContactSheet_(ss, incomingPhone);
-  const sheets = tracked ? [tracked] : getCampaignSheets_(ss);
-  for (const sheet of sheets) {
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const phoneCol = headers.indexOf(PHONE_HEADER);
-    const resultCol = headers.indexOf(CALL_RESULT_HEADER);
-    const dateCol = headers.indexOf(CALL_DATE_HEADER);
-    if (phoneCol === -1 || resultCol === -1) continue;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const tracked = lastContactSheet_(ss, incomingPhone);
+    const sheets = tracked ? [tracked] : getCampaignSheets_(ss);
+    for (const sheet of sheets) {
+      const data = sheet.getDataRange().getValues();
+      const headers = data[0];
+      const phoneCol = headers.indexOf(PHONE_HEADER);
+      const resultCol = headers.indexOf(CALL_RESULT_HEADER);
+      const firstResultCol = headers.indexOf(CALL_FIRST_RESULT_HEADER);
+      const dateCol = headers.indexOf(CALL_DATE_HEADER);
+      if (phoneCol === -1 || resultCol === -1) continue;
 
-    for (let i = 1; i < data.length; i++) {
-      const sheetPhone = phoneSuffix_(data[i][phoneCol]);
-      if (sheetPhone && sheetPhone === incomingPhone) {
-        const rowIndex = i + 1;
-        const summary = (Array.isArray(payload.tags) && payload.tags.length)
-          ? payload.tags.join(', ')
-          : (payload.summary || 'סטטוס: ' + payload.status);
-        sheet.getRange(rowIndex, resultCol + 1).setValue(summary);
-        if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
-        recordDailyActivity_(sheet.getName());
-        return;
+      for (let i = 1; i < data.length; i++) {
+        const sheetPhone = phoneSuffix_(data[i][phoneCol]);
+        if (sheetPhone && sheetPhone === incomingPhone) {
+          const rowIndex = i + 1;
+          const summary = (Array.isArray(payload.tags) && payload.tags.length)
+            ? payload.tags.join(', ')
+            : (payload.summary || 'סטטוס: ' + payload.status);
+          const existingResult = data[i][resultCol];
+          const combined = existingResult ? (existingResult + '\n' + summary) : summary;
+          sheet.getRange(rowIndex, resultCol + 1).setValue(combined);
+          if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
+          if (firstResultCol !== -1 && !data[i][firstResultCol]) {
+            sheet.getRange(rowIndex, firstResultCol + 1).setValue(summary);
+          }
+          recordDailyActivity_(sheet.getName());
+          return;
+        }
       }
     }
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -672,6 +693,105 @@ function addContactRow_(sheet, fields) {
   sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
 }
 
+/**
+ * מוצאת שורה בטאב לפי מספר טלפון (9 ספרות אחרונות) - משמשת את
+ * addUserNote/setUserStatus שמעדכנות שדות CRM פנימיים לפי טלפון (לא
+ * לפי מספר שורה, כי בדשבורד הטבלה עשויה להיות ממוינת/מסוננת).
+ */
+function findRowByPhone_(sheet, phone) {
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const phoneCol = headers.indexOf(PHONE_HEADER);
+  if (phoneCol === -1) return null;
+  const target = phoneSuffix_(phone);
+  for (let i = 1; i < data.length; i++) {
+    if (phoneSuffix_(data[i][phoneCol]) === target) {
+      return { rowIndex: i + 1, headers: headers };
+    }
+  }
+  return null;
+}
+
+function validateTeamUser_(username) {
+  if (TEAM_USERS_.indexOf(username) === -1) {
+    throw new Error('שם משתמש לא מוכר: ' + username);
+  }
+}
+
+/**
+ * כותבת שורת יומן חדשה לעמודת "הערות משתמש", תמיד בראש הרשימה (החדשה
+ * ביותר למעלה - הפוך מ"תשובת לקוח" של הלקוח, ששם הישנה נשארת למעלה
+ * וההודעות מצטרפות למטה). משמשת גם ישירות (addUserNote) וגם אוטומטית
+ * כשמעדכנים סטטוס (setUserStatus), כדי ששינויי סטטוס יתועדו גם הם.
+ */
+function appendNoteEntry_(sheet, rowIndex, notesCol, username, text) {
+  const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
+  const entry = username + ' - ' + timestamp + ': ' + text;
+  const existing = sheet.getRange(rowIndex, notesCol + 1).getValue();
+  const combined = existing ? (entry + '\n' + existing) : entry;
+  sheet.getRange(rowIndex, notesCol + 1).setValue(combined);
+}
+
+/**
+ * מוסיפה הערה פנימית (CRM) לאיש קשר, מהדשבורד - בלי לפתוח את הגיליון.
+ */
+function addUserNote(sheetName, phone, username, noteText) {
+  validateTeamUser_(username);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error('הטאב "' + sheetName + '" לא נמצא');
+
+  const found = findRowByPhone_(sheet, phone);
+  if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
+
+  const notesCol = found.headers.indexOf(USER_NOTES_HEADER);
+  if (notesCol === -1) throw new Error('לא נמצאה עמודת "' + USER_NOTES_HEADER + '" בטאב - יש להוסיף אותה');
+
+  appendNoteEntry_(sheet, found.rowIndex, notesCol, username, noteText);
+  return { success: true };
+}
+
+/**
+ * מעדכנת את הסטטוס הפנימי (הידני) של איש קשר, ורושמת את השינוי
+ * אוטומטית גם ביומן ההערות (מי קבעה את הסטטוס ומתי).
+ */
+function setUserStatus(sheetName, phone, username, statusText) {
+  validateTeamUser_(username);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error('הטאב "' + sheetName + '" לא נמצא');
+
+  const found = findRowByPhone_(sheet, phone);
+  if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
+
+  const statusCol = found.headers.indexOf(USER_STATUS_HEADER);
+  if (statusCol === -1) throw new Error('לא נמצאה עמודת "' + USER_STATUS_HEADER + '" בטאב - יש להוסיף אותה');
+
+  sheet.getRange(found.rowIndex, statusCol + 1).setValue(statusText);
+
+  const notesCol = found.headers.indexOf(USER_NOTES_HEADER);
+  if (notesCol !== -1) {
+    appendNoteEntry_(sheet, found.rowIndex, notesCol, username, 'עדכנה סטטוס ל: ' + statusText);
+  }
+  return { success: true };
+}
+
+/**
+ * מועד ההורדה הקודמת של קובץ האקסל לקמפיין הזה (ISO string), או null אם
+ * מעולם לא הורד. משמש את getCampaignData כדי לסמן שורות שהתעדכנו מאז.
+ */
+function lastExportTime_(sheetName) {
+  return PropertiesService.getScriptProperties().getProperty('LAST_EXPORT_' + sheetName) || null;
+}
+
+/**
+ * נקראת מהדשבורד בכל פעם שלוחצים "ייצוא לאקסל" - שומרת את הרגע הזה,
+ * כדי שבפעם הבאה נדע לסמן מה השתנה מאז.
+ */
+function recordExportTime(sheetName) {
+  PropertiesService.getScriptProperties().setProperty('LAST_EXPORT_' + sheetName, new Date().toISOString());
+}
+
 function classifyStatus_(value) {
   if (!value) return 'pending';
   if (String(value).indexOf('שגיאה') === 0) return 'bad';
@@ -722,7 +842,13 @@ function getCampaignData(sheetName) {
   const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
   const callStatusCol = headers.indexOf(CALL_STATUS_HEADER);
   const callResultCol = headers.indexOf(CALL_RESULT_HEADER);
+  const callFirstResultCol = headers.indexOf(CALL_FIRST_RESULT_HEADER);
   const callDateCol = headers.indexOf(CALL_DATE_HEADER);
+  const userStatusCol = headers.indexOf(USER_STATUS_HEADER);
+  const userNotesCol = headers.indexOf(USER_NOTES_HEADER);
+
+  const lastExportIso = lastExportTime_(sheetName);
+  const lastExportMs = lastExportIso ? new Date(lastExportIso).getTime() : null;
 
   let sent = 0, errors = 0, replies = 0, callsSent = 0, activityToday = 0;
   const rows = [];
@@ -738,13 +864,20 @@ function getCampaignData(sheetName) {
     const replyDate = replyDateCol !== -1 ? row[replyDateCol] : null;
     const callStatus = callStatusCol !== -1 ? String(row[callStatusCol] || '') : '';
     const callResult = callResultCol !== -1 ? row[callResultCol] : '';
+    const callFirstResult = callFirstResultCol !== -1 ? row[callFirstResultCol] : '';
     const callDate = callDateCol !== -1 ? row[callDateCol] : null;
+    const userStatus = userStatusCol !== -1 ? row[userStatusCol] : '';
+    const userNotes = userNotesCol !== -1 ? row[userNotesCol] : '';
 
     if (status === SENT_STATUS) sent++;
     if (status.indexOf('שגיאה') === 0) errors++;
     if (reply) replies++;
     if (callStatus === CALL_SENT_STATUS) callsSent++;
     if (isToday_(replyDate) || isToday_(callDate)) activityToday++;
+
+    const replyMs = (replyDate instanceof Date && !isNaN(replyDate.getTime())) ? replyDate.getTime() : 0;
+    const callMs = (callDate instanceof Date && !isNaN(callDate.getTime())) ? callDate.getTime() : 0;
+    const recentlyUpdated = lastExportMs !== null && Math.max(replyMs, callMs) > lastExportMs;
 
     rows.push({
       name: nameCol !== -1 ? row[nameCol] : '',
@@ -761,7 +894,13 @@ function getCampaignData(sheetName) {
       firstReply: firstReply,
       callStatus: callStatus,
       callStatusClass: classifyStatus_(callStatus),
-      callResult: callResult
+      callResult: callResult,
+      callFirstResult: callFirstResult,
+      callDate: (callDate instanceof Date && !isNaN(callDate.getTime()))
+        ? Utilities.formatDate(callDate, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
+      userStatus: userStatus,
+      userNotes: userNotes,
+      recentlyUpdated: recentlyUpdated
     });
   }
 
@@ -779,7 +918,8 @@ function getCampaignData(sheetName) {
     daysActive: daysActive_(sheetName),
     rows: rows,
     replyBreakdown: replyBreakdown_(rows),
-    trend: dailyActivityTrend_(sheetName)
+    trend: dailyActivityTrend_(sheetName),
+    teamUsers: TEAM_USERS_
   };
 }
 

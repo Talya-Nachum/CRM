@@ -527,6 +527,101 @@
     white-space: nowrap;
   }
 
+  .th-inner { display: inline-flex; align-items: center; gap: 5px; }
+
+  .col-filter-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    font-size: 9px;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  .col-filter-icon:hover { background: var(--surface-2); }
+  .col-filter-icon.on { background: var(--accent); color: #fff; }
+
+  .filter-pop {
+    position: absolute;
+    width: 220px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-hover);
+    padding: 12px;
+    z-index: 50;
+    font-size: 12.5px;
+  }
+
+  .filter-pop .fp-title { font-weight: 800; margin-bottom: 8px; }
+
+  .filter-pop .fp-actions {
+    display: flex;
+    justify-content: space-between;
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 11.5px;
+    margin-bottom: 6px;
+    cursor: pointer;
+  }
+
+  .filter-pop .fp-list {
+    max-height: 170px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .filter-pop label { display: flex; align-items: center; gap: 7px; font-weight: 400; }
+
+  .filter-pop .fp-apply {
+    margin-top: 10px;
+    width: 100%;
+    padding: 7px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+
+  .note-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .add-note-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1.5px dashed var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   tbody td {
     padding: 13px 10px;
     border-bottom: 1px solid var(--border);
@@ -701,6 +796,57 @@
     margin-top: 12px;
   }
 
+  .crm-modal-card { max-width: 420px; }
+
+  .modal-sub {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .crm-current-status {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    margin-top: 4px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  .row-2 { display: flex; gap: 8px; }
+  .row-2 .modal-input { flex: 1; min-width: 0; }
+
+  .crm-note-input { min-height: 60px; resize: vertical; }
+
+  .crm-note-history {
+    margin-top: 6px;
+    max-height: 170px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .crm-note-item {
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+
+  .crm-note-item .meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+
+  .crm-note-item .meta .who { color: var(--accent); }
+  .crm-note-item .text { font-size: 12.5px; white-space: pre-line; }
+
 </style>
 
 <div class="page">
@@ -783,6 +929,41 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="crmModal">
+  <div class="modal-card crm-modal-card">
+    <h3>עדכון פנימי</h3>
+    <div class="modal-sub" id="crmModalContact"></div>
+
+    <label class="modal-label">סטטוס נוכחי</label>
+    <div class="crm-current-status" id="crmCurrentStatus">—</div>
+
+    <label class="modal-label">עדכון סטטוס</label>
+    <div class="row-2">
+      <select class="modal-input" id="crmStatusUser"></select>
+      <input type="text" class="modal-input" id="crmStatusText" placeholder="סטטוס חדש, למשל: טופל">
+    </div>
+    <div class="modal-actions" style="justify-content:flex-start;">
+      <button class="btn btn-accent" id="crmStatusSaveBtn" type="button">שמור סטטוס</button>
+    </div>
+
+    <label class="modal-label">הערה חדשה</label>
+    <select class="modal-input" id="crmNoteUser"></select>
+    <textarea class="modal-input crm-note-input" id="crmNoteText" placeholder="לכתוב הערה..."></textarea>
+    <div class="modal-actions" style="justify-content:flex-start;">
+      <button class="btn btn-accent" id="crmNoteSaveBtn" type="button">שמור הערה</button>
+    </div>
+
+    <div class="modal-error" id="crmError"></div>
+
+    <label class="modal-label">היסטוריית הערות (החדשה למעלה)</label>
+    <div class="crm-note-history" id="crmNoteHistory"></div>
+
+    <div class="modal-actions">
+      <button class="btn" id="crmCloseBtn" type="button">סגירה</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // הכתובת הציבורית האמיתית (/exec), מוזרקת מהשרת - לא סומכים על
   // window.location.href כי הדף רץ בתוך iframe מבודד בדומיין אחר.
@@ -797,6 +978,7 @@
   let activeCategoryFilter = null; // { kind: 'named'|'other'|'noreply', label } - סינון לפי לחיצה על פילוח התגובות
   let currentBreakdown = []; // הפילוח האחרון שצויר, לצורך סימון השורה הפעילה בלג'נד
   let namedCategoryLabels = []; // תוויות הקטגוריות "האמיתיות" (לא "אחר"/"טרם ענו") - לחישוב סינון "אחר"
+  let columnFilters = {}; // { columnKey: Set(ערכים מותרים) } - סינון לפי עמודה (כמו Excel)
   const PAGE_SIZE = 10;
   const AUTO_REFRESH_MS = 30000;
 
@@ -944,27 +1126,55 @@
    */
   const COLUMN_DEFS = [
     { key: 'company', label: 'שם חברה', always: false, hasValue: function (r) { return !!r.company; },
+      filterValue: function (r) { return r.company || ''; },
       cell: function (r) { return '<td class="reply-cell">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
     { key: 'name', label: 'שם איש קשר', always: true,
+      filterValue: function (r) { return r.name || ''; },
       cell: function (r) { return '<td class="name-cell">' + escapeHtml_(r.name) + '</td>'; } },
     { key: 'title', label: 'תפקיד', always: false, hasValue: function (r) { return !!r.title; },
+      filterValue: function (r) { return r.title || ''; },
       cell: function (r) { return '<td class="reply-cell">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>'; } },
     { key: 'phone', label: 'טלפון נייד', always: true,
+      filterValue: function (r) { return r.phone || ''; },
       cell: function (r) { return '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>'; } },
     { key: 'email', label: 'אימייל', always: false, hasValue: function (r) { return !!r.email; },
+      filterValue: function (r) { return r.email || ''; },
       cell: function (r) { return '<td class="reply-cell">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>'; } },
     { key: 'source', label: 'מקור ליד', always: false, hasValue: function (r) { return !!r.source; },
+      filterValue: function (r) { return r.source || ''; },
       cell: function (r) { return '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>'; } },
     { key: 'status', label: 'סטטוס', always: true,
+      filterValue: function (r) { return r.status || ''; },
       cell: function (r) { return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>'; } },
-    { key: 'firstReply', label: 'תגובה ראשונית', always: false, hasValue: function (r) { return !!r.firstReply; },
-      cell: function (r) { return '<td class="reply-cell">' + (r.firstReply ? escapeHtml_(r.firstReply) : '—') + '</td>'; } },
+    { key: 'finalStatus', label: 'סטטוס סופי', always: false,
+      hasValue: function (r) { return !!(r.firstReply || r.callFirstResult); },
+      filterValue: function (r) { return r.firstReply || r.callFirstResult || ''; },
+      cell: function (r) {
+        if (r.firstReply) return '<td class="reply-cell">📱 ' + escapeHtml_(r.firstReply) + '</td>';
+        if (r.callFirstResult) return '<td class="reply-cell">📞 ' + escapeHtml_(r.callFirstResult) + '</td>';
+        return '<td class="reply-cell">—</td>';
+      } },
     { key: 'reply', label: 'תשובת לקוח', always: false, hasValue: function (r) { return !!r.reply; },
+      filterValue: function (r) { return r.reply ? lastReplyLine_(r.reply) : ''; },
       cell: function (r) { return '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
     { key: 'callStatus', label: 'סטטוס שיחה', always: false, hasValue: function (r) { return !!r.callStatus; },
+      filterValue: function (r) { return r.callStatus || ''; },
       cell: function (r) { return '<td>' + pill_(r.callStatus, r.callStatusClass, '—') + '</td>'; } },
     { key: 'callResult', label: 'תוצאות שיחה', always: false, hasValue: function (r) { return !!r.callResult; },
-      cell: function (r) { return '<td class="reply-cell">' + (r.callResult ? escapeHtml_(r.callResult) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } }
+      filterValue: function (r) { return r.callResult ? lastReplyLine_(r.callResult) : ''; },
+      cell: function (r) { return '<td class="reply-cell" title="' + (r.callResult ? escapeHtml_(r.callResult) : '') + '">' + (r.callResult ? escapeHtml_(lastReplyLine_(r.callResult)) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
+    { key: 'userStatus', label: 'סטטוס משתמש', always: false, hasValue: function (r) { return !!r.userStatus; },
+      filterValue: function (r) { return r.userStatus || ''; },
+      cell: function (r) { return '<td class="reply-cell">' + (r.userStatus ? escapeHtml_(r.userStatus) : '—') + '</td>'; } },
+    { key: 'notes', label: 'הערות', always: false, hasValue: function (r) { return !!r.userNotes; },
+      filterValue: function (r) { return r.userNotes || ''; },
+      cell: function (r) {
+        const summary = parseNotesSummary_(r.userNotes);
+        if (!summary) return '<td class="reply-cell">—</td>';
+        return '<td><span class="note-chip" data-phone="' + escapeHtml_(r.phone) + '">📝 ' + escapeHtml_(summary.lastAuthor) + ' (' + summary.count + ')</span></td>';
+      } },
+    { key: 'actions', label: '', always: true,
+      cell: function (r) { return '<td><button type="button" class="add-note-btn" data-phone="' + escapeHtml_(r.phone) + '" title="הערות וסטטוס">+</button></td>'; } }
   ];
 
   function computeVisibleColumns_(rows) {
@@ -974,8 +1184,25 @@
   }
 
   function renderTableHead_(columns) {
-    document.getElementById('tableHead').innerHTML =
-      '<tr>' + columns.map(function (c) { return '<th>' + escapeHtml_(c.label) + '</th>'; }).join('') + '</tr>';
+    document.getElementById('tableHead').innerHTML = '<tr>' + columns.map(function (c) {
+      const filterBtn = c.filterValue
+        ? '<span class="col-filter-icon' + (columnFilters[c.key] ? ' on' : '') + '" data-key="' + c.key + '">▾</span>'
+        : '';
+      return '<th><span class="th-inner">' + escapeHtml_(c.label) + filterBtn + '</span></th>';
+    }).join('') + '</tr>';
+    setupColumnFilterClicks_(columns);
+  }
+
+  /**
+   * מפענחת את "הערות משתמש" (שרשור שורות "שם - תאריך שעה: טקסט", החדשה
+   * למעלה) לתקציר קצר לתא בטבלה - כמות ההערות ומי כתבה את האחרונה.
+   */
+  function parseNotesSummary_(notes) {
+    if (!notes) return null;
+    const lines = String(notes).split('\n').filter(function (l) { return l.trim(); });
+    if (!lines.length) return null;
+    const match = lines[0].match(/^([^-]+)-/);
+    return { count: lines.length, lastAuthor: match ? match[1].trim() : '' };
   }
 
   function renderRows(rows) {
@@ -1105,6 +1332,12 @@
     if (activeCategoryFilter) {
       rows = rows.filter(function (r) { return rowMatchesCategory_(r, activeCategoryFilter); });
     }
+    Object.keys(columnFilters).forEach(function (key) {
+      const allowed = columnFilters[key];
+      const col = COLUMN_DEFS.filter(function (c) { return c.key === key; })[0];
+      if (!allowed || !col) return;
+      rows = rows.filter(function (r) { return allowed.has(col.filterValue(r)); });
+    });
     if (resetPage) currentPage = 1;
     renderTable_(rows);
     renderActiveFilterChip_();
@@ -1164,6 +1397,90 @@
     });
   }
 
+  /**
+   * סינון לפי עמודה (כמו Excel): לחיצה על סמל המשפך בכותרת עמודה פותחת
+   * רשימת הערכים השונים שקיימים בה (עם ספירה), עם תיבות סימון + "בחר
+   * הכל/נקה" + החלה. הבחירה נשמרת ב-columnFilters ומוחלת יחד עם החיפוש
+   * וסינון הקטגוריה ב-applyFilters_.
+   */
+  function setupColumnFilterClicks_(columns) {
+    document.querySelectorAll('#tableHead .col-filter-icon').forEach(function (icon) {
+      icon.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openColumnFilterPopover_(icon, icon.getAttribute('data-key'));
+      });
+    });
+  }
+
+  function openColumnFilterPopover_(anchorEl, key) {
+    closeColumnFilterPopover_();
+    const col = COLUMN_DEFS.filter(function (c) { return c.key === key; })[0];
+    if (!col || !currentData) return;
+
+    const counts = {};
+    currentData.rows.forEach(function (r) {
+      const raw = col.filterValue(r);
+      const label = raw ? raw : '(ריק)';
+      counts[label] = (counts[label] || 0) + 1;
+    });
+    const labels = Object.keys(counts).sort();
+    const selected = columnFilters[key]; // Set או undefined (undefined = הכל נבחר, אין סינון)
+
+    const pop = document.createElement('div');
+    pop.className = 'filter-pop';
+    pop.id = 'columnFilterPopover';
+    pop.innerHTML =
+      '<div class="fp-title">סינון: ' + escapeHtml_(col.label) + '</div>' +
+      '<div class="fp-actions"><span data-act="all">בחר הכל</span><span data-act="none">נקה</span></div>' +
+      '<div class="fp-list">' +
+        labels.map(function (label) {
+          const rawValue = label === '(ריק)' ? '' : label;
+          const checked = !selected || selected.has(rawValue);
+          return '<label><input type="checkbox" value="' + escapeHtml_(label) + '"' + (checked ? ' checked' : '') + '> ' +
+            escapeHtml_(label) + ' (' + counts[label] + ')</label>';
+        }).join('') +
+      '</div>' +
+      '<button type="button" class="fp-apply">החל סינון</button>';
+
+    document.body.appendChild(pop);
+    const rect = anchorEl.getBoundingClientRect();
+    pop.style.top = (window.scrollY + rect.bottom + 6) + 'px';
+    pop.style.left = Math.max(8, window.scrollX + rect.left - 190) + 'px';
+
+    pop.querySelector('[data-act="all"]').addEventListener('click', function () {
+      pop.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
+    });
+    pop.querySelector('[data-act="none"]').addEventListener('click', function () {
+      pop.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+    });
+    pop.querySelector('.fp-apply').addEventListener('click', function () {
+      const checkedBoxes = Array.prototype.slice.call(pop.querySelectorAll('input[type="checkbox"]:checked'));
+      if (checkedBoxes.length === labels.length) {
+        delete columnFilters[key];
+      } else {
+        columnFilters[key] = new Set(checkedBoxes.map(function (cb) {
+          return cb.value === '(ריק)' ? '' : cb.value;
+        }));
+      }
+      closeColumnFilterPopover_();
+      applyFilters_(true);
+      renderTableHead_(visibleColumns);
+    });
+
+    setTimeout(function () { document.addEventListener('click', closeColumnFilterPopoverOnOutsideClick_); }, 0);
+  }
+
+  function closeColumnFilterPopoverOnOutsideClick_(e) {
+    const pop = document.getElementById('columnFilterPopover');
+    if (pop && !pop.contains(e.target)) closeColumnFilterPopover_();
+  }
+
+  function closeColumnFilterPopover_() {
+    const pop = document.getElementById('columnFilterPopover');
+    if (pop) pop.remove();
+    document.removeEventListener('click', closeColumnFilterPopoverOnOutsideClick_);
+  }
+
   function setupExport_() {
     document.getElementById('exportBtn').addEventListener('click', function () {
       if (!currentData) return;
@@ -1173,18 +1490,33 @@
           String(r.phone || '').toLowerCase().indexOf(q) !== -1;
       });
 
-      // "תשובת לקוח" בגיליון היא שרשור מצטבר של כל ההודעות. לייצוא בונים
-      // גם עמודה נקייה לסינון (תאריך/שעה נפרד + התשובה האחרונה בלבד) וגם
-      // עמודה עם כל השרשור המלא (שורה לכל הודעה) - כדי שלא יאבד מידע.
-      const headers = ['שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס', 'תגובה ראשונית', 'תאריך ושעת תשובה', 'תשובה אחרונה', 'היסטוריית שיחה מלאה', 'סטטוס שיחה', 'תוצאות שיחה'];
+      // עמודות נקיות לסינון (סטטוס סופי + תאריך עדכון, לכל ערוץ בנפרד) וגם
+      // עמודות עם ההיסטוריה המלאה - כדי שלא יאבד מידע. שורה שהתעדכנה מאז
+      // ההורדה הקודמת של הקובץ הזה מסומנת ברקע צהבהב (r.recentlyUpdated).
+      const headers = [
+        'שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס',
+        'סטטוס סופי (וואטסאפ)', 'תאריך עדכון (וואטסאפ)', 'תשובה אחרונה (וואטסאפ)', 'היסטוריית וואטסאפ מלאה',
+        'סטטוס שיחה', 'סטטוס סופי (שיחה)', 'תאריך עדכון (שיחה)', 'תוצאה אחרונה (שיחה)', 'היסטוריית שיחות מלאה',
+        'סטטוס משתמש', 'הערות משתמש (הכל)'
+      ];
       const cell_ = function (v) { return '<td>' + escapeHtml_(v === undefined || v === null ? '' : v) + '</td>'; };
       const cellHtml_ = function (v) { return '<td>' + v + '</td>'; };
       const headRow = '<tr>' + headers.map(function (h) { return '<th>' + escapeHtml_(h) + '</th>'; }).join('') + '</tr>';
       const bodyRows = rows.map(function (r) {
         const cleanReply = r.reply ? stripTimestampPrefix_(lastReplyLine_(r.reply)) : '';
-        const fullHistory = r.reply ? escapeHtml_(r.reply).replace(/\n/g, '<br>') : '';
-        return '<tr>' + [r.company, r.name, r.title, r.phone, r.email, r.source, r.status, r.firstReply, r.replyDate, cleanReply].map(cell_).join('') +
-          cellHtml_(fullHistory) + [r.callStatus, r.callResult].map(cell_).join('') + '</tr>';
+        const fullReplyHistory = r.reply ? escapeHtml_(r.reply).replace(/\n/g, '<br>') : '';
+        const cleanCallResult = r.callResult ? lastReplyLine_(r.callResult) : '';
+        const fullCallHistory = r.callResult ? escapeHtml_(r.callResult).replace(/\n/g, '<br>') : '';
+        const fullNotes = r.userNotes ? escapeHtml_(r.userNotes).replace(/\n/g, '<br>') : '';
+        const trStyle = r.recentlyUpdated ? ' style="background:#FEF3C7;"' : '';
+        return '<tr' + trStyle + '>' +
+          [r.company, r.name, r.title, r.phone, r.email, r.source, r.status, r.firstReply, r.replyDate, cleanReply].map(cell_).join('') +
+          cellHtml_(fullReplyHistory) +
+          [r.callStatus, r.callFirstResult, r.callDate, cleanCallResult].map(cell_).join('') +
+          cellHtml_(fullCallHistory) +
+          [r.userStatus].map(cell_).join('') +
+          cellHtml_(fullNotes) +
+          '</tr>';
       }).join('');
 
       // "אקסל" אמיתי (xlsx) דורש ספרייה חיצונית שלא ניתן לטעון כאן; טבלת HTML
@@ -1202,6 +1534,9 @@
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+
+      // שומרים את רגע ההורדה הזה, כדי שבפעם הבאה נדע לסמן מה השתנה מאז.
+      if (currentTabName) google.script.run.recordExportTime(currentTabName);
     });
   }
 
@@ -1267,6 +1602,129 @@
     saveBtn.addEventListener('click', save);
     modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
     phoneInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+  }
+
+  /**
+   * חלון "עדכון פנימי" (CRM) - נפתח בלחיצה על ה-"+"/תגית ההערות בשורה.
+   * מאפשר לעדכן "סטטוס משתמש" (ערך נוכחי אחד, נדרס) ולהוסיף "הערה
+   * חדשה" ליומן ההערות (מצטבר, החדשה תמיד למעלה). אחרי שמירה מביאים
+   * מחדש את נתוני הקמפיין (getCampaignData) כדי גם לרענן את הטבלה
+   * הראשית ברקע וגם להציג בחלון עצמו את ההיסטוריה המעודכנת.
+   */
+  function setupCrmModal_() {
+    const modal = document.getElementById('crmModal');
+    const contactLabel = document.getElementById('crmModalContact');
+    const currentStatusEl = document.getElementById('crmCurrentStatus');
+    const statusUserSel = document.getElementById('crmStatusUser');
+    const statusText = document.getElementById('crmStatusText');
+    const noteUserSel = document.getElementById('crmNoteUser');
+    const noteText = document.getElementById('crmNoteText');
+    const errorEl = document.getElementById('crmError');
+    const historyEl = document.getElementById('crmNoteHistory');
+    const statusSaveBtn = document.getElementById('crmStatusSaveBtn');
+    const noteSaveBtn = document.getElementById('crmNoteSaveBtn');
+    let modalPhone = null;
+
+    function populateUsers_(sel) {
+      const users = (currentData && currentData.teamUsers) || ['מזי', 'טליה'];
+      sel.innerHTML = users.map(function (u) { return '<option value="' + escapeHtml_(u) + '">' + escapeHtml_(u) + '</option>'; }).join('');
+    }
+
+    function renderHistory_(notes) {
+      const lines = notes ? String(notes).split('\n').filter(function (l) { return l.trim(); }) : [];
+      if (!lines.length) { historyEl.innerHTML = '<div class="empty-state">אין הערות עדיין</div>'; return; }
+      historyEl.innerHTML = lines.map(function (line) {
+        const m = line.match(/^([^-]+)-\s*([^:]+):\s*([\s\S]*)$/);
+        if (!m) return '<div class="crm-note-item"><div class="text">' + escapeHtml_(line) + '</div></div>';
+        return '<div class="crm-note-item"><div class="meta"><span class="who">' + escapeHtml_(m[1].trim()) +
+          '</span> · ' + escapeHtml_(m[2].trim()) + '</div><div class="text">' + escapeHtml_(m[3].trim()) + '</div></div>';
+      }).join('');
+    }
+
+    function findRow_(phone) {
+      if (!currentData) return null;
+      return currentData.rows.filter(function (r) { return r.phone === phone; })[0] || null;
+    }
+
+    function openModal(phone) {
+      modalPhone = phone;
+      const row = findRow_(phone);
+      contactLabel.textContent = row ? [row.name, row.company, row.phone].filter(Boolean).join(' · ') : phone;
+      currentStatusEl.textContent = (row && row.userStatus) || 'ללא סטטוס';
+      populateUsers_(statusUserSel);
+      populateUsers_(noteUserSel);
+      statusText.value = '';
+      noteText.value = '';
+      errorEl.textContent = '';
+      renderHistory_(row && row.userNotes);
+      modal.classList.add('show');
+    }
+
+    function closeModal() {
+      modal.classList.remove('show');
+      modalPhone = null;
+    }
+
+    // אחרי שמירה, מביאים מחדש את כל נתוני הקמפיין - גם כדי לרענן את
+    // הטבלה הראשית (כולל תגית ההערות/סטטוס בשורה) וגם כדי להציג בחלון
+    // עצמו את ההיסטוריה המעודכנת, בלי לנחש את השינוי בצד הלקוח.
+    function refreshAfterSave_() {
+      google.script.run.withSuccessHandler(function (data) {
+        renderCampaign(data, true);
+        const row = (data && data.rows || []).filter(function (r) { return r.phone === modalPhone; })[0];
+        currentStatusEl.textContent = (row && row.userStatus) || 'ללא סטטוס';
+        renderHistory_(row && row.userNotes);
+      }).getCampaignData(currentTabName);
+    }
+
+    function saveStatus() {
+      const text = statusText.value.trim();
+      if (!text) { errorEl.textContent = 'יש להזין סטטוס'; return; }
+      if (!modalPhone || !currentTabName) return;
+      statusSaveBtn.disabled = true;
+      errorEl.textContent = '';
+      google.script.run
+        .withSuccessHandler(function () {
+          statusSaveBtn.disabled = false;
+          statusText.value = '';
+          refreshAfterSave_();
+        })
+        .withFailureHandler(function (err) {
+          statusSaveBtn.disabled = false;
+          errorEl.textContent = 'שגיאה: ' + (err.message || err);
+        })
+        .setUserStatus(currentTabName, modalPhone, statusUserSel.value, text);
+    }
+
+    function saveNote() {
+      const text = noteText.value.trim();
+      if (!text) { errorEl.textContent = 'יש להזין הערה'; return; }
+      if (!modalPhone || !currentTabName) return;
+      noteSaveBtn.disabled = true;
+      errorEl.textContent = '';
+      google.script.run
+        .withSuccessHandler(function () {
+          noteSaveBtn.disabled = false;
+          noteText.value = '';
+          refreshAfterSave_();
+        })
+        .withFailureHandler(function (err) {
+          noteSaveBtn.disabled = false;
+          errorEl.textContent = 'שגיאה: ' + (err.message || err);
+        })
+        .addUserNote(currentTabName, modalPhone, noteUserSel.value, text);
+    }
+
+    document.getElementById('tableBody').addEventListener('click', function (e) {
+      const trigger = e.target.closest('.add-note-btn, .note-chip');
+      if (!trigger) return;
+      const phone = trigger.getAttribute('data-phone');
+      if (phone) openModal(phone);
+    });
+    document.getElementById('crmCloseBtn').addEventListener('click', closeModal);
+    statusSaveBtn.addEventListener('click', saveStatus);
+    noteSaveBtn.addEventListener('click', saveNote);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
   }
 
   function setupShare_() {
@@ -1484,6 +1942,7 @@
   setupSearch_();
   setupExport_();
   setupAddContact_();
+  setupCrmModal_();
   setupShare_();
 
   // רענון אוטומטי: כל 30 שניות טוענים מחדש את נתוני הטאב הפעיל (בלי לגעת
