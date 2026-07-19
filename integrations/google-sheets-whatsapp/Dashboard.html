@@ -847,6 +847,18 @@
     white-space: pre-wrap;
   }
 
+  .crm-sales-tip {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--pending-soft);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
   .crm-note-input { min-height: 60px; resize: vertical; }
 
   .crm-note-history {
@@ -966,9 +978,11 @@
 
     <label class="modal-label">✨ סיכום AI של השיחה</label>
     <div class="crm-ai-summary" id="crmAiSummary">לא נוצר סיכום עדיין</div>
+    <div class="crm-sales-tip" id="crmSalesTip" style="display:none;"></div>
     <div class="modal-error" id="crmAiError"></div>
     <div class="modal-actions" style="justify-content:flex-start;">
       <button class="btn" id="crmAiBtn" type="button">צור סיכום</button>
+      <button class="btn" id="crmSalesTipBtn" type="button" title="טיפ מכירה" style="display:none;">🪄</button>
     </div>
 
     <label class="modal-label">מבצע/ת העדכון</label>
@@ -1732,6 +1746,8 @@
     const aiSummaryEl = document.getElementById('crmAiSummary');
     const aiErrorEl = document.getElementById('crmAiError');
     const aiBtn = document.getElementById('crmAiBtn');
+    const salesTipEl = document.getElementById('crmSalesTip');
+    const salesTipBtn = document.getElementById('crmSalesTipBtn');
     let modalPhone = null;
 
     function populateUsers_(sel) {
@@ -1795,6 +1811,9 @@
       errorEl.textContent = '';
       aiSummaryEl.textContent = 'לא נוצר סיכום עדיין';
       aiErrorEl.textContent = '';
+      salesTipEl.textContent = '';
+      salesTipEl.style.display = 'none';
+      salesTipBtn.style.display = 'none';
       renderHistory_(row && row.userNotes);
       modal.classList.add('show');
       if (autoSummarize) generateSummary_();
@@ -1808,16 +1827,25 @@
     }
 
     // מסכם עם Gemini את היסטוריית השיחה האמיתית (וואטסאפ + שיחות) של איש
-    // הקשר - לא את ההערות הפנימיות של הצוות.
+    // הקשר - לא את ההערות הפנימיות של הצוות. Gemini מחזיר גם טיפ מכירה
+    // ממוקד (salesTip) - מוצג רק בלחיצה על כפתור השרביט 🪄, מוסתר כברירת
+    // מחדל כדי לא לעמוס את הסיכום עצמו.
     function generateSummary_() {
       if (!modalPhone || !currentTabName) return;
       aiBtn.disabled = true;
       aiErrorEl.textContent = '';
       aiSummaryEl.textContent = 'מייצר סיכום...';
+      salesTipEl.textContent = '';
+      salesTipEl.style.display = 'none';
+      salesTipBtn.style.display = 'none';
       google.script.run
-        .withSuccessHandler(function (summary) {
+        .withSuccessHandler(function (result) {
           aiBtn.disabled = false;
-          aiSummaryEl.textContent = summary || 'אין מספיק מידע לסיכום';
+          aiSummaryEl.textContent = (result && result.summary) || 'אין מספיק מידע לסיכום';
+          if (result && result.salesTip) {
+            salesTipBtn.style.display = '';
+            salesTipBtn.setAttribute('data-tip', result.salesTip);
+          }
         })
         .withFailureHandler(function (err) {
           aiBtn.disabled = false;
@@ -1890,6 +1918,15 @@
     document.getElementById('crmCloseBtn').addEventListener('click', closeModal);
     saveBtn.addEventListener('click', saveAll_);
     aiBtn.addEventListener('click', function () { generateSummary_(); });
+    salesTipBtn.addEventListener('click', function () {
+      const isHidden = salesTipEl.style.display === 'none';
+      if (isHidden) {
+        salesTipEl.textContent = '🪄 ' + salesTipBtn.getAttribute('data-tip');
+        salesTipEl.style.display = '';
+      } else {
+        salesTipEl.style.display = 'none';
+      }
+    });
     historyEl.addEventListener('click', function (e) {
       const btn = e.target.closest('.note-edit-btn');
       if (!btn) return;

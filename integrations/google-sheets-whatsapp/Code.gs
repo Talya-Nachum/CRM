@@ -939,7 +939,9 @@ function recordExportTime(sheetName) {
 /**
  * מסכמת ב-AI (Google Gemini) את ההתכתבות בפועל עם הליד - היסטוריית
  * וואטסאפ + היסטוריית שיחות (לא הערות הצוות הפנימיות) - למספר משפטים
- * קצרים, כדי לדעת במבט אחד על מה מדובר בלי לקרוא את כל השרשור.
+ * קצרים, כדי לדעת במבט אחד על מה מדובר בלי לקרוא את כל השרשור. בנוסף
+ * מבקשת מ-Gemini טיפ מכירה ממוקד (sales_tip) - Gemini מתבקש להחזיר
+ * JSON מובנה (responseMimeType), ומחזירה לדשבורד { summary, salesTip }.
  * דורש GEMINI_API_KEY ב-Script Properties (מ-aistudio.google.com).
  */
 function summarizeContact(sheetName, phone) {
@@ -969,30 +971,63 @@ function summarizeContact(sheetName, phone) {
     throw new Error('אין עדיין שיחה עם הליד הזה לסכם');
   }
 
-  const prompt = 'סכם ב-2-4 משפטים קצרים בעברית את מצב הליד הבא - מה הוא רוצה/מתעניין בו ומה הסטטוס שלו כרגע - על סמך ההתכתבות שלו:\n\n' +
-    (name ? 'שם: ' + name + '\n' : '') +
-    (whatsappHistory ? '\nשיחת וואטסאפ:\n' + whatsappHistory + '\n' : '') +
-    (callHistory ? '\nתוצאות שיחות טלפון:\n' + callHistory + '\n' : '');
+  const prompt = `
+You are an expert sales strategist and psychologist. Analyze the following lead details, WhatsApp history, and call history.
+
+Your goal is to extract two things:
+1. A concise summary of the conversation history in Hebrew.
+2. A golden, juicy sales insight/tip for the sales representative (in Hebrew) that helps maximize the closing rate.
+
+Look for hidden clues between the lines:
+- If the contact says "not right now", translate that into the underlying motivation (e.g., "They are hesitant but interested, give them a strong push").
+- Analyze the company profile based on the text/domain (e.g., "Note: This is a global corporation, long closing cycles" or "High budget potential, likes end-of-year spending").
+- Keep the sales tip punchy, direct, and actionable, starting with words like "שימי לב:" or "טיפ זהב:".
+
+You must respond ONLY with a valid JSON object matching this structure:
+{
+  "summary": "הסיכום של השיחה כאן...",
+  "sales_tip": "הטיפ העסיסי והממוקד לנציגה כאן..."
+}
+
+Lead Information:
+${name ? 'Name: ' + name + '\n' : ''}
+${whatsappHistory ? 'WhatsApp History:\n' + whatsappHistory + '\n' : ''}
+${callHistory ? 'Call History:\n' + callHistory + '\n' : ''}
+`;
 
   const response = UrlFetchApp.fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey,
     {
       method: 'post',
       contentType: 'application/json',
-      payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      payload: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      }),
       muteHttpExceptions: true
     }
   );
 
   const result = JSON.parse(response.getContentText());
-  const summary = result.candidates && result.candidates[0] && result.candidates[0].content &&
+  const rawText = result.candidates && result.candidates[0] && result.candidates[0].content &&
     result.candidates[0].content.parts && result.candidates[0].content.parts[0] &&
     result.candidates[0].content.parts[0].text;
 
-  if (!summary) {
+  if (!rawText) {
     throw new Error('לא התקבל סיכום מ-Gemini: ' + response.getContentText());
   }
-  return summary.trim();
+
+  let parsed;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch (e) {
+    throw new Error('Gemini החזיר תשובה שאינה JSON תקין: ' + rawText);
+  }
+
+  return {
+    summary: (parsed.summary || '').trim(),
+    salesTip: (parsed.sales_tip || '').trim()
+  };
 }
 
 function classifyStatus_(value) {
