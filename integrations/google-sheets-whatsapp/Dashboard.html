@@ -861,30 +861,18 @@
 
   .crm-note-input { min-height: 60px; resize: vertical; }
 
-  .crm-note-history {
+  .crm-note-history-readonly {
     margin-top: 6px;
-    max-height: 170px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .crm-note-item {
+    min-height: 120px;
+    max-height: 220px;
+    resize: vertical;
     background: var(--surface-2);
-    border-radius: 10px;
-    padding: 8px 10px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
   }
-
-  .crm-note-item .meta {
-    font-size: 11px;
-    color: var(--text-muted);
-    font-weight: 700;
-    margin-bottom: 2px;
-  }
-
-  .crm-note-item .meta .who { color: var(--accent); }
-  .crm-note-item .text { font-size: 12.5px; white-space: pre-line; }
 
 </style>
 
@@ -991,8 +979,8 @@
     <label class="modal-label">עדכון סטטוס</label>
     <input type="text" class="modal-input" id="crmStatusText" placeholder="סטטוס חדש, למשל: טופל">
 
-    <label class="modal-label">הערות (החדשה למעלה)</label>
-    <div class="crm-note-history" id="crmNoteHistory"></div>
+    <label class="modal-label">הערות</label>
+    <textarea class="modal-input crm-note-history-readonly" id="crmNoteHistory" readonly placeholder="אין הערות עדיין"></textarea>
     <textarea class="modal-input crm-note-input" id="crmNoteText" placeholder="לכתוב הערה חדשה..."></textarea>
 
     <div class="modal-error" id="crmError"></div>
@@ -1755,49 +1743,12 @@
       sel.innerHTML = users.map(function (u) { return '<option value="' + escapeHtml_(u) + '">' + escapeHtml_(u) + '</option>'; }).join('');
     }
 
+    // תיבת היסטוריה היא textarea לקריאה בלבד (readonly) - טוענים אליה את
+    // כל מחרוזת ההערות הגולמית כמו שהיא (כל הערה כבר שורה נפרדת, החדשה
+    // ביותר למעלה - ר' appendNoteEntry_ ב-Code.gs). אם ריקה, ה-placeholder
+    // של התיבה עצמה ("אין הערות עדיין") מוצג אוטומטית.
     function renderHistory_(notes) {
-      const lines = notes ? String(notes).split('\n').filter(function (l) { return l.trim(); }) : [];
-      if (!lines.length) {
-        // הודעת דיבוג זמנית - מציגה בדיוק מה הגיע לפונקציה, כדי לאתר במבט
-        // אחד (בלי DevTools) מה בדיוק לא תקין אם עדיין לא מוצג נכון.
-        historyEl.innerHTML = '<div class="empty-state">אין הערות עדיין (debug: ' + escapeHtml_(JSON.stringify(notes === undefined ? 'undefined' : notes)) + ')</div>';
-        return;
-      }
-      historyEl.innerHTML = lines.map(function (line, i) {
-        const m = line.match(/^([^-]+)-\s*(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}):\s*([\s\S]*)$/);
-        const rawText = m ? m[3].trim() : line;
-        const metaHtml = m
-          ? '<div class="meta"><span class="who">' + escapeHtml_(m[1].trim()) + '</span> · ' + escapeHtml_(m[2].trim()) + '</div>'
-          : '';
-        return '<div class="crm-note-item" data-idx="' + i + '" data-raw="' + escapeHtml_(rawText) + '">' + metaHtml +
-          '<div class="text">' + escapeHtml_(rawText) +
-          '<span class="note-edit-btn" title="עריכת הערה">✏️</span></div></div>';
-      }).join('');
-    }
-
-    // הופכת פריט הערה בודד בהיסטוריה למצב עריכה (textarea + שמור/ביטול),
-    // בלי לגעת בשם הכותב/התאריך המקוריים ובלי להזיז הערות אחרות.
-    function startEditingNote_(itemEl) {
-      const idx = parseInt(itemEl.getAttribute('data-idx'), 10);
-      const rawText = itemEl.getAttribute('data-raw');
-      const textEl = itemEl.querySelector('.text');
-      textEl.innerHTML =
-        '<textarea class="modal-input crm-note-edit-input">' + escapeHtml_(rawText) + '</textarea>' +
-        '<div class="modal-actions" style="margin-top:6px;">' +
-        '<button type="button" class="btn note-edit-cancel">ביטול</button>' +
-        '<button type="button" class="btn btn-accent note-edit-save">שמור עריכה</button>' +
-        '</div>';
-      textEl.querySelector('.note-edit-cancel').addEventListener('click', function () {
-        renderHistory_(findRow_(modalPhone) && findRow_(modalPhone).userNotes);
-      });
-      textEl.querySelector('.note-edit-save').addEventListener('click', function () {
-        const newText = textEl.querySelector('.crm-note-edit-input').value.trim();
-        if (!newText || !modalPhone || !currentTabName) return;
-        google.script.run
-          .withSuccessHandler(function () { refreshAfterSave_(); })
-          .withFailureHandler(function (err) { errorEl.textContent = 'שגיאה: ' + (err.message || err); })
-          .editUserNote(currentTabName, modalPhone, idx, newText);
-      });
+      historyEl.value = notes ? String(notes) : '';
     }
 
     function findRow_(phone) {
@@ -1931,11 +1882,6 @@
       } else {
         salesTipEl.style.display = 'none';
       }
-    });
-    historyEl.addEventListener('click', function (e) {
-      const btn = e.target.closest('.note-edit-btn');
-      if (!btn) return;
-      startEditingNote_(btn.closest('.crm-note-item'));
     });
     modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
   }
