@@ -862,6 +862,49 @@ function editUserNote(sheetName, phone, noteIndex, newText) {
   return { success: true };
 }
 
+/**
+ * כלי אבחון חד-פעמי: מדפיסה ליומן הביצוע בדיוק מה הקוד רואה עבור מספר
+ * טלפון נתון - שורת הכותרות המדויקת (עם מרכאות, כדי לחשוף רווחים
+ * נסתרים), אינדקס העמודות שנמצאו, והערך הגולמי בפועל בתא. סורקת את כל
+ * טאבי הקמפיין (לא רק אחד) כדי לגלות גם אם אותו מספר טלפון קיים
+ * ביותר מטאב אחד. אין צורך לדעת את שם הטאב המדויק מראש.
+ */
+function debugContactByPhone(phone) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = getCampaignSheets_(ss);
+  let found_any = false;
+
+  sheets.forEach(function (sheet) {
+    const found = findRowByPhone_(sheet, phone);
+    if (!found) return;
+    found_any = true;
+
+    Logger.log('=== טאב: "' + sheet.getName() + '" ===');
+    Logger.log('כותרות (' + found.headers.length + ' עמודות): ' +
+      found.headers.map(function (h) { return '"' + h + '"'; }).join(' | '));
+
+    const firstReplyIdx = findColumnNormalized_(found.headers, FIRST_REPLY_HEADER);
+    const notesIdx = findColumnNormalized_(found.headers, USER_NOTES_HEADER);
+    const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
+
+    Logger.log('"' + FIRST_REPLY_HEADER + '" - אינדקס: ' + firstReplyIdx +
+      ', כותרת בפועל: "' + (firstReplyIdx !== -1 ? found.headers[firstReplyIdx] : '(לא נמצאה)') + '"' +
+      ', ערך: "' + (firstReplyIdx !== -1 ? rowValues[firstReplyIdx] : '(אין עמודה)') + '"');
+    Logger.log('"' + USER_NOTES_HEADER + '" - אינדקס: ' + notesIdx +
+      ', כותרת בפועל: "' + (notesIdx !== -1 ? found.headers[notesIdx] : '(לא נמצאה)') + '"' +
+      ', ערך: "' + (notesIdx !== -1 ? rowValues[notesIdx] : '(אין עמודה)') + '"');
+  });
+
+  if (!found_any) Logger.log('המספר ' + phone + ' לא נמצא באף טאב קמפיין.');
+}
+
+/**
+ * עטיפה נוחה להרצה ישירה מהתפריט - מריצה את האבחון עבור Ishai Waisman.
+ */
+function debugIshai() {
+  debugContactByPhone('532742755');
+}
+
 function validateTeamUser_(username) {
   if (TEAM_USERS_.indexOf(username) === -1) {
     throw new Error('שם משתמש לא מוכר: ' + username);
