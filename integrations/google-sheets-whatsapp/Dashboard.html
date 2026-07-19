@@ -976,24 +976,19 @@
 
     <label class="modal-label">עדכון סטטוס</label>
     <input type="text" class="modal-input" id="crmStatusText" placeholder="סטטוס חדש, למשל: טופל">
-    <div class="modal-actions" style="justify-content:flex-start;">
-      <button class="btn btn-accent" id="crmStatusSaveBtn" type="button">שמור סטטוס</button>
-    </div>
 
     <label class="modal-label">הערה חדשה</label>
     <textarea class="modal-input crm-note-input" id="crmNoteText" placeholder="לכתוב הערה..."></textarea>
-    <div class="modal-actions" style="justify-content:flex-start;">
-      <button class="btn btn-accent" id="crmNoteSaveBtn" type="button">שמור הערה</button>
-    </div>
 
     <div class="modal-error" id="crmError"></div>
 
-    <label class="modal-label">היסטוריית הערות (החדשה למעלה)</label>
-    <div class="crm-note-history" id="crmNoteHistory"></div>
-
     <div class="modal-actions">
       <button class="btn" id="crmCloseBtn" type="button">סגירה</button>
+      <button class="btn btn-accent" id="crmSaveBtn" type="button">שמור וסגור</button>
     </div>
+
+    <label class="modal-label">היסטוריית הערות (החדשה למעלה)</label>
+    <div class="crm-note-history" id="crmNoteHistory"></div>
   </div>
 </div>
 
@@ -1328,6 +1323,43 @@
   function escapeHtml_(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /**
+   * אפקט חגיגה עדין (קונפטי) אחרי שמירה מוצלחת - כמה ריבועים צבעוניים
+   * שנופלים ודוהים, בלי ספרייה חיצונית (לא ניתן לטעון CDN כאן).
+   */
+  function fireConfetti_() {
+    const colors = ['#7C3AED', '#A78BFA', '#34D399', '#FBBF24', '#F472B6'];
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:999;overflow:hidden;';
+    document.body.appendChild(container);
+    const count = 26;
+    for (let i = 0; i < count; i++) {
+      const piece = document.createElement('div');
+      const size = 6 + Math.random() * 6;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const startX = 50 + (Math.random() * 30 - 15);
+      const drift = (Math.random() * 60 - 30);
+      const duration = 900 + Math.random() * 500;
+      const rotation = Math.random() * 360;
+      piece.style.cssText =
+        'position:absolute;left:' + startX + 'vw;top:38vh;width:' + size + 'px;height:' + (size * 0.4) + 'px;' +
+        'background:' + color + ';border-radius:2px;opacity:1;' +
+        'transform:rotate(' + rotation + 'deg);' +
+        'transition:transform ' + duration + 'ms ease-out, top ' + duration + 'ms ease-in, opacity ' + duration + 'ms ease-in;';
+      container.appendChild(piece);
+      (function (piece, drift, rotation, duration) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            piece.style.top = (38 + 25 + Math.random() * 15) + 'vh';
+            piece.style.transform = 'translateX(' + drift + 'px) rotate(' + (rotation + 360 + Math.random() * 360) + 'deg)';
+            piece.style.opacity = '0';
+          });
+        });
+      })(piece, drift, rotation, duration);
+    }
+    setTimeout(function () { container.remove(); }, 1600);
   }
 
   /**
@@ -1694,8 +1726,7 @@
     const noteText = document.getElementById('crmNoteText');
     const errorEl = document.getElementById('crmError');
     const historyEl = document.getElementById('crmNoteHistory');
-    const statusSaveBtn = document.getElementById('crmStatusSaveBtn');
-    const noteSaveBtn = document.getElementById('crmNoteSaveBtn');
+    const saveBtn = document.getElementById('crmSaveBtn');
     const aiSummaryEl = document.getElementById('crmAiSummary');
     const aiErrorEl = document.getElementById('crmAiError');
     const aiBtn = document.getElementById('crmAiBtn');
@@ -1777,42 +1808,40 @@
       }).getCampaignData(currentTabName);
     }
 
-    function saveStatus() {
-      const text = statusText.value.trim();
-      if (!text) { errorEl.textContent = 'יש להזין סטטוס'; return; }
+    // כפתור "שמור וסגור" אחד ששומר גם סטטוס וגם הערה (מה שמולא בפועל),
+    // בלי צורך בשתי פעולות שמירה נפרדות - ואז סוגר את החלון עם קונפטי.
+    function saveAll_() {
+      const statusVal = statusText.value.trim();
+      const noteVal = noteText.value.trim();
+      if (!statusVal && !noteVal) { errorEl.textContent = 'יש להזין סטטוס ו/או הערה'; return; }
       if (!modalPhone || !currentTabName) return;
-      statusSaveBtn.disabled = true;
+      saveBtn.disabled = true;
       errorEl.textContent = '';
-      google.script.run
-        .withSuccessHandler(function () {
-          statusSaveBtn.disabled = false;
-          statusText.value = '';
-          refreshAfterSave_();
-        })
-        .withFailureHandler(function (err) {
-          statusSaveBtn.disabled = false;
-          errorEl.textContent = 'שגיאה: ' + (err.message || err);
-        })
-        .setUserStatus(currentTabName, modalPhone, userSel.value, text);
-    }
 
-    function saveNote() {
-      const text = noteText.value.trim();
-      if (!text) { errorEl.textContent = 'יש להזין הערה'; return; }
-      if (!modalPhone || !currentTabName) return;
-      noteSaveBtn.disabled = true;
-      errorEl.textContent = '';
-      google.script.run
-        .withSuccessHandler(function () {
-          noteSaveBtn.disabled = false;
-          noteText.value = '';
-          refreshAfterSave_();
-        })
-        .withFailureHandler(function (err) {
-          noteSaveBtn.disabled = false;
-          errorEl.textContent = 'שגיאה: ' + (err.message || err);
-        })
-        .addUserNote(currentTabName, modalPhone, userSel.value, text);
+      function onError(err) {
+        saveBtn.disabled = false;
+        errorEl.textContent = 'שגיאה: ' + (err.message || err);
+      }
+      function afterAll() {
+        saveBtn.disabled = false;
+        refreshAfterSave_();
+        closeModal();
+        fireConfetti_();
+      }
+      function doNoteIfNeeded() {
+        if (noteVal) {
+          google.script.run.withSuccessHandler(afterAll).withFailureHandler(onError)
+            .addUserNote(currentTabName, modalPhone, userSel.value, noteVal);
+        } else {
+          afterAll();
+        }
+      }
+      if (statusVal) {
+        google.script.run.withSuccessHandler(doNoteIfNeeded).withFailureHandler(onError)
+          .setUserStatus(currentTabName, modalPhone, userSel.value, statusVal);
+      } else {
+        doNoteIfNeeded();
+      }
     }
 
     document.getElementById('tableBody').addEventListener('click', function (e) {
@@ -1828,8 +1857,7 @@
       if (phone) openModal(phone, false);
     });
     document.getElementById('crmCloseBtn').addEventListener('click', closeModal);
-    statusSaveBtn.addEventListener('click', saveStatus);
-    noteSaveBtn.addEventListener('click', saveNote);
+    saveBtn.addEventListener('click', saveAll_);
     aiBtn.addEventListener('click', function () { generateSummary_(); });
     modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
   }
