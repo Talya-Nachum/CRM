@@ -1757,7 +1757,12 @@
 
     function renderHistory_(notes) {
       const lines = notes ? String(notes).split('\n').filter(function (l) { return l.trim(); }) : [];
-      if (!lines.length) { historyEl.innerHTML = '<div class="empty-state">אין הערות עדיין</div>'; return; }
+      if (!lines.length) {
+        // הודעת דיבוג זמנית - מציגה בדיוק מה הגיע לפונקציה, כדי לאתר במבט
+        // אחד (בלי DevTools) מה בדיוק לא תקין אם עדיין לא מוצג נכון.
+        historyEl.innerHTML = '<div class="empty-state">אין הערות עדיין (debug: ' + escapeHtml_(JSON.stringify(notes === undefined ? 'undefined' : notes)) + ')</div>';
+        return;
+      }
       historyEl.innerHTML = lines.map(function (line, i) {
         const m = line.match(/^([^-]+)-\s*(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}):\s*([\s\S]*)$/);
         const rawText = m ? m[3].trim() : line;
