@@ -1174,14 +1174,13 @@
     { key: 'status', label: 'סטטוס', always: true,
       filterValue: function (r) { return r.status || ''; },
       cell: function (r) { return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>'; } },
-    { key: 'finalStatus', label: 'סטטוס סופי', always: true,
-      filterValue: function (r) { return r.firstReply || r.callFirstResult || r.status || ''; },
+    { key: 'finalStatus', label: 'סטטוס איש קשר', always: true,
+      filterValue: function (r) { return r.firstReply || r.status || ''; },
       cell: function (r) {
         if (r.firstReply) return '<td class="reply-cell">📱 ' + escapeHtml_(r.firstReply) + '</td>';
-        if (r.callFirstResult) return '<td class="reply-cell">📞 ' + escapeHtml_(r.callFirstResult) + '</td>';
         return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>';
       } },
-    { key: 'reply', label: 'תשובת לקוח', always: false, hasValue: function (r) { return !!r.reply; },
+    { key: 'reply', label: 'תשובת איש קשר', always: false, hasValue: function (r) { return !!r.reply; },
       filterValue: function (r) { return r.reply ? lastReplyLine_(r.reply) : ''; },
       cell: function (r) { return '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
     { key: 'callStatus', label: 'סטטוס שיחה', always: false, hasValue: function (r) { return !!r.callStatus; },
@@ -1575,12 +1574,12 @@
       // במבט ראשון.
       const headers = [
         'שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד', 'סטטוס',
-        'סטטוס סופי (וואטסאפ)', 'תאריך עדכון (וואטסאפ)', 'תשובה אחרונה (וואטסאפ)', 'היסטוריית וואטסאפ מלאה',
-        'סטטוס שיחה', 'סטטוס סופי (שיחה)', 'תאריך עדכון (שיחה)', 'תוצאה אחרונה (שיחה)', 'היסטוריית שיחות מלאה',
+        'סטטוס איש קשר (וואטסאפ)', 'תאריך עדכון (וואטסאפ)', 'תשובה אחרונה (וואטסאפ)', 'היסטוריית וואטסאפ מלאה',
+        'סטטוס שיחה', 'תאריך עדכון (שיחה)', 'תוצאה אחרונה (שיחה)', 'היסטוריית שיחות מלאה',
         'סטטוס משתמש', 'הערות משתמש (הכל)'
       ];
       const WHATS_FROM = 6, WHATS_TO = 10;
-      const CALL_FROM = 11, CALL_TO = 15;
+      const CALL_FROM = 11, CALL_TO = 14;
       const headerBg_ = function (i) {
         if (i >= WHATS_FROM && i <= WHATS_TO) return '#A7F3D0';
         if (i >= CALL_FROM && i <= CALL_TO) return '#FED7AA';
@@ -1602,16 +1601,15 @@
         const cleanCallResult = r.callResult ? lastReplyLine_(r.callResult) : '';
         const fullCallHistory = r.callResult ? escapeHtml_(r.callResult).replace(/\n/g, '<br>') : '';
         const fullNotes = r.userNotes ? escapeHtml_(r.userNotes).replace(/\n/g, '<br>') : '';
-        // אם עדיין אין תגובה/תוצאת שיחה - נופלים חזרה לסטטוס השליחה הבסיסי
-        // (למשל "נשלח וואטסאפ"), לעולם לא משאירים את התא ריק.
+        // אם עדיין אין תגובה - נופלים חזרה לסטטוס השליחה הבסיסי (למשל
+        // "נשלח וואטסאפ"), לעולם לא משאירים את התא ריק.
         const finalWhats = r.firstReply || r.status || '';
-        const finalCall = r.callFirstResult || r.callStatus || '';
 
         const values = [
           { text: r.company }, { text: r.name }, { text: r.title }, { text: r.phone },
           { text: r.email }, { text: r.source }, { text: r.status },
           { text: finalWhats }, { text: r.replyDate }, { text: cleanReply }, { html: fullReplyHistory },
-          { text: r.callStatus }, { text: finalCall }, { text: r.callDate }, { text: cleanCallResult }, { html: fullCallHistory },
+          { text: r.callStatus }, { text: r.callDate }, { text: cleanCallResult }, { html: fullCallHistory },
           { text: r.userStatus }, { html: fullNotes }
         ];
 

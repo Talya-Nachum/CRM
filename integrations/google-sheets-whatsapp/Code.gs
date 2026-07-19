@@ -28,8 +28,11 @@
  *    (הגדרות הסוכנת > Overview > Webhooks).
  *
  * כותרות עמודות נדרשות בכל טאב קמפיין: טלפון נייד, שם פרטי, מספר תבנית,
- * סטטוס, תשובת לקוח, תאריך תשובה, מזהה קמפיין, סטטוס שיחה, מזהה ליד NLPearl,
- * תוצאות שיחה, תאריך שיחה.
+ * סטטוס, תשובת איש קשר, תאריך תשובה, מזהה קמפיין, סטטוס שיחה, מזהה ליד
+ * NLPearl, תוצאות שיחה.
+ * עמודות אופציונליות שנוצרות לבד אוטומטית בגיליון בפעם הראשונה שהן
+ * נדרשות בפועל (אין צורך להוסיף אותן ידנית מראש): סטטוס איש קשר (מלחיצה
+ * אמיתית על כפתור תגובה בוואטסאפ), תאריך שיחה, סטטוס משתמש, הערות משתמש.
  */
 
 // --- אינפוריו (וואטסאפ) ---
@@ -44,8 +47,8 @@ const EMAIL_HEADER = 'אימייל';
 const SOURCE_HEADER = 'מקור הליד';
 const TEMPLATE_HEADER = 'מספר תבנית';
 const STATUS_HEADER = 'סטטוס';
-const REPLY_HEADER = 'תשובת לקוח';
-const FIRST_REPLY_HEADER = 'תגובה ראשונית';
+const REPLY_HEADER = 'תשובת איש קשר';
+const FIRST_REPLY_HEADER = 'סטטוס איש קשר';
 const REPLY_DATE_HEADER = 'תאריך תשובה';
 const SENT_STATUS = 'נשלח וואטסאפ';
 const APPROVED_STATUS = 'מאושר לשליחה';
@@ -141,6 +144,24 @@ function startCallsActiveTab() {
  */
 function getCampaignSheets_(ss) {
   return ss.getSheets().filter(isCampaignSheet_);
+}
+
+/**
+ * מוודאת שלטאב יש עמודה עם הכותרת הזו - ואם לא, מוסיפה אותה בעצמה
+ * בעמודה הבאה הפנויה (בסוף שורת הכותרות) ומחזירה את האינדקס שלה
+ * (0-based, כמו headers.indexOf). כך עמודות אופציונליות (סטטוס איש
+ * קשר, סטטוס/הערות משתמש) נוצרות לבד ברגע שהן נדרשות בפועל בפעם
+ * הראשונה - אין צורך להוסיף אותן ידנית מראש בשום טאב.
+ * הפרמטר headers מתעדכן במקום (push) כדי שקריאות נוספות לאותה מערך
+ * באותה הרצה יראו את העמודה החדשה ולא יתנגשו איתה.
+ */
+function ensureColumn_(sheet, headers, headerName) {
+  const idx = headers.indexOf(headerName);
+  if (idx !== -1) return idx;
+  const newCol = headers.length + 1;
+  sheet.getRange(1, newCol).setValue(headerName);
+  headers.push(headerName);
+  return newCol - 1;
 }
 
 /**
@@ -436,7 +457,7 @@ function doPost(e) {
  * אוטומטית עם הלקוח) - כל הודעה מגיעה כקריאת webhook נפרדת. משתמשים
  * ב-LockService כדי שקריאות שמגיעות כמעט באותו רגע יעובדו אחת אחרי
  * השנייה (ולא "יתנגשו" ותיכתב תשובה לא-אחרונה), ומצרפים כל תשובה
- * לעמודת "תשובת לקוח" (עם שעה) במקום לדרוס את הקודמת - כדי לשמור את
+ * לעמודת "תשובת איש קשר" (עם שעה) במקום לדרוס את הקודמת - כדי לשמור את
  * כל השיחה, לא רק את ההודעה האחרונה.
  *
  * מחפשים קודם כל רק בטאב שאליו נשלחה לאחרונה הודעה למספר הזה
@@ -481,7 +502,6 @@ function handleInforuWebhook_(ss, payload) {
       const phoneCol = headers.indexOf(PHONE_HEADER);
       const replyCol = headers.indexOf(REPLY_HEADER);
       const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
-      const firstReplyCol = headers.indexOf(FIRST_REPLY_HEADER);
       if (phoneCol === -1 || replyCol === -1) continue;
 
       for (let i = 1; i < data.length; i++) {
@@ -497,12 +517,16 @@ function handleInforuWebhook_(ss, payload) {
           sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
           if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
           recordDailyActivity_(sheet.getName());
-          // "תגובה ראשונית" נקבעת רק מלחיצה אמיתית על כפתור (למשל "פגישה"
+          // "סטטוס איש קשר" נקבע רק מלחיצה אמיתית על כפתור (למשל "פגישה"
           // / "לא מעוניין" בתפריט הראשוני) - לא מטקסט חופשי שהלקוח כותב,
-          // גם אם הוא הגיע קודם כרונולוגית. נשמרת פעם אחת בלבד, לא נדרסת
-          // בלחיצה נוספת בהמשך השיחה עם הבוט האוטומטי.
-          if (firstReplyCol !== -1 && buttonPayload && !data[i][firstReplyCol]) {
-            sheet.getRange(rowIndex, firstReplyCol + 1).setValue(buttonPayload);
+          // גם אם הוא הגיע קודם כרונולוגית. נשמר פעם אחת בלבד, לא נדרס
+          // בלחיצה נוספת בהמשך השיחה עם הבוט האוטומטי. העמודה נוצרת לבד
+          // בפעם הראשונה שבאמת יש מה לכתוב בה - אין צורך להוסיף אותה ידנית.
+          if (buttonPayload) {
+            const firstReplyCol = ensureColumn_(sheet, headers, FIRST_REPLY_HEADER);
+            if (!data[i][firstReplyCol]) {
+              sheet.getRange(rowIndex, firstReplyCol + 1).setValue(buttonPayload);
+            }
           }
           return;
         }
@@ -518,8 +542,8 @@ function handleInforuWebhook_(ss, payload) {
  * לאחרונה שיחה למספר הזה (lastContactSheet_), כדי שתוצאת שיחה תעדכן
  * רק את הקמפיין הרלוונטי ולא כל טאב אחר שבו קיים במקרה אותו מספר.
  * "תוצאות שיחה" מצטברת (כל שיחה חדשה מתווספת לקיים, לא דורסת) - בדיוק
- * כמו "תשובת לקוח" בוואטסאפ, כדי לשמור היסטוריה אם היו כמה שיחות/ניסיונות.
- * "תוצאה ראשונית (שיחה)" נשמרת פעם אחת בלבד, כמו "תגובה ראשונית".
+ * כמו "תשובת איש קשר" בוואטסאפ, כדי לשמור היסטוריה אם היו כמה שיחות/ניסיונות.
+ * "תאריך שיחה" נוצרת לבד בפעם הראשונה שצריך אותה, כמו "סטטוס איש קשר".
  */
 function handleNlpearlWebhook_(ss, payload) {
   // מטפלים רק באירועי Call Webhook (מזוהים לפי "to") לצורך עמודת התוצאה -
@@ -540,8 +564,6 @@ function handleNlpearlWebhook_(ss, payload) {
       const headers = data[0];
       const phoneCol = headers.indexOf(PHONE_HEADER);
       const resultCol = headers.indexOf(CALL_RESULT_HEADER);
-      const firstResultCol = headers.indexOf(CALL_FIRST_RESULT_HEADER);
-      const dateCol = headers.indexOf(CALL_DATE_HEADER);
       if (phoneCol === -1 || resultCol === -1) continue;
 
       for (let i = 1; i < data.length; i++) {
@@ -554,10 +576,8 @@ function handleNlpearlWebhook_(ss, payload) {
           const existingResult = data[i][resultCol];
           const combined = existingResult ? (existingResult + '\n' + summary) : summary;
           sheet.getRange(rowIndex, resultCol + 1).setValue(combined);
-          if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
-          if (firstResultCol !== -1 && !data[i][firstResultCol]) {
-            sheet.getRange(rowIndex, firstResultCol + 1).setValue(summary);
-          }
+          const dateCol = ensureColumn_(sheet, headers, CALL_DATE_HEADER);
+          sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
           recordDailyActivity_(sheet.getName());
           return;
         }
@@ -773,8 +793,7 @@ function backfillFirstReplyFromWebhookLog() {
     for (const sheet of sheets) {
       const found = findRowByPhone_(sheet, phone);
       if (!found) continue;
-      const firstReplyCol = found.headers.indexOf(FIRST_REPLY_HEADER);
-      if (firstReplyCol === -1) continue;
+      const firstReplyCol = ensureColumn_(sheet, found.headers, FIRST_REPLY_HEADER);
       const cell = sheet.getRange(found.rowIndex, firstReplyCol + 1);
       if (!cell.getValue()) {
         cell.setValue(buttonPayload);
@@ -784,7 +803,7 @@ function backfillFirstReplyFromWebhookLog() {
     }
   }
 
-  Logger.log('הושלמו ' + updated + ' עדכונים רטרואקטיביים ל"תגובה ראשונית"');
+  Logger.log('הושלמו ' + updated + ' עדכונים רטרואקטיביים ל"' + FIRST_REPLY_HEADER + '"');
   return updated;
 }
 
@@ -796,7 +815,7 @@ function validateTeamUser_(username) {
 
 /**
  * כותבת שורת יומן חדשה לעמודת "הערות משתמש", תמיד בראש הרשימה (החדשה
- * ביותר למעלה - הפוך מ"תשובת לקוח" של הלקוח, ששם הישנה נשארת למעלה
+ * ביותר למעלה - הפוך מ"תשובת איש קשר" של הלקוח, ששם הישנה נשארת למעלה
  * וההודעות מצטרפות למטה). משמשת גם ישירות (addUserNote) וגם אוטומטית
  * כשמעדכנים סטטוס (setUserStatus), כדי ששינויי סטטוס יתועדו גם הם.
  */
@@ -820,9 +839,7 @@ function addUserNote(sheetName, phone, username, noteText) {
   const found = findRowByPhone_(sheet, phone);
   if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
 
-  const notesCol = found.headers.indexOf(USER_NOTES_HEADER);
-  if (notesCol === -1) throw new Error('לא נמצאה עמודת "' + USER_NOTES_HEADER + '" בטאב - יש להוסיף אותה');
-
+  const notesCol = ensureColumn_(sheet, found.headers, USER_NOTES_HEADER);
   appendNoteEntry_(sheet, found.rowIndex, notesCol, username, noteText);
   return { success: true };
 }
@@ -840,15 +857,11 @@ function setUserStatus(sheetName, phone, username, statusText) {
   const found = findRowByPhone_(sheet, phone);
   if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
 
-  const statusCol = found.headers.indexOf(USER_STATUS_HEADER);
-  if (statusCol === -1) throw new Error('לא נמצאה עמודת "' + USER_STATUS_HEADER + '" בטאב - יש להוסיף אותה');
-
+  const statusCol = ensureColumn_(sheet, found.headers, USER_STATUS_HEADER);
   sheet.getRange(found.rowIndex, statusCol + 1).setValue(statusText);
 
-  const notesCol = found.headers.indexOf(USER_NOTES_HEADER);
-  if (notesCol !== -1) {
-    appendNoteEntry_(sheet, found.rowIndex, notesCol, username, 'עדכנה סטטוס ל: ' + statusText);
-  }
+  const notesCol = ensureColumn_(sheet, found.headers, USER_NOTES_HEADER);
+  appendNoteEntry_(sheet, found.rowIndex, notesCol, username, 'עדכנה סטטוס ל: ' + statusText);
   return { success: true };
 }
 
@@ -1062,7 +1075,7 @@ function getCampaignData(sheetName) {
  * מפלח את אנשי הקשר לפי תוכן התגובה (לא לפי סטטוס שליחה) - כמה ענו
  * "פגישה", כמה "לא מעוניין" וכו', לצורך גרף הפילוח בדשבורד. מבוסס על
  * "תגובה ראשונית" (הלחיצה הראשונה), עם נפילה חזרה לשורה הראשונה של
- * "תשובת לקוח" לשורות ישנות שנכתבו לפני שהעמודה הזו נוספה. מי שעדיין
+ * "תשובת איש קשר" לשורות ישנות שנכתבו לפני שהעמודה הזו נוספה. מי שעדיין
  * לא ענה בכלל מקובץ בנפרד תחת "טרם ענו". יותר מ-6 קטגוריות שונות
  * מתקפלות ל"אחר", כדי שהגרף יישאר קריא.
  */
