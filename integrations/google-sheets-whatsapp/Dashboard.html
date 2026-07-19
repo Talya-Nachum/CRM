@@ -1446,6 +1446,11 @@
         const kind = entry.muted ? 'noreply' : (entry.label === 'אחר' ? 'other' : 'named');
         const isSame = activeCategoryFilter && activeCategoryFilter.kind === kind && activeCategoryFilter.label === entry.label;
         activeCategoryFilter = isSame ? null : { kind: kind, label: entry.label };
+        // מסירים סינון עמודה קיים על "סטטוס איש קשר" - אותה עמודה בדיוק
+        // שהגרף מייצג - כדי שסינון ישן (למשל מבחירה קודמת בתיבת הסימונים)
+        // לא יתנגש בשקט עם הקטגוריה החדשה שנלחצה ויחזיר "לא נמצאו" בטעות.
+        delete columnFilters['finalStatus'];
+        renderTableHead_(visibleColumns);
         applyFilters_(true);
       });
     });
