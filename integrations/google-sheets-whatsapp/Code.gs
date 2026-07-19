@@ -115,7 +115,7 @@ function onOpen() {
 function isCampaignSheet_(sheet) {
   if (NON_CAMPAIGN_SHEETS_.indexOf(sheet.getName()) !== -1) return false;
   const headers = sheet.getDataRange().getValues()[0] || [];
-  return headers.indexOf(PHONE_HEADER) !== -1;
+  return findColumnNormalized_(headers, PHONE_HEADER) !== -1;
 }
 
 function sendMessagesActiveTab() {
@@ -148,14 +148,29 @@ function getCampaignSheets_(ss) {
 }
 
 /**
+ * משווה כותרות "ברכות" - בלי תלות ברווחים כפולים/רווח בקצה/גרשיים/
+ * רישיות (בדיוק כמו normalizeLabel_ למטה, המשמש כבר להתאמת שדות Wix).
+ * חשוב כי כותרת שנוצרה/הוקלדה ידנית עלולה להכיל רווח נוסף בלתי-נראה
+ * שישבור התאמה מדויקת (indexOf רגיל) ויגרום לקוד "לא למצוא" עמודה
+ * שקיימת בפועל, וליצור בטעות עמודה כפולה חדשה לצידה.
+ */
+function findColumnNormalized_(headers, name) {
+  const target = normalizeLabel_(name);
+  for (let i = 0; i < headers.length; i++) {
+    if (normalizeLabel_(headers[i]) === target) return i;
+  }
+  return -1;
+}
+
+/**
  * מוצאת עמודה לפי כותרת - וגם לפי שם ישן חלופי (legacy), למי שעדיין לא
  * שינתה ידנית את הכותרת בטאב הזה לשם החדש. כך שני השמות עובדים בכל טאב
  * בלי תלות אם היא כבר שינתה שם או לא.
  */
 function findHeaderIndex_(headers, primary, legacy) {
-  const idx = headers.indexOf(primary);
+  const idx = findColumnNormalized_(headers, primary);
   if (idx !== -1) return idx;
-  return legacy ? headers.indexOf(legacy) : -1;
+  return legacy ? findColumnNormalized_(headers, legacy) : -1;
 }
 
 /**
@@ -168,7 +183,7 @@ function findHeaderIndex_(headers, primary, legacy) {
  * באותה הרצה יראו את העמודה החדשה ולא יתנגשו איתה.
  */
 function ensureColumn_(sheet, headers, headerName) {
-  const idx = headers.indexOf(headerName);
+  const idx = findColumnNormalized_(headers, headerName);
   if (idx !== -1) return idx;
   const newCol = headers.length + 1;
   sheet.getRange(1, newCol).setValue(headerName);
@@ -311,10 +326,10 @@ function sendMessagesInSheet_(sheet) {
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
-  const phoneCol = headers.indexOf(PHONE_HEADER);
-  const nameCol = headers.indexOf(NAME_HEADER);
-  const statusCol = headers.indexOf(STATUS_HEADER);
-  const templateCol = headers.indexOf(TEMPLATE_HEADER);
+  const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+  const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+  const statusCol = findColumnNormalized_(headers, STATUS_HEADER);
+  const templateCol = findColumnNormalized_(headers, TEMPLATE_HEADER);
 
   if (phoneCol === -1 || nameCol === -1 || statusCol === -1) return;
 
@@ -375,11 +390,11 @@ function startCallsInSheet_(sheet) {
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
-  const phoneCol = headers.indexOf(PHONE_HEADER);
-  const nameCol = headers.indexOf(NAME_HEADER);
-  const campaignCol = headers.indexOf(CAMPAIGN_HEADER);
-  const callStatusCol = headers.indexOf(CALL_STATUS_HEADER);
-  const leadIdCol = headers.indexOf(CALL_LEAD_ID_HEADER);
+  const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+  const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+  const campaignCol = findColumnNormalized_(headers, CAMPAIGN_HEADER);
+  const callStatusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
+  const leadIdCol = findColumnNormalized_(headers, CALL_LEAD_ID_HEADER);
 
   if (phoneCol === -1 || callStatusCol === -1) return;
 
@@ -511,9 +526,9 @@ function handleInforuWebhook_(ss, payload) {
     for (const sheet of sheets) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
-      const phoneCol = headers.indexOf(PHONE_HEADER);
+      const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
       const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
-      const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
+      const replyDateCol = findColumnNormalized_(headers, REPLY_DATE_HEADER);
       if (phoneCol === -1 || replyCol === -1) continue;
 
       for (let i = 1; i < data.length; i++) {
@@ -574,8 +589,8 @@ function handleNlpearlWebhook_(ss, payload) {
     for (const sheet of sheets) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
-      const phoneCol = headers.indexOf(PHONE_HEADER);
-      const resultCol = headers.indexOf(CALL_RESULT_HEADER);
+      const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+      const resultCol = findColumnNormalized_(headers, CALL_RESULT_HEADER);
       if (phoneCol === -1 || resultCol === -1) continue;
 
       for (let i = 1; i < data.length; i++) {
@@ -713,7 +728,7 @@ function addContact(sheetName, fields) {
  */
 function addContactRow_(sheet, fields) {
   const headers = sheet.getDataRange().getValues()[0];
-  const phoneCol = headers.indexOf(PHONE_HEADER);
+  const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
   if (phoneCol === -1) {
     throw new Error('לא נמצאה עמודת "' + PHONE_HEADER + '" בטאב "' + sheet.getName() + '"');
   }
@@ -734,7 +749,7 @@ function addContactRow_(sheet, fields) {
   const row = new Array(headers.length).fill('');
   row[phoneCol] = fields.phone;
   Object.keys(columnByField).forEach(function (key) {
-    const col = headers.indexOf(columnByField[key]);
+    const col = findColumnNormalized_(headers, columnByField[key]);
     if (col !== -1) row[col] = (fields && fields[key]) || '';
   });
 
@@ -754,7 +769,7 @@ function addContactRow_(sheet, fields) {
 function findRowByPhone_(sheet, phone) {
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const phoneCol = headers.indexOf(PHONE_HEADER);
+  const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
   if (phoneCol === -1) return null;
   const target = phoneSuffix_(phone);
   for (let i = 1; i < data.length; i++) {
@@ -832,7 +847,7 @@ function editUserNote(sheetName, phone, noteIndex, newText) {
   const found = findRowByPhone_(sheet, phone);
   if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
 
-  const notesCol = found.headers.indexOf(USER_NOTES_HEADER);
+  const notesCol = found.findColumnNormalized_(headers, USER_NOTES_HEADER);
   if (notesCol === -1) throw new Error('אין עדיין הערות לאיש קשר הזה');
 
   const cell = sheet.getRange(found.rowIndex, notesCol + 1);
@@ -942,7 +957,7 @@ function summarizeContact(sheetName, phone) {
 
   const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
   const get_ = function (header) {
-    const col = found.headers.indexOf(header);
+    const col = findColumnNormalized_(found.headers, header);
     return col !== -1 ? rowValues[col] : '';
   };
 
@@ -1018,22 +1033,22 @@ function getCampaignData(sheetName) {
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
-  const phoneCol = headers.indexOf(PHONE_HEADER);
-  const nameCol = headers.indexOf(NAME_HEADER);
-  const companyCol = headers.indexOf(COMPANY_HEADER);
-  const titleCol = headers.indexOf(TITLE_HEADER);
-  const emailCol = headers.indexOf(EMAIL_HEADER);
-  const sourceCol = headers.indexOf(SOURCE_HEADER);
-  const statusCol = headers.indexOf(STATUS_HEADER);
+  const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+  const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+  const companyCol = findColumnNormalized_(headers, COMPANY_HEADER);
+  const titleCol = findColumnNormalized_(headers, TITLE_HEADER);
+  const emailCol = findColumnNormalized_(headers, EMAIL_HEADER);
+  const sourceCol = findColumnNormalized_(headers, SOURCE_HEADER);
+  const statusCol = findColumnNormalized_(headers, STATUS_HEADER);
   const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
-  const firstReplyCol = headers.indexOf(FIRST_REPLY_HEADER);
-  const replyDateCol = headers.indexOf(REPLY_DATE_HEADER);
-  const callStatusCol = headers.indexOf(CALL_STATUS_HEADER);
-  const callResultCol = headers.indexOf(CALL_RESULT_HEADER);
-  const callFirstResultCol = headers.indexOf(CALL_FIRST_RESULT_HEADER);
-  const callDateCol = headers.indexOf(CALL_DATE_HEADER);
-  const userStatusCol = headers.indexOf(USER_STATUS_HEADER);
-  const userNotesCol = headers.indexOf(USER_NOTES_HEADER);
+  const firstReplyCol = findColumnNormalized_(headers, FIRST_REPLY_HEADER);
+  const replyDateCol = findColumnNormalized_(headers, REPLY_DATE_HEADER);
+  const callStatusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
+  const callResultCol = findColumnNormalized_(headers, CALL_RESULT_HEADER);
+  const callFirstResultCol = findColumnNormalized_(headers, CALL_FIRST_RESULT_HEADER);
+  const callDateCol = findColumnNormalized_(headers, CALL_DATE_HEADER);
+  const userStatusCol = findColumnNormalized_(headers, USER_STATUS_HEADER);
+  const userNotesCol = findColumnNormalized_(headers, USER_NOTES_HEADER);
 
   const lastExportIso = lastExportTime_(sheetName);
   const lastExportMs = lastExportIso ? new Date(lastExportIso).getTime() : null;
