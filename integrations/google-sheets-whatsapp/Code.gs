@@ -807,6 +807,34 @@ function backfillFirstReplyFromWebhookLog() {
   return updated;
 }
 
+/**
+ * מתקנת את הטקסט של הערה קיימת ברשימה (לפי מיקום ברשימה, החדשה ביותר
+ * במיקום 0 - כמו שהיא מוצגת בדשבורד), בלי לגעת בשם הכותב/התאריך המקוריים
+ * ובלי להזיז את שאר ההערות. משמשת את הדשבורד כשלוחצים על עריכת הערה.
+ */
+function editUserNote(sheetName, phone, noteIndex, newText) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error('הטאב "' + sheetName + '" לא נמצא');
+
+  const found = findRowByPhone_(sheet, phone);
+  if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
+
+  const notesCol = found.headers.indexOf(USER_NOTES_HEADER);
+  if (notesCol === -1) throw new Error('אין עדיין הערות לאיש קשר הזה');
+
+  const cell = sheet.getRange(found.rowIndex, notesCol + 1);
+  const lines = String(cell.getValue() || '').split('\n').filter(function (l) { return l.trim(); });
+  if (noteIndex < 0 || noteIndex >= lines.length) {
+    throw new Error('ההערה לא נמצאה - יכול להיות שהיא כבר השתנתה');
+  }
+
+  const m = lines[noteIndex].match(/^([^-]+)-\s*(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}):\s*([\s\S]*)$/);
+  lines[noteIndex] = m ? (m[1].trim() + ' - ' + m[2].trim() + ': ' + newText) : newText;
+  cell.setValue(lines.join('\n'));
+  return { success: true };
+}
+
 function validateTeamUser_(username) {
   if (TEAM_USERS_.indexOf(username) === -1) {
     throw new Error('שם משתמש לא מוכר: ' + username);

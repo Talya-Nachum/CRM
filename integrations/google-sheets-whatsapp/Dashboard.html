@@ -1172,9 +1172,19 @@
       filterValue: function (r) { return r.source || ''; },
       cell: function (r) { return '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>'; } },
     { key: 'finalStatus', label: 'סטטוס איש קשר', always: true,
-      filterValue: function (r) { return r.firstReply || r.status || ''; },
+      // סדר עדיפות: לחיצה אמיתית על כפתור > תשובה חופשית בוואטסאפ (הגיע
+      // וענה, גם אם לא בלחיצת כפתור - לא סביר שייראה בדיוק כמו מי שלא ענה
+      // בכלל) > תוצאת שיחה (אם אין וואטסאפ בכלל) > סטטוס שליחה בסיסי.
+      filterValue: function (r) {
+        return r.firstReply
+          || (r.reply ? stripTimestampPrefix_(String(r.reply).split('\n')[0]) : '')
+          || (r.callResult ? lastReplyLine_(r.callResult) : '')
+          || r.status || '';
+      },
       cell: function (r) {
-        if (r.firstReply) return '<td class="reply-cell">📱 ' + escapeHtml_(r.firstReply) + '</td>';
+        if (r.firstReply) return '<td class="reply-cell">💬 ' + escapeHtml_(r.firstReply) + '</td>';
+        if (r.reply) return '<td class="reply-cell">💬 ' + escapeHtml_(stripTimestampPrefix_(String(r.reply).split('\n')[0])) + '</td>';
+        if (r.callResult) return '<td class="reply-cell">🤖 ' + escapeHtml_(lastReplyLine_(r.callResult)) + '</td>';
         return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>';
       } },
     { key: 'reply', label: 'תשובת איש קשר', always: false, hasValue: function (r) { return !!r.reply; },
@@ -1603,9 +1613,11 @@
         const cleanCallResult = r.callResult ? lastReplyLine_(r.callResult) : '';
         const fullCallHistory = r.callResult ? escapeHtml_(r.callResult).replace(/\n/g, '<br>') : '';
         const fullNotes = r.userNotes ? escapeHtml_(r.userNotes).replace(/\n/g, '<br>') : '';
-        // אם עדיין אין תגובה - נופלים חזרה לסטטוס השליחה הבסיסי (למשל
-        // "נשלח וואטסאפ"), לעולם לא משאירים את התא ריק.
-        const finalWhats = r.firstReply || r.status || '';
+        // אם עדיין אין תגובה בכלל - נופלים חזרה לסטטוס השליחה הבסיסי (למשל
+        // "נשלח וואטסאפ"), לעולם לא משאירים את התא ריק. תשובה חופשית (בלי
+        // לחיצת כפתור) עדיין עדיפה על הסטטוס הבסיסי - מי שכן ענה לא צריך
+        // להיראות בדיוק כמו מי שלא ענה בכלל.
+        const finalWhats = r.firstReply || cleanReply || r.status || '';
 
         const values = [
           { text: r.company }, { text: r.name }, { text: r.title }, { text: r.phone },
@@ -1740,17 +1752,46 @@
     function renderHistory_(notes) {
       const lines = notes ? String(notes).split('\n').filter(function (l) { return l.trim(); }) : [];
       if (!lines.length) { historyEl.innerHTML = '<div class="empty-state">אין הערות עדיין</div>'; return; }
-      historyEl.innerHTML = lines.map(function (line) {
-        const m = line.match(/^([^-]+)-\s*([^:]+):\s*([\s\S]*)$/);
-        if (!m) return '<div class="crm-note-item"><div class="text">' + escapeHtml_(line) + '</div></div>';
-        return '<div class="crm-note-item"><div class="meta"><span class="who">' + escapeHtml_(m[1].trim()) +
-          '</span> · ' + escapeHtml_(m[2].trim()) + '</div><div class="text">' + escapeHtml_(m[3].trim()) + '</div></div>';
+      historyEl.innerHTML = lines.map(function (line, i) {
+        const m = line.match(/^([^-]+)-\s*(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}):\s*([\s\S]*)$/);
+        const rawText = m ? m[3].trim() : line;
+        const metaHtml = m
+          ? '<div class="meta"><span class="who">' + escapeHtml_(m[1].trim()) + '</span> · ' + escapeHtml_(m[2].trim()) + '</div>'
+          : '';
+        return '<div class="crm-note-item" data-idx="' + i + '" data-raw="' + escapeHtml_(rawText) + '">' + metaHtml +
+          '<div class="text">' + escapeHtml_(rawText) +
+          '<span class="note-edit-btn" title="עריכת הערה">✏️</span></div></div>';
       }).join('');
+    }
+
+    // הופכת פריט הערה בודד בהיסטוריה למצב עריכה (textarea + שמור/ביטול),
+    // בלי לגעת בשם הכותב/התאריך המקוריים ובלי להזיז הערות אחרות.
+    function startEditingNote_(itemEl) {
+      const idx = parseInt(itemEl.getAttribute('data-idx'), 10);
+      const rawText = itemEl.getAttribute('data-raw');
+      const textEl = itemEl.querySelector('.text');
+      textEl.innerHTML =
+        '<textarea class="modal-input crm-note-edit-input">' + escapeHtml_(rawText) + '</textarea>' +
+        '<div class="modal-actions" style="margin-top:6px;">' +
+        '<button type="button" class="btn note-edit-cancel">ביטול</button>' +
+        '<button type="button" class="btn btn-accent note-edit-save">שמור עריכה</button>' +
+        '</div>';
+      textEl.querySelector('.note-edit-cancel').addEventListener('click', function () {
+        renderHistory_(findRow_(modalPhone) && findRow_(modalPhone).userNotes);
+      });
+      textEl.querySelector('.note-edit-save').addEventListener('click', function () {
+        const newText = textEl.querySelector('.crm-note-edit-input').value.trim();
+        if (!newText || !modalPhone || !currentTabName) return;
+        google.script.run
+          .withSuccessHandler(function () { refreshAfterSave_(); })
+          .withFailureHandler(function (err) { errorEl.textContent = 'שגיאה: ' + (err.message || err); })
+          .editUserNote(currentTabName, modalPhone, idx, newText);
+      });
     }
 
     function findRow_(phone) {
       if (!currentData) return null;
-      return currentData.rows.filter(function (r) { return r.phone === phone; })[0] || null;
+      return currentData.rows.filter(function (r) { return String(r.phone) === String(phone); })[0] || null;
     }
 
     function openModal(phone, autoSummarize) {
@@ -1802,7 +1843,7 @@
     function refreshAfterSave_() {
       google.script.run.withSuccessHandler(function (data) {
         renderCampaign(data, true);
-        const row = (data && data.rows || []).filter(function (r) { return r.phone === modalPhone; })[0];
+        const row = (data && data.rows || []).filter(function (r) { return String(r.phone) === String(modalPhone); })[0];
         currentStatusEl.textContent = (row && row.userStatus) || 'ללא סטטוס';
         renderHistory_(row && row.userNotes);
       }).getCampaignData(currentTabName);
@@ -1859,6 +1900,11 @@
     document.getElementById('crmCloseBtn').addEventListener('click', closeModal);
     saveBtn.addEventListener('click', saveAll_);
     aiBtn.addEventListener('click', function () { generateSummary_(); });
+    historyEl.addEventListener('click', function (e) {
+      const btn = e.target.closest('.note-edit-btn');
+      if (!btn) return;
+      startEditingNote_(btn.closest('.crm-note-item'));
+    });
     modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
   }
 
