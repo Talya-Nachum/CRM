@@ -1018,50 +1018,70 @@ function recordExportTime(sheetName) {
 }
 
 /**
+ * גיליון "ייצוא זמני" אחד קבוע (לא נוצר/נמחק בכל ייצוא - למחיקת קובץ נדרשת
+ * הרשאת Drive רחבה שלא מאושרת בפרויקט הזה). ה-ID נשמר ב-Script Properties;
+ * בכל ייצוא נעשה שימוש חוזר באותו קובץ, ומנקים את תוכנו לפני כתיבה מחדש.
+ * הקובץ הזה הוא תשתית פנימית בלבד - אין למחוק אותו ידנית מה-Drive.
+ */
+function getOrCreateExportSheet_() {
+  const props = PropertiesService.getScriptProperties();
+  const savedId = props.getProperty('EXPORT_TEMP_SS_ID');
+  if (savedId) {
+    try {
+      return SpreadsheetApp.openById(savedId);
+    } catch (e) {
+      // הקובץ נמחק/לא נגיש - ניצור אחד חדש במקומו.
+    }
+  }
+  const created = SpreadsheetApp.create('ייצוא זמני - תשתית פנימית של הדשבורד (נא לא למחוק)');
+  props.setProperty('EXPORT_TEMP_SS_ID', created.getId());
+  return created;
+}
+
+/**
  * מייצרת קובץ אקסל (xlsx) אמיתי מהשורות שכבר סוננו בדשבורד (headers + rows
  * מגיעים מהלקוח - כדי שהייצוא יכבד בדיוק את מה שמסונן על המסך). בעבר הקובץ
  * שהורד היה טבלת HTML "מחופשת" ל-xls, ואצל חלק ממשתמשות אקסל זה גרם לתאים
- * להיראות "ממוזגים" וחסם סינון (Data > Filter). כאן במקום זה נוצר גיליון
- * גוגל זמני, נכתבים אליו הנתונים כתאים אמיתיים, ואז הוא מיוצא ל-xlsx אמיתי
- * דרך ה-export endpoint של גוגל דוקס (עם טוקן ה-OAuth של הסקריפט עצמו -
- * לא דורש הפעלת שירות מתקדם/Advanced Service). מחזירה בסיס-64 של קובץ
- * ה-xlsx, שהלקוח הופך ל-Blob ומוריד. הגיליון הזמני נמחק מיד בסיום.
+ * להיראות "ממוזגים" וחסם סינון (Data > Filter). כאן במקום זה נכתבים הנתונים
+ * לגיליון זמני (getOrCreateExportSheet_) כתאים אמיתיים, ואז הוא מיוצא
+ * ל-xlsx אמיתי דרך ה-export endpoint של גוגל דוקס (עם טוקן ה-OAuth של
+ * הסקריפט עצמו). מחזירה בסיס-64 של קובץ ה-xlsx, שהלקוח הופך ל-Blob ומוריד.
  */
 function exportCampaignExcel(sheetName, headers, rows) {
-  const tempSs = SpreadsheetApp.create('ייצוא_' + sheetName + '_' + new Date().getTime());
-  try {
-    const sheet = tempSs.getSheets()[0];
-    const numCols = headers.length;
-    const numRows = rows.length;
+  const tempSs = getOrCreateExportSheet_();
+  const sheet = tempSs.getSheets()[0];
+  sheet.clear();
+  const existingFilter = sheet.getFilter();
+  if (existingFilter) existingFilter.remove();
 
-    sheet.getRange(1, 1, 1, numCols).setValues([headers]);
-    sheet.getRange(1, 1, 1, numCols).setFontWeight('bold').setBackground('#F3F4F6');
+  const numCols = headers.length;
+  const numRows = rows.length;
 
-    if (numRows > 0) {
-      const values = rows.map(function (r) { return r.values; });
-      const dataRange = sheet.getRange(2, 1, numRows, numCols);
-      dataRange.setNumberFormat('@'); // כל התאים כטקסט - מונע "מספר מדעי" בטלפונים ותאריכים שמתפרשים לא נכון
-      dataRange.setValues(values);
+  sheet.getRange(1, 1, 1, numCols).setValues([headers]);
+  sheet.getRange(1, 1, 1, numCols).setFontWeight('bold').setBackground('#F3F4F6');
 
-      rows.forEach(function (r, i) {
-        if (r.highlight) sheet.getRange(i + 2, 1, 1, numCols).setBackground('#FEF3C7');
-      });
-    }
+  if (numRows > 0) {
+    const values = rows.map(function (r) { return r.values; });
+    const dataRange = sheet.getRange(2, 1, numRows, numCols);
+    dataRange.setNumberFormat('@'); // כל התאים כטקסט - מונע "מספר מדעי" בטלפונים ותאריכים שמתפרשים לא נכון
+    dataRange.setValues(values);
 
-    sheet.setFrozenRows(1);
-    sheet.getRange(1, 1, numRows + 1, numCols).createFilter();
-    for (let c = 1; c <= numCols; c++) sheet.autoResizeColumn(c);
-
-    const fileId = tempSs.getId();
-    const url = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
-    const response = UrlFetchApp.fetch(url, {
-      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+    rows.forEach(function (r, i) {
+      if (r.highlight) sheet.getRange(i + 2, 1, 1, numCols).setBackground('#FEF3C7');
     });
-    const base64 = Utilities.base64Encode(response.getBlob().getBytes());
-    return base64;
-  } finally {
-    DriveApp.getFileById(tempSs.getId()).setTrashed(true);
   }
+
+  sheet.setFrozenRows(1);
+  sheet.getRange(1, 1, numRows + 1, numCols).createFilter();
+  for (let c = 1; c <= numCols; c++) sheet.autoResizeColumn(c);
+  SpreadsheetApp.flush();
+
+  const fileId = tempSs.getId();
+  const url = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
+  const response = UrlFetchApp.fetch(url, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+  });
+  return Utilities.base64Encode(response.getBlob().getBytes());
 }
 
 /**
