@@ -1039,6 +1039,30 @@ function getOrCreateExportSheet_() {
 }
 
 /**
+ * קובע כיווניות מימין-לשמאל לגיליון - גיליון שנוצר עם SpreadsheetApp.create
+ * ברירת המחדל שלו LTR (משמאל לימין), ואין ל-SpreadsheetApp פונקציה ישירה
+ * לשנות זאת; משתמשים בקריאת REST ישירה ל-Sheets API (batchUpdate) עם
+ * הטוקן של הסקריפט עצמו - לא דורש הפעלת שירות מתקדם.
+ */
+function setSheetRtl_(spreadsheetId, sheetId) {
+  const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + spreadsheetId + ':batchUpdate';
+  const payload = {
+    requests: [{
+      updateSheetProperties: {
+        properties: { sheetId: sheetId, gridProperties: { rightToLeft: true } },
+        fields: 'gridProperties.rightToLeft'
+      }
+    }]
+  };
+  UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    payload: JSON.stringify(payload)
+  });
+}
+
+/**
  * מייצרת קובץ אקסל (xlsx) אמיתי מהשורות שכבר סוננו בדשבורד (headers + rows
  * מגיעים מהלקוח - כדי שהייצוא יכבד בדיוק את מה שמסונן על המסך). בעבר הקובץ
  * שהורד היה טבלת HTML "מחופשת" ל-xls, ואצל חלק ממשתמשות אקסל זה גרם לתאים
@@ -1074,6 +1098,7 @@ function exportCampaignExcel(sheetName, headers, rows) {
   sheet.setFrozenRows(1);
   sheet.getRange(1, 1, numRows + 1, numCols).createFilter();
   for (let c = 1; c <= numCols; c++) sheet.autoResizeColumn(c);
+  setSheetRtl_(tempSs.getId(), sheet.getSheetId());
   SpreadsheetApp.flush();
 
   const fileId = tempSs.getId();
