@@ -536,20 +536,24 @@ function handleInforuWebhook_(ss, payload) {
         const sheetPhone = phoneSuffix_(data[i][phoneCol]);
         if (sheetPhone && sheetPhone === incomingPhone) {
           const rowIndex = i + 1;
-          const existingReply = data[i][replyCol];
-          // בלי חותמת זמן בתוך הטקסט - כדי שהעמודה תישאר טקסט נקי שאפשר
-          // לסנן/למיין (גם בגיליון עצמו וגם בייצוא לאקסל). מועד התשובה
-          // האחרונה נשמר בנפרד בעמודת "תאריך תשובה". כל הודעה נכנסת -
-          // כפתור או טקסט חופשי - נכנסת לשרשרת הזו במלואה.
-          const combined = existingReply ? (existingReply + '\n' + incomingText) : incomingText;
-          sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
-          if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
+          // "הערות איש קשר" (השרשור המלא) מקבלת רק טקסט חופשי אמיתי -
+          // לחיצת כפתור לבדה כבר מתועדת ב"סטטוס" ולא צריכה גם עותק כאן,
+          // כדי שמי שרק לחץ כפתור ולא כתב שום דבר בעצמו יישאר עם "הערות
+          // איש קשר" ריקות (אין שם שום שיחה אמיתית לתעד).
+          if (!buttonPayload) {
+            const existingReply = data[i][replyCol];
+            // בלי חותמת זמן בתוך הטקסט - כדי שהעמודה תישאר טקסט נקי
+            // שאפשר לסנן/למיין. מועד התשובה האחרונה נשמר בנפרד בעמודת
+            // "תאריך תשובה".
+            const combined = existingReply ? (existingReply + '\n' + incomingText) : incomingText;
+            sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
+            if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
+          }
           recordDailyActivity_(sheet.getName());
-          // "סטטוס איש קשר" נקבע רק מלחיצה אמיתית על כפתור (למשל "פגישה"
-          // / "לא מעוניין" בתפריט הראשוני) - לא מטקסט חופשי שהלקוח כותב,
-          // גם אם הוא הגיע קודם כרונולוגית. נשמר פעם אחת בלבד, לא נדרס
-          // בלחיצה נוספת בהמשך השיחה עם הבוט האוטומטי. העמודה נוצרת לבד
-          // בפעם הראשונה שבאמת יש מה לכתוב בה - אין צורך להוסיף אותה ידנית.
+          // "סטטוס" נקבע רק מלחיצה אמיתית על כפתור (למשל "פגישה"/"לא
+          // מעוניין" בתפריט הראשוני) - נשמר פעם אחת בלבד, לא נדרס בלחיצה
+          // נוספת בהמשך השיחה עם הבוט האוטומטי. העמודה נוצרת לבד בפעם
+          // הראשונה שבאמת יש מה לכתוב בה - אין צורך להוסיף אותה ידנית.
           if (buttonPayload) {
             const firstReplyCol = ensureColumn_(sheet, headers, FIRST_REPLY_HEADER);
             if (!data[i][firstReplyCol]) {
