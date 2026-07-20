@@ -1041,25 +1041,25 @@ function getOrCreateExportSheet_() {
 /**
  * קובע כיווניות מימין-לשמאל לגיליון - גיליון שנוצר עם SpreadsheetApp.create
  * ברירת המחדל שלו LTR (משמאל לימין), ואין ל-SpreadsheetApp פונקציה ישירה
- * לשנות זאת; משתמשים בקריאת REST ישירה ל-Sheets API (batchUpdate) עם
- * הטוקן של הסקריפט עצמו - לא דורש הפעלת שירות מתקדם.
+ * לשנות זאת. דורש הפעלת שירות מתקדם (ר' הודעת השגיאה אם לא מופעל):
+ * בעורך הסקריפטים - "שירותים" (Services, ה-"+" בתפריט הצד) -> להוסיף
+ * "Google Sheets API" (זה מפעיל את זה אוטומטית, בלי לצאת ל-Cloud Console).
  */
 function setSheetRtl_(spreadsheetId, sheetId) {
-  const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + spreadsheetId + ':batchUpdate';
-  const payload = {
-    requests: [{
-      updateSheetProperties: {
-        properties: { sheetId: sheetId, gridProperties: { rightToLeft: true } },
-        fields: 'gridProperties.rightToLeft'
-      }
-    }]
-  };
-  UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-    payload: JSON.stringify(payload)
-  });
+  try {
+    Sheets.Spreadsheets.batchUpdate({
+      requests: [{
+        updateSheetProperties: {
+          properties: { sheetId: sheetId, gridProperties: { rightToLeft: true } },
+          fields: 'gridProperties.rightToLeft'
+        }
+      }]
+    }, spreadsheetId);
+  } catch (e) {
+    throw new Error('כדי שהאקסל ייצא מימין-לשמאל צריך להוסיף שירות בעורך הסקריפטים: ' +
+      'משמאל, ליד "שירותים" (Services) ללחוץ על ה-"+", לבחור "Google Sheets API" וללחוץ הוסף. ' +
+      'שגיאה מקורית: ' + e.message);
+  }
 }
 
 /**
