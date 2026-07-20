@@ -28,11 +28,12 @@
  *    (הגדרות הסוכנת > Overview > Webhooks).
  *
  * כותרות עמודות נדרשות בכל טאב קמפיין: טלפון נייד, שם פרטי, מספר תבנית,
- * סטטוס, תשובת איש קשר, תאריך תשובה, מזהה קמפיין, סטטוס שיחה, מזהה ליד
- * NLPearl, תוצאות שיחה.
+ * סטטוס דיוור (שם ישן שעדיין נתמך: "סטטוס"), תשובת איש קשר, תאריך תשובה,
+ * מזהה קמפיין, סטטוס שיחה, מזהה ליד NLPearl, תוצאות שיחה.
  * עמודות אופציונליות שנוצרות לבד אוטומטית בגיליון בפעם הראשונה שהן
- * נדרשות בפועל (אין צורך להוסיף אותן ידנית מראש): סטטוס איש קשר (מלחיצה
- * אמיתית על כפתור תגובה בוואטסאפ), תאריך שיחה, סטטוס משתמש, הערות משתמש.
+ * נדרשות בפועל (אין צורך להוסיף אותן ידנית מראש): סטטוס איש קשר (עמודה
+ * מובילה אחת - מתחילה מלחיצה אמיתית על כפתור תגובה בוואטסאפ, אבל ניתנת
+ * לדריסה חופשית בכל עת ע"י הצוות מהדשבורד), תאריך שיחה, הערות משתמש.
  */
 
 // --- אינפוריו (וואטסאפ) ---
@@ -46,7 +47,8 @@ const TITLE_HEADER = 'תפקיד';
 const EMAIL_HEADER = 'אימייל';
 const SOURCE_HEADER = 'מקור הליד';
 const TEMPLATE_HEADER = 'מספר תבנית';
-const STATUS_HEADER = 'סטטוס';
+const STATUS_HEADER = 'סטטוס דיוור';
+const STATUS_HEADER_LEGACY = 'סטטוס'; // שם ישן - טאבים שטרם שונו ידנית
 const REPLY_HEADER = 'תשובת איש קשר';
 const REPLY_HEADER_LEGACY = 'תשובת לקוח'; // שם ישן - טאבים שטרם שונו ידנית
 const FIRST_REPLY_HEADER = 'סטטוס איש קשר';
@@ -66,8 +68,7 @@ const CALL_FIRST_RESULT_HEADER = 'תוצאה ראשונית (שיחה)';
 const CALL_DATE_HEADER = 'תאריך שיחה';
 const CALL_SENT_STATUS = 'שיחה נשלחה';
 
-// --- CRM פנימי (הערות וסטטוס ידניים של הצוות) ---
-const USER_STATUS_HEADER = 'סטטוס משתמש';
+// --- CRM פנימי (הערות הצוות; הסטטוס הידני משותף עם FIRST_REPLY_HEADER) ---
 const USER_NOTES_HEADER = 'הערות משתמש';
 const TEAM_USERS_ = ['מזי', 'טליה'];
 
@@ -328,7 +329,7 @@ function sendMessagesInSheet_(sheet) {
 
   const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
   const nameCol = findColumnNormalized_(headers, NAME_HEADER);
-  const statusCol = findColumnNormalized_(headers, STATUS_HEADER);
+  const statusCol = findHeaderIndex_(headers, STATUS_HEADER, STATUS_HEADER_LEGACY);
   const templateCol = findColumnNormalized_(headers, TEMPLATE_HEADER);
 
   if (phoneCol === -1 || nameCol === -1 || statusCol === -1) return;
@@ -920,8 +921,11 @@ function addUserNote(sheetName, phone, username, noteText) {
 }
 
 /**
- * מעדכנת את הסטטוס הפנימי (הידני) של איש קשר, ורושמת את השינוי
- * אוטומטית גם ביומן ההערות (מי קבעה את הסטטוס ומתי).
+ * מעדכנת את "סטטוס איש קשר" - עמודה אחת מובילה שמתחילה עם הערך
+ * האוטומטי (מה שהלקוח ענה בפועל, כמו "נשמח להיפגש") אבל ניתנת לדריסה
+ * חופשית בכל עת ע"י הצוות (לא כמו הלחיצה האוטומטית על כפתור, שנכתבת רק
+ * פעם אחת אם השדה ריק) - כדי שלא יהיו שתי עמודות סטטוס נפרדות ומבלבלות.
+ * רושמת את השינוי אוטומטית גם ביומן ההערות (מי קבעה את הסטטוס ומתי).
  */
 function setUserStatus(sheetName, phone, username, statusText) {
   validateTeamUser_(username);
@@ -932,7 +936,7 @@ function setUserStatus(sheetName, phone, username, statusText) {
   const found = findRowByPhone_(sheet, phone);
   if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
 
-  const statusCol = ensureColumn_(sheet, found.headers, USER_STATUS_HEADER);
+  const statusCol = ensureColumn_(sheet, found.headers, FIRST_REPLY_HEADER);
   sheet.getRange(found.rowIndex, statusCol + 1).setValue(statusText);
 
   const notesCol = ensureColumn_(sheet, found.headers, USER_NOTES_HEADER);
@@ -1094,7 +1098,7 @@ function getCampaignData(sheetName) {
   const titleCol = findColumnNormalized_(headers, TITLE_HEADER);
   const emailCol = findColumnNormalized_(headers, EMAIL_HEADER);
   const sourceCol = findColumnNormalized_(headers, SOURCE_HEADER);
-  const statusCol = findColumnNormalized_(headers, STATUS_HEADER);
+  const statusCol = findHeaderIndex_(headers, STATUS_HEADER, STATUS_HEADER_LEGACY);
   const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
   const firstReplyCol = findColumnNormalized_(headers, FIRST_REPLY_HEADER);
   const replyDateCol = findColumnNormalized_(headers, REPLY_DATE_HEADER);
@@ -1102,7 +1106,6 @@ function getCampaignData(sheetName) {
   const callResultCol = findColumnNormalized_(headers, CALL_RESULT_HEADER);
   const callFirstResultCol = findColumnNormalized_(headers, CALL_FIRST_RESULT_HEADER);
   const callDateCol = findColumnNormalized_(headers, CALL_DATE_HEADER);
-  const userStatusCol = findColumnNormalized_(headers, USER_STATUS_HEADER);
   const userNotesCol = findColumnNormalized_(headers, USER_NOTES_HEADER);
 
   const lastExportIso = lastExportTime_(sheetName);
@@ -1124,7 +1127,6 @@ function getCampaignData(sheetName) {
     const callResult = callResultCol !== -1 ? row[callResultCol] : '';
     const callFirstResult = callFirstResultCol !== -1 ? row[callFirstResultCol] : '';
     const callDate = callDateCol !== -1 ? row[callDateCol] : null;
-    const userStatus = userStatusCol !== -1 ? row[userStatusCol] : '';
     const userNotes = userNotesCol !== -1 ? row[userNotesCol] : '';
 
     if (status === SENT_STATUS) sent++;
@@ -1156,7 +1158,6 @@ function getCampaignData(sheetName) {
       callFirstResult: callFirstResult,
       callDate: (callDate instanceof Date && !isNaN(callDate.getTime()))
         ? Utilities.formatDate(callDate, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
-      userStatus: userStatus,
       userNotes: userNotes,
       recentlyUpdated: recentlyUpdated
     });

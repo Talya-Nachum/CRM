@@ -1171,7 +1171,7 @@
     { key: 'source', label: 'מקור ליד', always: false, hasValue: function (r) { return !!r.source; },
       filterValue: function (r) { return r.source || ''; },
       cell: function (r) { return '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>'; } },
-    { key: 'finalStatus', label: 'סטטוס איש קשר', always: true,
+    { key: 'finalStatus', label: 'סטטוס', always: true,
       // רק לחיצה אמיתית על כפתור - לא תשובה חופשית. תשובה חופשית כבר
       // מוצגת במלואה בעמודת "תשובת איש קשר" הנפרדת, אין צורך לשכפל אותה
       // כאן; העמודה הזו נשארת שמורה אך ורק לבחירה הקטגורית מהכפתור.
@@ -1180,7 +1180,7 @@
         if (r.firstReply) return '<td class="reply-cell">💬 ' + escapeHtml_(r.firstReply) + '</td>';
         return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>';
       } },
-    { key: 'reply', label: 'תשובת איש קשר', always: false, hasValue: function (r) { return !!r.reply; },
+    { key: 'reply', label: 'הערות איש קשר', always: false, hasValue: function (r) { return !!r.reply; },
       filterValue: function (r) { return r.reply ? lastReplyLine_(r.reply) : ''; },
       cell: function (r) { return '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
     { key: 'callStatus', label: 'סטטוס שיחה', always: false, hasValue: function (r) { return !!r.callStatus; },
@@ -1189,10 +1189,7 @@
     { key: 'callResult', label: 'תוצאות שיחה', always: false, hasValue: function (r) { return !!r.callResult; },
       filterValue: function (r) { return r.callResult ? lastReplyLine_(r.callResult) : ''; },
       cell: function (r) { return '<td class="reply-cell" title="' + (r.callResult ? escapeHtml_(r.callResult) : '') + '">' + (r.callResult ? escapeHtml_(lastReplyLine_(r.callResult)) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
-    { key: 'userStatus', label: 'סטטוס משתמש', always: false, hasValue: function (r) { return !!r.userStatus; },
-      filterValue: function (r) { return r.userStatus || ''; },
-      cell: function (r) { return '<td class="reply-cell">' + (r.userStatus ? escapeHtml_(r.userStatus) : '—') + '</td>'; } },
-    { key: 'notes', label: 'הערות', always: false, hasValue: function (r) { return !!r.userNotes; },
+    { key: 'notes', label: 'הערות מיטוב', always: false, hasValue: function (r) { return !!r.userNotes; },
       filterValue: function (r) { return r.userNotes || ''; },
       cell: function (r) {
         const summary = parseNotesSummary_(r.userNotes);
@@ -1572,56 +1569,30 @@
       // עמודות בסגנון אקסל) - לא מייצא סתם את כל השורות בקמפיין.
       const rows = getFilteredRows_();
 
-      // עמודות נקיות לסינון (סטטוס סופי + תאריך עדכון, לכל ערוץ בנפרד) וגם
-      // עמודות עם ההיסטוריה המלאה - כדי שלא יאבד מידע. שורה שהתעדכנה מאז
-      // ההורדה הקודמת של הקובץ הזה מסומנת ברקע צהבהב. עמודות וואטסאפ
-      // צבועות בירוק ועמודות שיחה/פרלה בכתום, כדי להבדיל בין הערוצים
-      // במבט ראשון.
-      const headers = [
-        'שם חברה', 'שם איש קשר', 'תפקיד', 'טלפון נייד', 'אימייל', 'מקור ליד',
-        'סטטוס איש קשר (וואטסאפ)', 'תאריך עדכון (וואטסאפ)', 'תשובה אחרונה (וואטסאפ)', 'היסטוריית וואטסאפ מלאה',
-        'סטטוס שיחה', 'תאריך עדכון (שיחה)', 'תוצאה אחרונה (שיחה)', 'היסטוריית שיחות מלאה',
-        'סטטוס משתמש', 'הערות משתמש (הכל)'
-      ];
-      const WHATS_FROM = 6, WHATS_TO = 9;
-      const CALL_FROM = 10, CALL_TO = 13;
-      const headerBg_ = function (i) {
-        if (i >= WHATS_FROM && i <= WHATS_TO) return '#A7F3D0';
-        if (i >= CALL_FROM && i <= CALL_TO) return '#FED7AA';
-        return '#F3F4F6';
-      };
-      const cellBg_ = function (i, recentlyUpdated) {
-        if (i >= WHATS_FROM && i <= WHATS_TO) return recentlyUpdated ? '#A7F3D0' : '#D1FAE5';
-        if (i >= CALL_FROM && i <= CALL_TO) return recentlyUpdated ? '#FED7AA' : '#FFEDD5';
-        return recentlyUpdated ? '#FEF3C7' : '';
-      };
+      // רשימת עמודות מצומצמת שנקבעה מפורשות עם הלקוחה - לא כל השדות
+      // הזמינים, רק אלה שהיא באמת רוצה לראות בקובץ שיורד. שורה שהתעדכנה
+      // מאז ההורדה הקודמת של הקובץ הזה מסומנת ברקע צהבהב.
+      const headers = ['שם חברה', 'שם איש קשר', 'טלפון נייד', 'אימייל', 'סטטוס', 'הערות איש קשר', 'תאריך', 'הערות מיטוב'];
 
-      const headRow = '<tr>' + headers.map(function (h, i) {
-        return '<th style="background:' + headerBg_(i) + ';">' + escapeHtml_(h) + '</th>';
+      const headRow = '<tr>' + headers.map(function (h) {
+        return '<th style="background:#F3F4F6;">' + escapeHtml_(h) + '</th>';
       }).join('') + '</tr>';
 
       const bodyRows = rows.map(function (r) {
-        const cleanReply = r.reply ? stripTimestampPrefix_(lastReplyLine_(r.reply)) : '';
         const fullReplyHistory = r.reply ? escapeHtml_(r.reply).replace(/\n/g, '<br>') : '';
-        const cleanCallResult = r.callResult ? lastReplyLine_(r.callResult) : '';
-        const fullCallHistory = r.callResult ? escapeHtml_(r.callResult).replace(/\n/g, '<br>') : '';
         const fullNotes = r.userNotes ? escapeHtml_(r.userNotes).replace(/\n/g, '<br>') : '';
         // אם אין לחיצת כפתור - נופלים חזרה לסטטוס השליחה הבסיסי, לעולם לא
-        // משאירים את התא ריק. תשובה חופשית כבר מיוצאת בעמודות "תשובה
-        // אחרונה"/"היסטוריה מלאה" הנפרדות, אין צורך לשכפל אותה גם כאן.
-        const finalWhats = r.firstReply || r.status || '';
+        // משאירים את התא ריק.
+        const finalStatus = r.firstReply || r.status || '';
+        const bg = r.recentlyUpdated ? '#FEF3C7' : '';
+        const style = bg ? ' style="background:' + bg + ';"' : '';
 
         const values = [
-          { text: r.company }, { text: r.name }, { text: r.title }, { text: r.phone },
-          { text: r.email }, { text: r.source },
-          { text: finalWhats }, { text: r.replyDate }, { text: cleanReply }, { html: fullReplyHistory },
-          { text: r.callStatus }, { text: r.callDate }, { text: cleanCallResult }, { html: fullCallHistory },
-          { text: r.userStatus }, { html: fullNotes }
+          { text: r.company }, { text: r.name }, { text: r.phone }, { text: r.email },
+          { text: finalStatus }, { html: fullReplyHistory }, { text: r.replyDate }, { html: fullNotes }
         ];
 
-        const tds = values.map(function (v, i) {
-          const bg = cellBg_(i, r.recentlyUpdated);
-          const style = bg ? ' style="background:' + bg + ';"' : '';
+        const tds = values.map(function (v) {
           const content = v.html !== undefined ? v.html : escapeHtml_(v.text === undefined || v.text === null ? '' : v.text);
           return '<td' + style + '>' + content + '</td>';
         }).join('');
@@ -1760,7 +1731,7 @@
       modalPhone = phone;
       const row = findRow_(phone);
       contactLabel.textContent = row ? [row.name, row.company, row.phone].filter(Boolean).join(' · ') : phone;
-      currentStatusEl.textContent = (row && row.userStatus) || 'ללא סטטוס';
+      currentStatusEl.textContent = (row && row.firstReply) || 'ללא סטטוס';
       populateUsers_(userSel);
       statusText.value = '';
       noteText.value = '';
@@ -1818,7 +1789,7 @@
       google.script.run.withSuccessHandler(function (data) {
         renderCampaign(data, true);
         const row = (data && data.rows || []).filter(function (r) { return String(r.phone) === String(modalPhone); })[0];
-        currentStatusEl.textContent = (row && row.userStatus) || 'ללא סטטוס';
+        currentStatusEl.textContent = (row && row.firstReply) || 'ללא סטטוס';
         renderHistory_(row && row.userNotes);
       }).getCampaignData(currentTabName);
     }
