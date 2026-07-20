@@ -1018,6 +1018,53 @@ function recordExportTime(sheetName) {
 }
 
 /**
+ * מייצרת קובץ אקסל (xlsx) אמיתי מהשורות שכבר סוננו בדשבורד (headers + rows
+ * מגיעים מהלקוח - כדי שהייצוא יכבד בדיוק את מה שמסונן על המסך). בעבר הקובץ
+ * שהורד היה טבלת HTML "מחופשת" ל-xls, ואצל חלק ממשתמשות אקסל זה גרם לתאים
+ * להיראות "ממוזגים" וחסם סינון (Data > Filter). כאן במקום זה נוצר גיליון
+ * גוגל זמני, נכתבים אליו הנתונים כתאים אמיתיים, ואז הוא מיוצא ל-xlsx אמיתי
+ * דרך ה-export endpoint של גוגל דוקס (עם טוקן ה-OAuth של הסקריפט עצמו -
+ * לא דורש הפעלת שירות מתקדם/Advanced Service). מחזירה בסיס-64 של קובץ
+ * ה-xlsx, שהלקוח הופך ל-Blob ומוריד. הגיליון הזמני נמחק מיד בסיום.
+ */
+function exportCampaignExcel(sheetName, headers, rows) {
+  const tempSs = SpreadsheetApp.create('ייצוא_' + sheetName + '_' + new Date().getTime());
+  try {
+    const sheet = tempSs.getSheets()[0];
+    const numCols = headers.length;
+    const numRows = rows.length;
+
+    sheet.getRange(1, 1, 1, numCols).setValues([headers]);
+    sheet.getRange(1, 1, 1, numCols).setFontWeight('bold').setBackground('#F3F4F6');
+
+    if (numRows > 0) {
+      const values = rows.map(function (r) { return r.values; });
+      const dataRange = sheet.getRange(2, 1, numRows, numCols);
+      dataRange.setNumberFormat('@'); // כל התאים כטקסט - מונע "מספר מדעי" בטלפונים ותאריכים שמתפרשים לא נכון
+      dataRange.setValues(values);
+
+      rows.forEach(function (r, i) {
+        if (r.highlight) sheet.getRange(i + 2, 1, 1, numCols).setBackground('#FEF3C7');
+      });
+    }
+
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, numRows + 1, numCols).createFilter();
+    for (let c = 1; c <= numCols; c++) sheet.autoResizeColumn(c);
+
+    const fileId = tempSs.getId();
+    const url = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
+    const response = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+    });
+    const base64 = Utilities.base64Encode(response.getBlob().getBytes());
+    return base64;
+  } finally {
+    DriveApp.getFileById(tempSs.getId()).setTrashed(true);
+  }
+}
+
+/**
  * מסכמת ב-AI (Google Gemini) את ההתכתבות בפועל עם הליד - היסטוריית
  * וואטסאפ + היסטוריית שיחות (לא הערות הצוות הפנימיות) - למספר משפטים
  * קצרים, כדי לדעת במבט אחד על מה מדובר בלי לקרוא את כל השרשור. בנוסף
