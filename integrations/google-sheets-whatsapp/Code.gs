@@ -1050,8 +1050,8 @@ function setSheetRtl_(spreadsheetId, sheetId) {
     Sheets.Spreadsheets.batchUpdate({
       requests: [{
         updateSheetProperties: {
-          properties: { sheetId: sheetId, gridProperties: { rightToLeft: true } },
-          fields: 'gridProperties.rightToLeft'
+          properties: { sheetId: sheetId, rightToLeft: true },
+          fields: 'rightToLeft'
         }
       }]
     }, spreadsheetId);
