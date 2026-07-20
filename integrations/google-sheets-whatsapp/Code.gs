@@ -840,10 +840,63 @@ function backfillFirstReplyFromWebhookLog() {
 }
 
 /**
- * מתקנת את הטקסט של הערה קיימת ברשימה (לפי מיקום ברשימה, החדשה ביותר
- * במיקום 0 - כמו שהיא מוצגת בדשבורד), בלי לגעת בשם הכותב/התאריך המקוריים
- * ובלי להזיז את שאר ההערות. משמשת את הדשבורד כשלוחצים על עריכת הערה.
+ * כלי ניקוי חד-פעמי: מסירה מ"הערות איש קשר" שורות שהן בעצם הד של לחיצת
+ * כפתור (זהות מילה-במילה לערך שנשמר ב"סטטוס") - כדי לתקן נתונים היסטוריים
+ * שנכתבו לפני התיקון בהודעה הנכנסת (ר' handleInforuWebhook_), שבו לחיצת
+ * כפתור לבדה עדיין הצטרפה גם ל"הערות איש קשר" בטעות. נוגעת אך ורק בשורה
+ * שזהה **מילה-במילה** לערך שכבר שמור ב"סטטוס" - שום טקסט חופשי לא נמחק,
+ * גם אם הוא דומה או מכיל את אותן מילים בתוך משפט ארוך יותר. אפשר להריץ
+ * שוב בבטחה - שורה שכבר נוקתה פשוט לא תשתנה שוב.
+ *
+ * מריצים קודם את previewCleanupHistoricalButtonEchoes() (לא נוגעת בכלום,
+ * רק מדפיסה ליומן מה היא הייתה עושה) כדי לבדוק שהתוצאה נראית נכון, ורק
+ * אחר כך את cleanupHistoricalButtonEchoes() שבאמת כותבת את השינוי לגיליון.
  */
+function collectButtonEchoCleanup_(dryRun) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = getCampaignSheets_(ss);
+  let cleaned = 0;
+
+  sheets.forEach(function (sheet) {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
+    const firstReplyCol = findColumnNormalized_(headers, FIRST_REPLY_HEADER);
+    const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+    if (replyCol === -1 || firstReplyCol === -1) return;
+
+    for (let i = 1; i < data.length; i++) {
+      const firstReply = String(data[i][firstReplyCol] || '').trim();
+      const reply = data[i][replyCol];
+      if (!firstReply || !reply) continue;
+
+      const lines = String(reply).split('\n');
+      const filtered = lines.filter(function (line) { return line.trim() !== firstReply; });
+      if (filtered.length !== lines.length) {
+        const name = nameCol !== -1 ? data[i][nameCol] : '';
+        Logger.log((dryRun ? '[תצוגה מקדימה] ' : '[שונה] ') + 'טאב "' + sheet.getName() + '", ' + name +
+          ': "' + String(reply) + '" -> "' + filtered.join('\n') + '"');
+        if (!dryRun) sheet.getRange(i + 1, replyCol + 1).setValue(filtered.join('\n'));
+        cleaned++;
+      }
+    }
+  });
+
+  Logger.log((dryRun ? 'תצוגה מקדימה: ' : 'בוצע בפועל: ') + cleaned + ' שורות ב"' + REPLY_HEADER + '" ' +
+    (dryRun ? 'ישתנו אם תריצי את cleanupHistoricalButtonEchoes' : 'נוקו') + '.');
+  return cleaned;
+}
+
+/** מריצים את זו קודם - לא נוגעת בגיליון, רק מראה מה היה משתנה. */
+function previewCleanupHistoricalButtonEchoes() {
+  return collectButtonEchoCleanup_(true);
+}
+
+/** מריצים את זו רק אחרי שבדקת את הפלט של הפונקציה הקודמת ואת מרוצה ממנו. */
+function cleanupHistoricalButtonEchoes() {
+  return collectButtonEchoCleanup_(false);
+}
+
 /**
  * כלי אבחון חד-פעמי: מדפיסה ליומן הביצוע בדיוק מה הקוד רואה עבור מספר
  * טלפון נתון - שורת הכותרות המדויקת (עם מרכאות, כדי לחשוף רווחים
