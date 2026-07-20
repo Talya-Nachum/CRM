@@ -1085,7 +1085,19 @@ function exportCampaignExcel(sheetName, headers, rows) {
   sheet.getRange(1, 1, 1, numCols).setFontWeight('bold').setBackground('#F3F4F6');
 
   if (numRows > 0) {
-    const values = rows.map(function (r) { return r.values; });
+    // עמודת הטלפון (אינדקס 2 - "טלפון נייד") - setNumberFormat('@') לבדו
+    // לא מספיק כשכותבים ערך שה-JS רואה כ-Number: הגיליון עדיין שומר אותו
+    // כמספר, ובאקסל זה מוצג ב"כתיב מדעי" (למשל 972544701930 -> 9.72544E+11).
+    // גרש מוביל (') מכריח פירוש כטקסט, ממש כמו הקלדה ידנית בגיליון.
+    const PHONE_COL_INDEX = 2;
+    const values = rows.map(function (r) {
+      return r.values.map(function (v, idx) {
+        if (idx === PHONE_COL_INDEX && v !== '' && v !== null && v !== undefined) {
+          return "'" + String(v);
+        }
+        return v;
+      });
+    });
     const dataRange = sheet.getRange(2, 1, numRows, numCols);
     dataRange.setNumberFormat('@'); // כל התאים כטקסט - מונע "מספר מדעי" בטלפונים ותאריכים שמתפרשים לא נכון
     dataRange.setValues(values);
