@@ -656,7 +656,14 @@ function handleNlpearlWebhook_(ss, payload) {
           // מגדירה ומשנה בעצמה בפרלה), בלי מיפוי קבוע בקוד, כי הרשימה
           // משתנה אצלה כל הזמן.
           const statusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
-          if (statusCol !== -1) sheet.getRange(rowIndex, statusCol + 1).setValue(summary);
+          // כשיש payload.tags זו כבר תווית קצרה וקריאה בהגדרת הלקוחה בפרלה
+          // (כמו "לא מעוניין") - נכתבת ישירות. כשאין tags וה-summary הוא
+          // נרטיב ארוך שפרלה כתבה, מזקקים אותו ב-AI לתווית קצרה לפני
+          // הכתיבה ל"סטטוס שיחה" - כדי שהעמודה הזו תמיד תישאר קריאה
+          // במבט אחד. "סיכום שיחה" למעלה תמיד מקבל את הטקסט המלא, לא נגוע.
+          const hasShortTag = Array.isArray(payload.tags) && payload.tags.length;
+          const statusValue = hasShortTag ? summary : (distillCallStatus_(summary) || summary);
+          if (statusCol !== -1) sheet.getRange(rowIndex, statusCol + 1).setValue(statusValue);
           recordDailyActivity_(sheet.getName());
           return;
         }
@@ -664,6 +671,44 @@ function handleNlpearlWebhook_(ss, payload) {
     }
   } finally {
     lock.releaseLock();
+  }
+}
+
+/**
+ * מזקקת נרטיב שיחה ארוך (payload.summary מפרלה, כשאין Indicator Tag קצר)
+ * לתווית קצרה וקריאה בעברית (עד כמה מילים), באותו סגנון כמו התגיות
+ * שהלקוחה מגדירה בעצמה בפרלה ("לא מעוניין", "ליד חם", "ביקש לחזור אליו").
+ * לא זורקת שגיאה - אם אין מפתח/יש כשל רשת/תשובה לא תקינה, מחזירה '' כדי
+ * שהקורא ייפול חזרה לטקסט המלא (byte for byte) ולעולם לא ייתקע/יאבד מידע.
+ */
+function distillCallStatus_(narrative) {
+  try {
+    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    if (!apiKey || !narrative) return '';
+
+    const prompt = 'סכם את תוצאת שיחת המכירה הבאה בתווית קצרה אחת בעברית ' +
+      '(עד 4 מילים, בלי נקודה בסוף), באותו סגנון כמו תגיות שמשתמשות אנשי מכירות ' +
+      'כמו "לא מעוניין", "ליד חם", "ביקש לחזור אליו", "תואמה פגישה", "לא ענה". ' +
+      'החזירי רק את התווית עצמה, בלי מירכאות ובלי הסבר נוסף.\n\nתמלול/סיכום השיחה:\n' + narrative;
+
+    const response = UrlFetchApp.fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey,
+      {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        muteHttpExceptions: true
+      }
+    );
+
+    const result = JSON.parse(response.getContentText());
+    const rawText = result.candidates && result.candidates[0] && result.candidates[0].content &&
+      result.candidates[0].content.parts && result.candidates[0].content.parts[0] &&
+      result.candidates[0].content.parts[0].text;
+
+    return rawText ? rawText.trim().replace(/^["'״]+|["'״]+$/g, '') : '';
+  } catch (e) {
+    return '';
   }
 }
 
@@ -1074,6 +1119,66 @@ function previewCleanupPearlNumericStatuses() {
 /** מריצים את זו רק אחרי שבדקת את הפלט של הפונקציה הקודמת ואת מרוצה ממנו. */
 function cleanupPearlNumericStatuses() {
   return collectPearlNumericCleanup_(false);
+}
+
+/**
+ * כלי חד-פעמי: מזקקת ב-AI (Gemini) שורות "סטטוס שיחה" היסטוריות שבהן
+ * נשאר נרטיב ארוך במקום תווית קצרה (כי בשעתו פרלה לא סיפקה Indicator Tag
+ * קצר, רק סיכום חופשי) - למשל אחרי cleanupPearlNumericStatuses. מזהה
+ * "ארוך מדי" לפי אורך טקסט (מעל DISTILL_LENGTH_THRESHOLD_ תווים - תווית
+ * אמיתית כמו "לא מעוניין" תמיד קצרה בהרבה). כותבת **רק** ל"סטטוס שיחה" -
+ * "סיכום שיחה" (הטקסט המלא) לעולם לא נגעת. אם Gemini נכשל/מחזירה ריק
+ * לשורה מסוימת, השורה הזו נשארת בדיוק כמו שהיתה (לא נמחק/מומצא דבר).
+ *
+ * מריצים קודם את previewDistillCallStatuses() (לא נוגעת בכלום) ורק אחר
+ * כך את distillCallStatuses() שבאמת כותבת לגיליון.
+ */
+function collectDistillCallStatuses_(dryRun) {
+  const DISTILL_LENGTH_THRESHOLD_ = 30;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = getCampaignSheets_(ss);
+  let changed = 0;
+
+  sheets.forEach(function (sheet) {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+    const statusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
+    if (statusCol === -1) return;
+
+    for (let i = 1; i < data.length; i++) {
+      const rawStatus = String(data[i][statusCol] || '');
+      if (!rawStatus || rawStatus.length <= DISTILL_LENGTH_THRESHOLD_) continue;
+
+      const name = nameCol !== -1 ? data[i][nameCol] : '';
+
+      if (dryRun) {
+        Logger.log('[תצוגה מקדימה] טאב "' + sheet.getName() + '", ' + name +
+          ': סטטוס שיחה ארוך (' + rawStatus.length + ' תווים) יזוקק ל-AI: "' + rawStatus + '"');
+        changed++;
+      } else {
+        const distilled = distillCallStatus_(rawStatus);
+        if (distilled) {
+          sheet.getRange(i + 1, statusCol + 1).setValue(distilled);
+          changed++;
+        }
+      }
+    }
+  });
+
+  Logger.log((dryRun ? 'תצוגה מקדימה: ' : 'בוצע בפועל: ') + changed + ' שורות ' +
+    (dryRun ? 'יזוקקו אם תריצי את distillCallStatuses' : 'זוקקו') + '.');
+  return changed;
+}
+
+/** מריצים את זו קודם - לא נוגעת בגיליון, רק מראה מה היה משתנה. */
+function previewDistillCallStatuses() {
+  return collectDistillCallStatuses_(true);
+}
+
+/** מריצים את זו רק אחרי שבדקת את הפלט של הפונקציה הקודמת ואת מרוצה ממנו. */
+function distillCallStatuses() {
+  return collectDistillCallStatuses_(false);
 }
 
 /**
