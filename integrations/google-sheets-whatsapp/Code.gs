@@ -1370,17 +1370,20 @@ function daysActive_(sheetName) {
  * מצבע הרקע של התא עצמו, שאותו צובעים עם כלי הצביעה הרגיל של הגיליון
  * (בדיוק כמו ה-Indicator Tags שלה בפרלה) - לא מקלידים קוד צבע. תא בעמודה
  * ב' בלי צבע רקע (לבן/ריק) מתעלם ממנו - הסטטוס ימשיך לקבל את הצבע
- * האוטומטי הרגיל. אם הטאב לא קיים בכלל, מחזירה אובייקט ריק.
+ * האוטומטי הרגיל. קוראת **מהשורה הראשונה** (אין הנחה של שורת כותרת -
+ * אפשר להתחיל להקליד ישר מהשורה הראשונה; אם כן מוסיפים בעתיד כותרת
+ * כמו "סטטוס"/"צבע", היא פשוט תתעלם ממנה כי אין לה צבע רקע). אם הטאב
+ * לא קיים בכלל, מחזירה אובייקט ריק.
  */
 function getStatusColors_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(STATUS_COLORS_SHEET_NAME);
   if (!sheet) return {};
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return {};
+  if (lastRow < 1) return {};
 
-  const statuses = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-  const backgrounds = sheet.getRange(2, 2, lastRow - 1, 1).getBackgrounds();
+  const statuses = sheet.getRange(1, 1, lastRow, 1).getValues();
+  const backgrounds = sheet.getRange(1, 2, lastRow, 1).getBackgrounds();
   const colors = {};
   for (let i = 0; i < statuses.length; i++) {
     const status = String(statuses[i][0] || '').trim();
