@@ -849,6 +849,35 @@
     color: var(--text-muted);
   }
 
+  /* טולטיפ מותאם אישית לתאים חתוכים (תשובת איש קשר / הערות פרלה) - לא
+     נשענים על ה-title המובנה של הדפדפן, כי הוא מגיע באיחור ולפעמים לא
+     עולה בכלל; זה מבטיח שמעבר עכבר תמיד ומיד מציג את הטקסט המלא. */
+  .cell-tooltip {
+    position: fixed;
+    z-index: 1000;
+    max-width: 380px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 10px 14px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 10px);
+    box-shadow: var(--shadow-hover);
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.1s ease;
+  }
+  .cell-tooltip.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+
   .empty-state, .loading-state {
     color: var(--text-muted);
     font-size: 14px;
@@ -1295,7 +1324,7 @@
       // רק אם למישהו יש בפועל שיחה כזו.
       hasValue: function (r) { return !!r.reply; },
       filterValue: function (r) { return r.reply ? lastReplyLine_(r.reply) : ''; },
-      cell: function (r) { return '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
+      cell: function (r) { return '<td class="reply-cell" data-tip="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
     { key: 'callStatus', label: 'סטטוס פרלה', always: false, sortable: true,
       // מוצגת רק אם בפועל בוצעה שיחת פרלה (יש ערך) - אם לא הרצנו שיחות
       // בקמפיין הזה בכלל, אין טעם בעמודה ריקה. אותו מנגנון צבע כמו "סטטוס".
@@ -1309,7 +1338,7 @@
       // תוצאות/סיכום שיחות הפרלה - מוצגת רק אם בפועל בוצעה שיחה.
       hasValue: function (r) { return !!r.callResult; },
       filterValue: function (r) { return r.callResult ? lastReplyLine_(r.callResult) : ''; },
-      cell: function (r) { return '<td class="reply-cell" title="' + (r.callResult ? escapeHtml_(r.callResult) : '') + '">' + (r.callResult ? escapeHtml_(lastReplyLine_(r.callResult)) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
+      cell: function (r) { return '<td class="reply-cell" data-tip="' + (r.callResult ? escapeHtml_(r.callResult) : '') + '">' + (r.callResult ? escapeHtml_(lastReplyLine_(r.callResult)) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
     { key: 'notes', label: 'הערות מיטוב', always: true,
       // יומן הערות ידניות של הצוות בלבד (addUserNote/setUserStatus) -
       // נפרד מ"הערות איש קשר". התא מציג תקציר קצר (מי כתב אחרון + כמות) -
@@ -1515,6 +1544,60 @@
       })(piece, drift, rotation, duration);
     }
     setTimeout(function () { container.remove(); }, 1600);
+  }
+
+  /**
+   * טולטיפ מותאם אישית לתאים חתוכים בטבלה (תשובת איש קשר / הערות פרלה) -
+   * במקום ה-title המובנה של הדפדפן (שמגיע באיחור ולפעמים לא עולה בכלל).
+   * מאזין אחד יחיד, מוצמד ל-#tableBody (שלא מוחלף כאלמנט בין רינדורים,
+   * רק ה-innerHTML שלו מתחלף) - כך שממשיך לעבוד גם אחרי טעינת קמפיין
+   * חדש/רענון אוטומטי בלי צורך לחבר מחדש מאזינים לכל שורה.
+   */
+  function setupCellTooltips_() {
+    const tbody = document.getElementById('tableBody');
+    if (!tbody) return;
+
+    const tip = document.createElement('div');
+    tip.className = 'cell-tooltip';
+    document.body.appendChild(tip);
+
+    function hide() {
+      tip.classList.remove('visible');
+    }
+
+    function positionNear(cell) {
+      const rect = cell.getBoundingClientRect();
+      tip.style.left = '0px';
+      tip.style.top = '0px';
+      tip.classList.add('visible');
+      const tipRect = tip.getBoundingClientRect();
+      let left = rect.left;
+      let top = rect.bottom + 6;
+      if (left + tipRect.width > window.innerWidth - 8) left = window.innerWidth - tipRect.width - 8;
+      if (left < 8) left = 8;
+      if (top + tipRect.height > window.innerHeight - 8) top = rect.top - tipRect.height - 6;
+      if (top < 8) top = 8;
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+    }
+
+    tbody.addEventListener('mouseover', function (e) {
+      const cell = e.target.closest('.reply-cell[data-tip]');
+      if (!cell || !cell.getAttribute('data-tip')) { hide(); return; }
+      tip.textContent = cell.getAttribute('data-tip');
+      positionNear(cell);
+    });
+
+    tbody.addEventListener('mouseout', function (e) {
+      const cell = e.target.closest('.reply-cell[data-tip]');
+      if (!cell) return;
+      const toEl = e.relatedTarget;
+      if (toEl && cell.contains(toEl)) return;
+      hide();
+    });
+
+    tbody.addEventListener('scroll', hide);
+    window.addEventListener('scroll', hide, true);
   }
 
   let saveToastTimer_ = null;
@@ -2214,6 +2297,7 @@
   setupAddContact_();
   setupCrmModal_();
   setupShare_();
+  setupCellTooltips_();
 
   // רענון אוטומטי: כל 30 שניות טוענים מחדש את נתוני הטאב הפעיל (בלי לגעת
   // ברשימת הטאבים עצמה, כדי לא "לקפוץ" למשתמש בזמן שהוא מסתכל).
