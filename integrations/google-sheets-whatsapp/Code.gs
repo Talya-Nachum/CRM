@@ -80,7 +80,8 @@ const TEAM_USERS_ = ['מזי', 'טליה'];
 // טאבים שהם עזר/לוג בלבד, לעולם לא נחשבים קמפיין גם אם במקרה יש בהם
 // עמודה שנראית כמו טלפון נייד.
 const STATUS_COLORS_SHEET_NAME = 'צבעי סטטוס';
-const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns', STATUS_COLORS_SHEET_NAME];
+const LEGEND_SHEET_NAME_ = 'מקרא';
+const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns', STATUS_COLORS_SHEET_NAME, LEGEND_SHEET_NAME_];
 
 // --- Wix (לידים מטופס באתר) ---
 // שם הטאב שאליו נכנסים לידים חדשים מ-Wix - זהו טאב הקמפיין הקיים
