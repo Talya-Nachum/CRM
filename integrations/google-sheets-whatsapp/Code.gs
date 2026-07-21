@@ -69,7 +69,12 @@ const CALL_DATE_HEADER = 'תאריך שיחה';
 const CALL_SENT_STATUS = 'שיחה נשלחה';
 
 // --- CRM פנימי (הערות הצוות; הסטטוס הידני משותף עם FIRST_REPLY_HEADER) ---
+// עמודה אחת מאוחדת: גם כל שיחת הוואטסאפ עם הבוט (טקסט חופשי + לחיצות
+// כפתור) וגם הערות ידניות של הצוות - הכל יחד, החדש ביותר תמיד למעלה
+// (ר' appendNoteEntry_ / insertEntryChronologically_). מוצגת בדשבורד
+// ובאקסל בתור "הערות מיטוב" (התווית בלבד - שם העמודה בגיליון לא השתנה).
 const USER_NOTES_HEADER = 'הערות משתמש';
+const CUSTOMER_NOTE_AUTHOR = 'הלקוח';
 const TEAM_USERS_ = ['מזי', 'טליה'];
 
 // טאבים שהם עזר/לוג בלבד, לעולם לא נחשבים קמפיין גם אם במקרה יש בהם
@@ -528,27 +533,19 @@ function handleInforuWebhook_(ss, payload) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
       const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
-      const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
-      const replyDateCol = findColumnNormalized_(headers, REPLY_DATE_HEADER);
-      if (phoneCol === -1 || replyCol === -1) continue;
+      if (phoneCol === -1) continue;
 
       for (let i = 1; i < data.length; i++) {
         const sheetPhone = phoneSuffix_(data[i][phoneCol]);
         if (sheetPhone && sheetPhone === incomingPhone) {
           const rowIndex = i + 1;
-          // "הערות איש קשר" (השרשור המלא) מקבלת רק טקסט חופשי אמיתי -
-          // לחיצת כפתור לבדה כבר מתועדת ב"סטטוס" ולא צריכה גם עותק כאן,
-          // כדי שמי שרק לחץ כפתור ולא כתב שום דבר בעצמו יישאר עם "הערות
-          // איש קשר" ריקות (אין שם שום שיחה אמיתית לתעד).
-          if (!buttonPayload) {
-            const existingReply = data[i][replyCol];
-            // בלי חותמת זמן בתוך הטקסט - כדי שהעמודה תישאר טקסט נקי
-            // שאפשר לסנן/למיין. מועד התשובה האחרונה נשמר בנפרד בעמודת
-            // "תאריך תשובה".
-            const combined = existingReply ? (existingReply + '\n' + incomingText) : incomingText;
-            sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
-            if (replyDateCol !== -1) sheet.getRange(rowIndex, replyDateCol + 1).setValue(new Date());
-          }
+          // "הערות מיטוב" היא עכשיו יומן מאוחד אחד: כל שיחת הוואטסאפ עם
+          // הבוט - גם טקסט חופשי וגם לחיצות כפתור - נכנסת לשם, יחד עם
+          // הערות ידניות של הצוות, הכי חדש תמיד למעלה (ר' appendNoteEntry_,
+          // שגם מעדכנת אוטומטית את "תאריך תשובה" - מוצגת כ"תאריך").
+          const notesCol = ensureColumn_(sheet, headers, USER_NOTES_HEADER);
+          const noteText = buttonPayload ? ('לחץ/ה: ' + buttonPayload) : incomingText;
+          appendNoteEntry_(sheet, headers, rowIndex, notesCol, CUSTOMER_NOTE_AUTHOR, noteText);
           recordDailyActivity_(sheet.getName());
           // "סטטוס" נקבע רק מלחיצה אמיתית על כפתור (למשל "פגישה"/"לא
           // מעוניין" בתפריט הראשוני) - נשמר פעם אחת בלבד, לא נדרס בלחיצה
@@ -898,6 +895,131 @@ function cleanupHistoricalButtonEchoes() {
 }
 
 /**
+ * מפרקת מחרוזת "הערות מיטוב" (יומן מאוחד, החדש למעלה - ר' appendNoteEntry_)
+ * לרשימת רשומות { author, dateStr, date, text }. כל רשומה מתחילה בשורה
+ * בתבנית "שם - dd/MM/yyyy HH:mm: טקסט"; כל שורה שאחריה שלא תואמת את
+ * התבנית שייכת לגוף הטקסט של אותה רשומה (הערה/הודעה יכולה להיות רב-שורתית).
+ */
+function parseNoteEntries_(notes) {
+  const text = String(notes || '');
+  if (!text) return [];
+  const headerRe = /^(.+?) - (\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}): (.*)$/;
+  const entries = [];
+  text.split('\n').forEach(function (line) {
+    const m = line.match(headerRe);
+    if (m) {
+      entries.push({ author: m[1], dateStr: m[2], date: parseEntryDate_(m[2]), text: m[3] });
+    } else if (entries.length) {
+      entries[entries.length - 1].text += '\n' + line;
+    }
+  });
+  return entries;
+}
+
+function parseEntryDate_(dateStr) {
+  const m = String(dateStr).match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/);
+  if (!m) return null;
+  return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]);
+}
+
+function formatNoteEntry_(entry) {
+  return entry.author + ' - ' + entry.dateStr + ': ' + entry.text;
+}
+
+/**
+ * מכניסה רשומה בודדת { author, dateStr, date, text } לתוך מחרוזת הערות
+ * קיימת (רצף רשומות, החדש למעלה), במיקום הכרונולוגי הנכון שלה - לא
+ * בהכרח בראש. משמשת את כלי ההגירה למטה, כדי שרשומת היסטוריה ישנה תיכנס
+ * ביחס נכון להערות ידניות שכבר קיימות, ולא תמיד תקפוץ לראש בטעות.
+ */
+function insertEntryChronologically_(existingNotes, newEntry) {
+  const existing = parseNoteEntries_(existingNotes).map(function (e, idx) { return { entry: e, idx: idx }; });
+  const all = existing.concat([{ entry: newEntry, idx: existing.length }]);
+  all.sort(function (a, b) {
+    const at = a.entry.date ? a.entry.date.getTime() : -Infinity;
+    const bt = b.entry.date ? b.entry.date.getTime() : -Infinity;
+    if (bt !== at) return bt - at; // חדש למעלה
+    return a.idx - b.idx; // יציבות בין רשומות עם אותו תאריך
+  });
+  return all.map(function (w) { return formatNoteEntry_(w.entry); }).join('\n');
+}
+
+/**
+ * כלי הגירה חד-פעמי: ממזגת את התוכן הישן של "תשובת איש קשר" (השיחה
+ * החופשית עם הבוט לפני המעבר לעמודת "הערות מיטוב" מאוחדת - ר' בקשת
+ * הלקוחה להעביר את הכל לעמודה אחת) לתוך "הערות מיטוב", כרשומה נוספת
+ * ברצף הכרונולוגי הקיים (לפי "תאריך תשובה" של השורה, לא בהכרח בראש).
+ * **לא נוגעת כלל בעמודת "תשובת איש קשר" המקורית** - היא נשארת בגיליון
+ * כגיבוי שקט ולא נמחקת, בדיוק כמו בכלי הניקוי למעלה. אידמפוטנטית - אפשר
+ * להריץ שוב בבטחה, שורה שכבר הוגרה לא תתווסף פעם שנייה.
+ *
+ * מריצים קודם את previewMergeReplyIntoNotes() (לא נוגעת בכלום) ורק אחר
+ * כך את mergeReplyIntoNotes() שבאמת כותבת לגיליון.
+ */
+function collectReplyMergeMigration_(dryRun) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = getCampaignSheets_(ss);
+  const MARKER = 'היסטוריית שיחה (וואטסאפ';
+  let migrated = 0;
+
+  sheets.forEach(function (sheet) {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
+    const replyDateCol = findColumnNormalized_(headers, REPLY_DATE_HEADER);
+    const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+    const notesColReadOnly = findColumnNormalized_(headers, USER_NOTES_HEADER);
+    if (replyCol === -1) return;
+
+    for (let i = 1; i < data.length; i++) {
+      const oldReply = String(data[i][replyCol] || '').trim();
+      if (!oldReply) continue;
+
+      const existingNotes = notesColReadOnly !== -1 ? String(data[i][notesColReadOnly] || '') : '';
+      if (existingNotes.indexOf(MARKER) !== -1) continue; // כבר הוגר בעבר
+
+      const rawDate = replyDateCol !== -1 ? data[i][replyDateCol] : null;
+      const hasDate = rawDate instanceof Date && !isNaN(rawDate.getTime());
+      const dateStr = hasDate
+        ? Utilities.formatDate(rawDate, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm')
+        : '01/01/2000 00:00'; // אין תאריך ידוע - ממקמים בסוף הרשימה (הכי ישן)
+      const newEntry = {
+        author: CUSTOMER_NOTE_AUTHOR,
+        dateStr: dateStr,
+        date: hasDate ? rawDate : new Date(2000, 0, 1),
+        text: MARKER + ', לפני המעבר לעמודה מאוחדת):\n' + oldReply
+      };
+
+      const name = nameCol !== -1 ? data[i][nameCol] : '';
+      if (dryRun) {
+        Logger.log('[תצוגה מקדימה] טאב "' + sheet.getName() + '", ' + name +
+          ': תתווסף רשומת היסטוריה (' + oldReply.split('\n').length + ' שורות ישנות, תאריך: ' + dateStr + ')');
+      } else {
+        const notesCol = ensureColumn_(sheet, headers, USER_NOTES_HEADER);
+        const merged = insertEntryChronologically_(existingNotes, newEntry);
+        sheet.getRange(i + 1, notesCol + 1).setValue(merged);
+      }
+      migrated++;
+    }
+  });
+
+  Logger.log((dryRun ? 'תצוגה מקדימה: ' : 'בוצע בפועל: ') + migrated + ' רשומות ' +
+    (dryRun ? 'יתווספו ל"' + USER_NOTES_HEADER + '" אם תריצי את mergeReplyIntoNotes' : 'מוזגו ל"' + USER_NOTES_HEADER + '"') +
+    '. עמודת "' + REPLY_HEADER + '" המקורית לא נמחקת ונשארת כגיבוי שקט.');
+  return migrated;
+}
+
+/** מריצים את זו קודם - לא נוגעת בגיליון, רק מראה מה היה מתווסף. */
+function previewMergeReplyIntoNotes() {
+  return collectReplyMergeMigration_(true);
+}
+
+/** מריצים את זו רק אחרי שבדקת את הפלט של הפונקציה הקודמת ואת מרוצה ממנו. */
+function mergeReplyIntoNotes() {
+  return collectReplyMergeMigration_(false);
+}
+
+/**
  * כלי אבחון חד-פעמי: מדפיסה ליומן הביצוע בדיוק מה הקוד רואה עבור מספר
  * טלפון נתון - שורת הכותרות המדויקת (עם מרכאות, כדי לחשוף רווחים
  * נסתרים), אינדקס העמודות שנמצאו, והערך הגולמי בפועל בתא. סורקת את כל
@@ -947,17 +1069,24 @@ function validateTeamUser_(username) {
 }
 
 /**
- * כותבת שורת יומן חדשה לעמודת "הערות משתמש", תמיד בראש הרשימה (החדשה
- * ביותר למעלה - הפוך מ"תשובת איש קשר" של הלקוח, ששם הישנה נשארת למעלה
- * וההודעות מצטרפות למטה). משמשת גם ישירות (addUserNote) וגם אוטומטית
- * כשמעדכנים סטטוס (setUserStatus), כדי ששינויי סטטוס יתועדו גם הם.
+ * כותבת שורת יומן חדשה לעמודת "הערות משתמש" (המוצגת בדשבורד כ"הערות
+ * מיטוב") - עמודה מאוחדת אחת שמכילה גם את כל שיחת הוואטסאפ עם הבוט (ר'
+ * handleInforuWebhook_) וגם הערות ידניות של הצוות (addUserNote/
+ * setUserStatus). תמיד בראש הרשימה - החדש ביותר למעלה, בלי קשר אם זו
+ * הודעה מהלקוח או הערה פנימית. בנוסף מעדכנת את "תאריך תשובה" (מוצגת
+ * בדשבורד כ"תאריך") לרגע הזה - "תאריך העדכון האחרון" הכללי של הרשומה,
+ * משמש גם את הדשבורד להדגשת שורות שהתעדכנו היום/מאז ההורדה האחרונה.
  */
-function appendNoteEntry_(sheet, rowIndex, notesCol, username, text) {
-  const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
+function appendNoteEntry_(sheet, headers, rowIndex, notesCol, username, text) {
+  const now = new Date();
+  const timestamp = Utilities.formatDate(now, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
   const entry = username + ' - ' + timestamp + ': ' + text;
   const existing = sheet.getRange(rowIndex, notesCol + 1).getValue();
   const combined = existing ? (entry + '\n' + existing) : entry;
   sheet.getRange(rowIndex, notesCol + 1).setValue(combined);
+
+  const dateCol = findColumnNormalized_(headers, REPLY_DATE_HEADER);
+  if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(now);
 }
 
 /**
@@ -973,7 +1102,7 @@ function addUserNote(sheetName, phone, username, noteText) {
   if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
 
   const notesCol = ensureColumn_(sheet, found.headers, USER_NOTES_HEADER);
-  appendNoteEntry_(sheet, found.rowIndex, notesCol, username, noteText);
+  appendNoteEntry_(sheet, found.headers, found.rowIndex, notesCol, username, noteText);
   return { success: true };
 }
 
@@ -997,7 +1126,7 @@ function setUserStatus(sheetName, phone, username, statusText) {
   sheet.getRange(found.rowIndex, statusCol + 1).setValue(statusText);
 
   const notesCol = ensureColumn_(sheet, found.headers, USER_NOTES_HEADER);
-  appendNoteEntry_(sheet, found.rowIndex, notesCol, username, 'עדכנה סטטוס ל: ' + statusText);
+  appendNoteEntry_(sheet, found.headers, found.rowIndex, notesCol, username, 'עדכנה סטטוס ל: ' + statusText);
   return { success: true };
 }
 
@@ -1102,8 +1231,12 @@ function exportCampaignExcel(sheetName, headers, rows) {
     dataRange.setNumberFormat('@'); // כל התאים כטקסט - מונע "מספר מדעי" בטלפונים ותאריכים שמתפרשים לא נכון
     dataRange.setValues(values);
 
+    // שתי רמות הדגשה: צהוב = התעדכן היום (מנצח), ירוק חלש = התעדכן מאז
+    // ההורדה הקודמת של האקסל (אבל לא בהכרח היום) - ר' updatedToday/
+    // recentlyUpdated ב-getCampaignData.
     rows.forEach(function (r, i) {
-      if (r.highlight) sheet.getRange(i + 2, 1, 1, numCols).setBackground('#FEF3C7');
+      if (r.updatedToday) sheet.getRange(i + 2, 1, 1, numCols).setBackground('#FEF3C7');
+      else if (r.recentlyUpdated) sheet.getRange(i + 2, 1, 1, numCols).setBackground('#DCFCE7');
     });
   }
 
@@ -1149,7 +1282,12 @@ function summarizeContact(sheetName, phone) {
   };
 
   const name = get_(NAME_HEADER);
-  const whatsappHistory = get_(REPLY_HEADER) || get_(REPLY_HEADER_LEGACY);
+  // שיחת הוואטסאפ עצמה חיה עכשיו בתוך "הערות מיטוב" (עמודה מאוחדת) -
+  // שולפים רק את הרשומות שכתב הלקוח בפועל (לא הערות פנימיות של הצוות),
+  // בסדר כרונולוגי טבעי (ישן -> חדש) לצורך הסיכום.
+  const customerEntries = parseNoteEntries_(get_(USER_NOTES_HEADER))
+    .filter(function (e) { return e.author === CUSTOMER_NOTE_AUTHOR; });
+  const whatsappHistory = customerEntries.slice().reverse().map(function (e) { return e.text; }).join('\n');
   const callHistory = get_(CALL_RESULT_HEADER);
 
   if (!whatsappHistory && !callHistory) {
@@ -1260,7 +1398,6 @@ function getCampaignData(sheetName) {
   const emailCol = findColumnNormalized_(headers, EMAIL_HEADER);
   const sourceCol = findColumnNormalized_(headers, SOURCE_HEADER);
   const statusCol = findHeaderIndex_(headers, STATUS_HEADER, STATUS_HEADER_LEGACY);
-  const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
   const firstReplyCol = findColumnNormalized_(headers, FIRST_REPLY_HEADER);
   const replyDateCol = findColumnNormalized_(headers, REPLY_DATE_HEADER);
   const callStatusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
@@ -1281,7 +1418,6 @@ function getCampaignData(sheetName) {
     if (!phone) continue;
 
     const status = statusCol !== -1 ? String(row[statusCol] || '') : '';
-    const reply = replyCol !== -1 ? row[replyCol] : '';
     const firstReply = firstReplyCol !== -1 ? row[firstReplyCol] : '';
     const replyDate = replyDateCol !== -1 ? row[replyDateCol] : null;
     const callStatus = callStatusCol !== -1 ? String(row[callStatusCol] || '') : '';
@@ -1289,16 +1425,24 @@ function getCampaignData(sheetName) {
     const callFirstResult = callFirstResultCol !== -1 ? row[callFirstResultCol] : '';
     const callDate = callDateCol !== -1 ? row[callDateCol] : null;
     const userNotes = userNotesCol !== -1 ? row[userNotesCol] : '';
+    // "תגובות התקבלו" נספרות לפי הופעת "הלקוח -" ב"הערות מיטוב" - זה
+    // סימן אמין שהלקוח בעצמו כתב/לחץ משהו (לא רק שהצוות כתב הערה ידנית),
+    // בלי צורך בעמודה נפרדת - ר' CUSTOMER_NOTE_AUTHOR/appendNoteEntry_.
+    const customerReplied = String(userNotes || '').indexOf(CUSTOMER_NOTE_AUTHOR + ' - ') !== -1;
 
     if (status === SENT_STATUS) sent++;
     if (status.indexOf('שגיאה') === 0) errors++;
-    if (reply) replies++;
+    if (customerReplied) replies++;
     if (callStatus === CALL_SENT_STATUS) callsSent++;
     if (isToday_(replyDate) || isToday_(callDate)) activityToday++;
 
     const replyMs = (replyDate instanceof Date && !isNaN(replyDate.getTime())) ? replyDate.getTime() : 0;
     const callMs = (callDate instanceof Date && !isNaN(callDate.getTime())) ? callDate.getTime() : 0;
-    const recentlyUpdated = lastExportMs !== null && Math.max(replyMs, callMs) > lastExportMs;
+    const lastActivityMs = Math.max(replyMs, callMs);
+    // שתי רמות הדגשה בדשבורד/באקסל: "היום" (צהוב, המנצחת אם שתיהן
+    // מתקיימות) ו"מאז ההורדה האחרונה של האקסל" (ירוק חלש).
+    const updatedToday = lastActivityMs > 0 && isToday_(new Date(lastActivityMs));
+    const recentlyUpdated = lastExportMs !== null && lastActivityMs > lastExportMs;
 
     rows.push({
       name: nameCol !== -1 ? row[nameCol] : '',
@@ -1309,7 +1453,6 @@ function getCampaignData(sheetName) {
       source: sourceCol !== -1 ? row[sourceCol] : '',
       status: status,
       statusClass: classifyStatus_(status),
-      reply: reply,
       replyDate: (replyDate instanceof Date && !isNaN(replyDate.getTime()))
         ? Utilities.formatDate(replyDate, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
       firstReply: firstReply,
@@ -1320,6 +1463,7 @@ function getCampaignData(sheetName) {
       callDate: (callDate instanceof Date && !isNaN(callDate.getTime()))
         ? Utilities.formatDate(callDate, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
       userNotes: userNotes,
+      updatedToday: updatedToday,
       recentlyUpdated: recentlyUpdated
     });
   }
@@ -1346,10 +1490,10 @@ function getCampaignData(sheetName) {
 /**
  * מפלח את אנשי הקשר לפי תוכן התגובה (לא לפי סטטוס שליחה) - כמה ענו
  * "פגישה", כמה "לא מעוניין" וכו', לצורך גרף הפילוח בדשבורד. מבוסס על
- * "תגובה ראשונית" (הלחיצה הראשונה), עם נפילה חזרה לשורה הראשונה של
- * "תשובת איש קשר" לשורות ישנות שנכתבו לפני שהעמודה הזו נוספה. מי שעדיין
- * לא ענה בכלל מקובץ בנפרד תחת "טרם ענו". יותר מ-6 קטגוריות שונות
- * מתקפלות ל"אחר", כדי שהגרף יישאר קריא.
+ * "תגובה ראשונית" (הלחיצה על כפתור) בלבד - מי שרק כתב טקסט חופשי בלי
+ * ללחוץ כפתור נספר תחת "טרם ענו" (התוכן שלו עדיין מופיע ב"הערות מיטוב",
+ * רק לא נכנס לגרף הזה). יותר מ-6 קטגוריות שונות מתקפלות ל"אחר", כדי
+ * שהגרף יישאר קריא.
  */
 function replyBreakdown_(rows) {
   const NO_REPLY_LABEL = 'טרם ענו';
@@ -1357,8 +1501,7 @@ function replyBreakdown_(rows) {
 
   const counts = {};
   rows.forEach(function (r) {
-    const key = r.firstReply || (r.reply ? String(r.reply).split('\n')[0] : '');
-    const label = key || NO_REPLY_LABEL;
+    const label = r.firstReply || NO_REPLY_LABEL;
     counts[label] = (counts[label] || 0) + 1;
   });
 

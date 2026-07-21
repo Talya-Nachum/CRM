@@ -13,74 +13,74 @@
   }
 
   :root {
-    --bg: #EDE4FF;
-    --bg-2: #E0E7FF;
-    --bg-solid: #F8F7FC;
+    --bg: #F5F6F9;
+    --bg-2: #EEF3FB;
+    --bg-solid: #F5F6F9;
     --surface: #FFFFFF;
-    --surface-2: #F3F0FB;
-    --border: #E6DFF9;
-    --text: #17122A;
-    --text-muted: #6B6480;
-    --accent: #7C3AED;
-    --accent-grad-1: #8B5CF6;
-    --accent-grad-2: #5B21B6;
-    --accent-soft: #F1E9FF;
-    --accent-ink: #4C1D95;
-    --accent-2: #2563EB;
-    --accent-2-soft: #DBEAFE;
-    --good: #16A34A;
-    --good-soft: #DCFCE7;
-    --bad: #DC2626;
-    --bad-soft: #FEE2E2;
-    --pending: #EA580C;
-    --pending-soft: #FFEDD5;
+    --surface-2: #F2F4F7;
+    --border: #E3E6EC;
+    --text: #1B1D22;
+    --text-muted: #667085;
+    --accent: #116DFF;
+    --accent-grad-1: #2E82FF;
+    --accent-grad-2: #0B57D0;
+    --accent-soft: #E8F0FF;
+    --accent-ink: #0B4FC4;
+    --accent-2: #7C5CFC;
+    --accent-2-soft: #EFEAFF;
+    --good: #1FAA59;
+    --good-soft: #E5F6EC;
+    --bad: #E1442F;
+    --bad-soft: #FCE9E7;
+    --pending: #B7791F;
+    --pending-soft: #FBF0DD;
     --cat-1: #2a78d6;
     --cat-2: #008300;
     --cat-3: #e87ba4;
     --cat-4: #eda100;
     --cat-5: #1baf7a;
     --cat-6: #eb6834;
-    --cat-muted: #9a8fb0;
-    --shadow: 0 10px 30px rgba(17,12,34,0.08);
-    --shadow-hover: 0 20px 45px rgba(17,12,34,0.16);
-    --radius: 20px;
-    --radius-lg: 24px;
-    --radius-btn: 16px;
-    --radius-input: 16px;
+    --cat-muted: #9099a8;
+    --shadow: 0 1px 2px rgba(17,17,31,0.05), 0 8px 24px rgba(17,17,31,0.06);
+    --shadow-hover: 0 1px 2px rgba(17,17,31,0.06), 0 16px 40px rgba(17,17,31,0.1);
+    --radius: 12px;
+    --radius-lg: 14px;
+    --radius-btn: 8px;
+    --radius-input: 8px;
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #17111F;
-      --bg-2: #1C1730;
-      --bg-solid: #17111F;
-      --surface: #211A32;
-      --surface-2: #2A2140;
-      --border: #362A4D;
-      --text: #EDE9FE;
-      --text-muted: #A79BC7;
-      --accent: #A78BFA;
-      --accent-grad-1: #A78BFA;
-      --accent-grad-2: #7C3AED;
-      --accent-soft: #352755;
-      --accent-ink: #E9D8FD;
-      --accent-2: #60A5FA;
-      --accent-2-soft: #1E3A5F;
-      --good: #4ADE80;
-      --good-soft: #14532D;
+      --bg: #101216;
+      --bg-2: #14171D;
+      --bg-solid: #101216;
+      --surface: #171A20;
+      --surface-2: #1D2129;
+      --border: #2A2E37;
+      --text: #ECEEF2;
+      --text-muted: #9AA0AC;
+      --accent: #4C93FF;
+      --accent-grad-1: #6AA5FF;
+      --accent-grad-2: #2E7DFF;
+      --accent-soft: #1B2A42;
+      --accent-ink: #BCD6FF;
+      --accent-2: #A392FF;
+      --accent-2-soft: #241F3D;
+      --good: #34D399;
+      --good-soft: #10291B;
       --bad: #F87171;
-      --bad-soft: #450A0A;
+      --bad-soft: #341714;
       --pending: #FBBF24;
-      --pending-soft: #451A03;
+      --pending-soft: #332507;
       --cat-1: #3987e5;
       --cat-2: #008300;
       --cat-3: #d55181;
       --cat-4: #c98500;
       --cat-5: #199e70;
       --cat-6: #d95926;
-      --cat-muted: #6f6485;
-      --shadow: 0 10px 30px rgba(0,0,0,0.4);
-      --shadow-hover: 0 20px 45px rgba(0,0,0,0.55);
+      --cat-muted: #6f7685;
+      --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.4);
+      --shadow-hover: 0 1px 2px rgba(0,0,0,0.4), 0 16px 40px rgba(0,0,0,0.5);
     }
   }
 
@@ -109,10 +109,48 @@
     }
   }
 
+  .shell {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .sidebar {
+    width: 232px;
+    flex-shrink: 0;
+    min-height: 100vh;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 24px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    position: sticky;
+    top: 0;
+  }
+
+  .sidebar-brand-text {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.01em;
+    padding: 0 6px;
+  }
+
+  .sidebar-section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    padding: 0 6px;
+  }
+
   .page {
+    flex: 1;
+    min-width: 0;
     max-width: 1180px;
     margin: 0 auto;
-    padding: 40px 28px 80px;
+    padding: 32px 28px 80px;
     display: flex;
     flex-direction: column;
     gap: 28px;
@@ -227,44 +265,60 @@
 
   .tabs {
     display: flex;
-    gap: 10px;
-    overflow-x: auto;
-    padding-bottom: 4px;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
   }
 
   .tab {
     flex: 0 0 auto;
-    padding: 10px 20px;
-    border-radius: 18px;
-    border: 1.5px solid var(--border);
-    background: var(--surface);
+    width: 100%;
+    text-align: right;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    transition: background 0.15s ease, color 0.15s ease;
   }
 
   .tab:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    transform: translateY(-2px);
+    background: var(--surface-2);
+    color: var(--text);
   }
 
   .tab.active {
-    background: linear-gradient(135deg, var(--accent-grad-1), var(--accent-grad-2));
+    background: var(--accent-soft);
     border-color: transparent;
-    color: #fff;
-    box-shadow: 0 8px 18px -6px rgba(109,40,217,0.4);
+    color: var(--accent-ink);
+    font-weight: 700;
+    box-shadow: inset -3px 0 0 0 var(--accent);
   }
 
-  .tab.active::before {
-    content: '✦';
-    margin-left: 6px;
-    font-size: 12px;
-  }
+  .tab.active:hover { color: var(--accent-ink); }
 
-  .tab.active:hover { color: #fff; }
+  @media (max-width: 780px) {
+    .shell { flex-direction: column; }
+    .sidebar {
+      width: 100%;
+      min-height: auto;
+      position: static;
+      border-left: none;
+      border-bottom: 1px solid var(--border);
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+    }
+    .sidebar-section-label { display: none; }
+    .tabs { flex-direction: row; overflow-x: auto; overflow-y: hidden; }
+    .tab.active { box-shadow: inset 0 -3px 0 0 var(--accent); }
+  }
 
   .stats {
     display: grid;
@@ -529,6 +583,18 @@
 
   .th-inner { display: inline-flex; align-items: center; gap: 5px; }
 
+  .sortable-th .th-inner { cursor: pointer; user-select: none; }
+  .sortable-th .th-inner:hover { color: var(--accent); }
+  .th-inner.sort-active { color: var(--accent-ink); }
+
+  .col-sort-icon {
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  .th-inner.sort-active .col-sort-icon { color: var(--accent); opacity: 1; }
+
   .col-filter-icon {
     display: inline-flex;
     align-items: center;
@@ -665,6 +731,7 @@
 
   .name-cell { font-weight: 600; }
   .phone-cell { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+  .date-cell { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12.5px; white-space: nowrap; }
 
   .pagination {
     display: flex;
@@ -876,7 +943,16 @@
 
 </style>
 
-<div class="page">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand-text">מיטוב מכירות</div>
+    <div class="sidebar-section-label">קמפיינים</div>
+    <nav class="tabs" id="tabs" aria-label="בחירת קמפיין">
+      <span class="loading-state">טוען קמפיינים...</span>
+    </nav>
+  </aside>
+
+  <div class="page">
   <header class="top">
     <div>
       <h1 id="appTitle">ניהול קמפיינים</h1>
@@ -891,10 +967,6 @@
       <span class="copy-toast" id="copyToast">הקישור הועתק!</span>
     </div>
   </header>
-
-  <nav class="tabs" id="tabs" aria-label="בחירת קמפיין">
-    <span class="loading-state">טוען קמפיינים...</span>
-  </nav>
 
   <section class="stats" id="stats"></section>
 
@@ -931,6 +1003,7 @@
       <div class="pagination" id="pagination"></div>
     </div>
   </section>
+  </div>
 </div>
 
 <div class="modal-overlay" id="addModal">
@@ -1007,6 +1080,7 @@
   let currentBreakdown = []; // הפילוח האחרון שצויר, לצורך סימון השורה הפעילה בלג'נד
   let namedCategoryLabels = []; // תוויות הקטגוריות "האמיתיות" (לא "אחר"/"טרם ענו") - לחישוב סינון "אחר"
   let columnFilters = {}; // { columnKey: Set(ערכים מותרים) } - סינון לפי עמודה (כמו Excel)
+  let sortState = { key: null, dir: 1 }; // מיון א-ב בלחיצה על כותרת עמודה - ר' setupColumnSortClicks_
   const PAGE_SIZE = 10;
   const AUTO_REFRESH_MS = 30000;
 
@@ -1111,7 +1185,7 @@
     data.rows = data.rows.slice().sort(function (a, b) {
       const aNew = a._isNew ? 1 : 0, bNew = b._isNew ? 1 : 0;
       if (aNew !== bNew) return bNew - aNew;
-      const aReplied = a.reply ? 1 : 0, bReplied = b.reply ? 1 : 0;
+      const aReplied = a.userNotes ? 1 : 0, bReplied = b.userNotes ? 1 : 0;
       return bReplied - aReplied;
     });
 
@@ -1136,12 +1210,12 @@
     const prevSnap = rowSnapshots[currentTabName];
     const newSnap = {};
     data.rows.forEach(function (r) {
-      newSnap[r.phone] = { reply: r.reply, callResult: r.callResult };
+      newSnap[r.phone] = { userNotes: r.userNotes, callResult: r.callResult };
       if (prevSnap) {
         const prev = prevSnap[r.phone];
-        const replyChanged = r.reply && (!prev || r.reply !== prev.reply);
+        const notesChanged = r.userNotes && (!prev || r.userNotes !== prev.userNotes);
         const callChanged = r.callResult && (!prev || r.callResult !== prev.callResult);
-        r._isNew = !!(prev && (replyChanged || callChanged));
+        r._isNew = !!(prev && (notesChanged || callChanged));
       }
     });
     rowSnapshots[currentTabName] = newSnap;
@@ -1153,49 +1227,38 @@
    * (ראו computeVisibleColumns_) - כדי לא להציג עמודות ריקות לגמרי.
    */
   const COLUMN_DEFS = [
-    { key: 'company', label: 'שם חברה', always: false, hasValue: function (r) { return !!r.company; },
+    { key: 'company', label: 'שם חברה', always: true, sortable: true,
       filterValue: function (r) { return r.company || ''; },
       cell: function (r) { return '<td class="reply-cell">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
-    { key: 'name', label: 'שם איש קשר', always: true,
+    { key: 'name', label: 'שם איש קשר', always: true, sortable: true,
       filterValue: function (r) { return r.name || ''; },
       cell: function (r) { return '<td class="name-cell">' + escapeHtml_(r.name) + '</td>'; } },
-    { key: 'title', label: 'תפקיד', always: false, hasValue: function (r) { return !!r.title; },
-      filterValue: function (r) { return r.title || ''; },
-      cell: function (r) { return '<td class="reply-cell">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>'; } },
     { key: 'phone', label: 'טלפון נייד', always: true,
       filterValue: function (r) { return r.phone || ''; },
       cell: function (r) { return '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>'; } },
-    { key: 'email', label: 'אימייל', always: false, hasValue: function (r) { return !!r.email; },
-      filterValue: function (r) { return r.email || ''; },
-      cell: function (r) { return '<td class="reply-cell">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>'; } },
-    { key: 'source', label: 'מקור ליד', always: false, hasValue: function (r) { return !!r.source; },
-      filterValue: function (r) { return r.source || ''; },
-      cell: function (r) { return '<td class="reply-cell">' + (r.source ? escapeHtml_(r.source) : '—') + '</td>'; } },
-    { key: 'finalStatus', label: 'סטטוס', always: true,
-      // רק לחיצה אמיתית על כפתור - לא תשובה חופשית. תשובה חופשית כבר
-      // מוצגת במלואה בעמודת "תשובת איש קשר" הנפרדת, אין צורך לשכפל אותה
-      // כאן; העמודה הזו נשארת שמורה אך ורק לבחירה הקטגורית מהכפתור.
+    { key: 'finalStatus', label: 'סטטוס', always: true, sortable: true,
+      // רק לחיצה אמיתית על כפתור - לא תשובה חופשית (זו כבר מוצגת בעמודת
+      // "הערות מיטוב"). כל עוד לא הגיעה תגובה כזו, נשאר הסטטוס הבסיסי
+      // ("נשלח וואטסאפ" וכו') - וניתן לדריסה חופשית תמיד ע"י הצוות.
       filterValue: function (r) { return r.firstReply || r.status || ''; },
       cell: function (r) {
         if (r.firstReply) return '<td class="reply-cell">💬 ' + escapeHtml_(r.firstReply) + '</td>';
         return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>';
       } },
-    { key: 'reply', label: 'הערות איש קשר', always: false, hasValue: function (r) { return !!r.reply; },
-      filterValue: function (r) { return r.reply ? lastReplyLine_(r.reply) : ''; },
-      cell: function (r) { return '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
-    { key: 'callStatus', label: 'סטטוס שיחה', always: false, hasValue: function (r) { return !!r.callStatus; },
-      filterValue: function (r) { return r.callStatus || ''; },
-      cell: function (r) { return '<td>' + pill_(r.callStatus, r.callStatusClass, '—') + '</td>'; } },
-    { key: 'callResult', label: 'תוצאות שיחה', always: false, hasValue: function (r) { return !!r.callResult; },
-      filterValue: function (r) { return r.callResult ? lastReplyLine_(r.callResult) : ''; },
-      cell: function (r) { return '<td class="reply-cell" title="' + (r.callResult ? escapeHtml_(r.callResult) : '') + '">' + (r.callResult ? escapeHtml_(lastReplyLine_(r.callResult)) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
-    { key: 'notes', label: 'הערות מיטוב', always: false, hasValue: function (r) { return !!r.userNotes; },
+    { key: 'notes', label: 'הערות מיטוב', always: true,
+      // עמודה מאוחדת: כל שיחת הוואטסאפ עם הבוט + הערות ידניות של הצוות,
+      // ר' handleInforuWebhook_/appendNoteEntry_ ב-Code.gs. התא מציג
+      // תקציר קצר (מי כתב אחרון + כמות) - הטקסט המלא נפתח ב"+".
       filterValue: function (r) { return r.userNotes || ''; },
       cell: function (r) {
         const summary = parseNotesSummary_(r.userNotes);
         if (!summary) return '<td class="reply-cell">—</td>';
-        return '<td><span class="note-chip" data-phone="' + escapeHtml_(r.phone) + '" title="' + escapeHtml_(r.userNotes) + '">📝 ' + escapeHtml_(summary.lastAuthor) + ' (' + summary.count + ')</span></td>';
+        return '<td><span class="note-chip" data-phone="' + escapeHtml_(r.phone) + '" title="' + escapeHtml_(r.userNotes) + '">📝 ' + escapeHtml_(summary.lastAuthor) + ' (' + summary.count + ')</span>' +
+          (r._isNew ? '<span class="new-badge">חדש</span>' : '') + '</td>';
       } },
+    { key: 'date', label: 'תאריך', always: true, sortable: true,
+      filterValue: function (r) { return r.replyDate || ''; },
+      cell: function (r) { return '<td class="date-cell">' + (r.replyDate ? escapeHtml_(r.replyDate) : '—') + '</td>'; } },
     { key: 'actions', label: '', always: true,
       cell: function (r) {
         const p = escapeHtml_(r.phone);
@@ -1217,9 +1280,36 @@
       const filterBtn = c.filterValue
         ? '<span class="col-filter-icon' + (columnFilters[c.key] ? ' on' : '') + '" data-key="' + c.key + '">▾</span>'
         : '';
-      return '<th><span class="th-inner">' + escapeHtml_(c.label) + filterBtn + '</span></th>';
+      const sortArrow = c.sortable
+        ? '<span class="col-sort-icon">' + (sortState.key === c.key ? (sortState.dir === 1 ? '▲' : '▼') : '⇅') + '</span>'
+        : '';
+      const sortCls = c.sortable ? ' class="sortable-th"' : '';
+      const activeCls = c.sortable && sortState.key === c.key ? ' sort-active' : '';
+      return '<th' + sortCls + '><span class="th-inner' + activeCls + '" data-sort-key="' + (c.sortable ? c.key : '') + '">' +
+        escapeHtml_(c.label) + sortArrow + filterBtn + '</span></th>';
     }).join('') + '</tr>';
     setupColumnFilterClicks_(columns);
+    setupColumnSortClicks_();
+  }
+
+  /**
+   * מיון א-ב בלחיצה על כותרת עמודה (name/company/finalStatus/date) -
+   * לחיצה נוספת על אותה עמודה הופכת כיוון (עולה/יורד), לחיצה על עמודה
+   * אחרת מתחילה מיון חדש עולה. מוחל ב-getFilteredRows_ אחרי כל הסינונים.
+   */
+  function setupColumnSortClicks_() {
+    document.querySelectorAll('#tableHead .th-inner[data-sort-key]').forEach(function (el) {
+      const key = el.getAttribute('data-sort-key');
+      if (!key) return;
+      el.addEventListener('click', function (e) {
+        if (e.target.closest('.col-filter-icon')) return;
+        sortState = (sortState.key === key)
+          ? { key: key, dir: sortState.dir * -1 }
+          : { key: key, dir: 1 };
+        renderTableHead_(visibleColumns);
+        applyFilters_(true);
+      });
+    });
   }
 
   /**
@@ -1409,6 +1499,16 @@
       if (!allowed || !col) return;
       rows = rows.filter(function (r) { return allowed.has(String(col.filterValue(r))); });
     });
+    if (sortState.key) {
+      const sortCol = COLUMN_DEFS.filter(function (c) { return c.key === sortState.key; })[0];
+      if (sortCol) {
+        rows = rows.slice().sort(function (a, b) {
+          const av = String(sortCol.filterValue(a) || '');
+          const bv = String(sortCol.filterValue(b) || '');
+          return av.localeCompare(bv, 'he') * sortState.dir;
+        });
+      }
+    }
     return rows;
   }
 
@@ -1421,13 +1521,13 @@
   }
 
   /**
-   * הקטגוריה של שורה - התגובה הראשונית אם יש, אחרת ההודעה הראשונה
-   * בשרשור, אחרת ריק (= "טרם ענו"). זהה ללוגיקה שמחשבת את replyBreakdown_
-   * בצד השרת (Code.gs), כדי שהלחיצה על הלג'נד תסנן בדיוק את מי שנספר
-   * תחת אותה קטגוריה בגרף.
+   * הקטגוריה של שורה - התגובה הראשונית (לחיצת כפתור) אם יש, אחרת ריק
+   * (= "טרם ענו"). זהה ללוגיקה שמחשבת את replyBreakdown_ בצד השרת
+   * (Code.gs), כדי שהלחיצה על הלג'נד תסנן בדיוק את מי שנספר תחת אותה
+   * קטגוריה בגרף.
    */
   function categoryOf_(r) {
-    return r.firstReply || (r.reply ? String(r.reply).split('\n')[0] : '') || '';
+    return r.firstReply || '';
   }
 
   function rowMatchesCategory_(r, filter) {
@@ -1456,14 +1556,27 @@
     });
   }
 
+  /**
+   * מציגה תמיד באופן בולט אם יש **כל** סינון פעיל (חיפוש, קטגוריה
+   * מהלג'נד, או סינון עמודה) + כמה שורות מוצגות מתוך הסך הכול בקמפיין -
+   * כדי שלעולם לא יקרה שסינון ישן ונשכח יגרום ל"חשבתי שראיתי הכל" בטעות.
+   */
   function renderActiveFilterChip_() {
     const el = document.getElementById('activeFilterChip');
-    if (!el) return;
-    if (!activeCategoryFilter) { el.innerHTML = ''; return; }
-    el.innerHTML = '<span class="filter-chip">מסונן: ' + escapeHtml_(activeCategoryFilter.label) +
-      ' <button type="button" id="clearCategoryFilter">✕</button></span>';
-    document.getElementById('clearCategoryFilter').addEventListener('click', function () {
+    if (!el || !currentData) return;
+    const q = document.getElementById('searchInput').value.trim();
+    const hasColumnFilters = Object.keys(columnFilters).some(function (k) { return !!columnFilters[k]; });
+    if (!q && !activeCategoryFilter && !hasColumnFilters) { el.innerHTML = ''; return; }
+
+    const shown = getFilteredRows_().length;
+    const total = currentData.rows.length;
+    el.innerHTML = '<span class="filter-chip">מציג ' + shown + ' מתוך ' + total + ' (יש סינון פעיל)' +
+      ' <button type="button" id="clearAllFilters">נקה הכל ✕</button></span>';
+    document.getElementById('clearAllFilters').addEventListener('click', function () {
+      document.getElementById('searchInput').value = '';
       activeCategoryFilter = null;
+      columnFilters = {};
+      renderTableHead_(visibleColumns);
       applyFilters_(true);
     });
   }
@@ -1567,24 +1680,31 @@
     exportBtn.addEventListener('click', function () {
       if (!currentData || !currentTabName) return;
       // מכבד את הסינון הפעיל על המסך (חיפוש + קטגוריה מהלג'נד + סינוני
-      // עמודות בסגנון אקסל) - לא מייצא סתם את כל השורות בקמפיין.
+      // עמודות בסגנון אקסל) - לא מייצא סתם את כל השורות בקמפיין. אם יש
+      // סינון פעיל שמצמצם את מה שבאמת ייצא, מתריעים לפני ההורדה - כדי
+      // שלעולם לא יקרה שוב "חשבתי שפניתי לכולם" בגלל סינון ששכחו שהיה פעיל.
       const rows = getFilteredRows_();
+      const totalInCampaign = currentData.rows.length;
+      if (rows.length < totalInCampaign) {
+        const proceed = confirm(
+          'יש סינון פעיל - מייצאים ' + rows.length + ' מתוך ' + totalInCampaign + ' אנשי קשר בקמפיין.\n' +
+          'ללחוץ "אישור" כדי לייצא רק את המסונן, או "ביטול" ואז לנקות סינון כדי לייצא את כולם.'
+        );
+        if (!proceed) return;
+      }
 
       // רשימת עמודות מצומצמת שנקבעה מפורשות עם הלקוחה - לא כל השדות
-      // הזמינים, רק אלה שהיא באמת רוצה לראות בקובץ שיורד. שורה שהתעדכנה
-      // מאז ההורדה הקודמת של הקובץ הזה מסומנת ברקע צהבהב.
-      const headers = ['שם חברה', 'שם איש קשר', 'טלפון נייד', 'אימייל', 'סטטוס', 'הערות איש קשר', 'תאריך', 'הערות מיטוב'];
+      // הזמינים, רק אלה שהיא באמת רוצה לראות בקובץ שיורד. שתי רמות הדגשה:
+      // צהוב = התעדכן היום, ירוק חלש = התעדכן מאז ההורדה הקודמת (ר'
+      // updatedToday/recentlyUpdated ב-getCampaignData).
+      const headers = ['שם חברה', 'שם איש קשר', 'טלפון נייד', 'סטטוס', 'הערות מיטוב', 'תאריך'];
 
       const exportRows = rows.map(function (r) {
-        // אם אין לחיצת כפתור - נופלים חזרה לסטטוס השליחה הבסיסי, לעולם לא
-        // משאירים את התא ריק.
         const finalStatus = r.firstReply || r.status || '';
         return {
-          values: [
-            r.company || '', r.name || '', r.phone || '', r.email || '',
-            finalStatus, r.reply || '', r.replyDate || '', r.userNotes || ''
-          ],
-          highlight: !!r.recentlyUpdated
+          values: [r.company || '', r.name || '', r.phone || '', finalStatus, r.userNotes || '', r.replyDate || ''],
+          updatedToday: !!r.updatedToday,
+          recentlyUpdated: !!r.recentlyUpdated
         };
       });
 
