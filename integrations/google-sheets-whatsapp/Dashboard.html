@@ -878,6 +878,45 @@
     visibility: visible;
   }
 
+  /* תיבת בחירת סטטוס מרשימה סגורה (חיפוש-תוך-כדי-הקלדה) בחלון "עדכון
+     פנימי" - לא ניתן לשמור טקסט חופשי, רק ערך שנבחר בפועל מהרשימה. */
+  .status-combo {
+    position: relative;
+  }
+  .status-dropdown {
+    position: absolute;
+    z-index: 1000;
+    top: calc(100% + 4px);
+    right: 0;
+    left: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 10px);
+    box-shadow: var(--shadow-hover);
+    display: none;
+  }
+  .status-dropdown.open {
+    display: block;
+  }
+  .status-dropdown .opt {
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .status-dropdown .opt:hover,
+  .status-dropdown .opt.highlighted {
+    background: var(--surface-2);
+  }
+  .status-dropdown .opt-empty {
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: default;
+  }
+
   .empty-state, .loading-state {
     color: var(--text-muted);
     font-size: 14px;
@@ -1114,7 +1153,10 @@
     <select class="modal-input" id="crmUser"></select>
 
     <label class="modal-label">עדכון סטטוס</label>
-    <input type="text" class="modal-input" id="crmStatusText" placeholder="סטטוס חדש, למשל: טופל">
+    <div class="status-combo">
+      <input type="text" class="modal-input" id="crmStatusText" placeholder="הקלידי לחיפוש או לחצי לבחירה מהרשימה" autocomplete="off">
+      <div class="status-dropdown" id="crmStatusOptions"></div>
+    </div>
 
     <label class="modal-label">הערות</label>
     <textarea class="modal-input crm-note-history-readonly" id="crmNoteHistory" readonly placeholder="אין הערות עדיין"></textarea>
@@ -1203,6 +1245,7 @@
     if (!data) return;
 
     customStatusColors = data.statusColors || {};
+    statusList = data.statusList || [];
     markNewRows_(data);
 
     const sentPct = data.total ? Math.round((data.sent / data.total) * 100) : 0;
@@ -1506,7 +1549,9 @@
 
   // סטטוסים שנחשבים "הצלחה אמיתית" (נקבעה פגישה) - רק הם מציגים קונפטי
   // בסיום "שמור וסגור"; כל שמירה אחרת מציגה רק ✓ קטן שמתפוגג, בלי חגיגה.
-  const MEETING_STATUSES = ['תואמה פגישה מקוונת', 'תואמה פגישה פרונטלית'];
+  // עודכן להתאים בדיוק לניסוח ב"רשימת סטטוסים" הסגורה (בלי "תואמה") -
+  // אחרת הקונפטי לעולם לא היה נדלק, כי עכשיו אפשר לשמור רק ערך מדויק מהרשימה.
+  const MEETING_STATUSES = ['פגישה מקוונת', 'פגישה פרונטלית'];
 
   /**
    * אפקט חגיגה (קונפטי) - מוצג רק כשקובעים פגישה (MEETING_STATUSES), לא
@@ -1985,6 +2030,7 @@
     const currentStatusEl = document.getElementById('crmCurrentStatus');
     const userSel = document.getElementById('crmUser');
     const statusText = document.getElementById('crmStatusText');
+    const statusOptionsEl = document.getElementById('crmStatusOptions');
     const noteText = document.getElementById('crmNoteText');
     const errorEl = document.getElementById('crmError');
     const historyEl = document.getElementById('crmNoteHistory');
@@ -2000,6 +2046,49 @@
       const users = (currentData && currentData.teamUsers) || ['מזי', 'טליה'];
       sel.innerHTML = users.map(function (u) { return '<option value="' + escapeHtml_(u) + '">' + escapeHtml_(u) + '</option>'; }).join('');
     }
+
+    // תיבת בחירת סטטוס מרשימה סגורה בלבד - חיפוש-תוך-כדי-הקלדה, אבל
+    // שמירה מתאפשרת רק על ערך שנבחר בפועל מהרשימה (ר' saveAll_ למטה).
+    function statusIsValid_(text) {
+      if (!text) return true; // ריק = "לא לשנות סטטוס", מותר תמיד
+      const key = normalizeStatusKey_(text);
+      return statusList.some(function (s) { return normalizeStatusKey_(s) === key; });
+    }
+
+    function renderStatusOptions_(filterText) {
+      const key = normalizeStatusKey_(filterText || '');
+      const matches = statusList.filter(function (s) { return !key || normalizeStatusKey_(s).indexOf(key) !== -1; });
+      if (!statusList.length) {
+        statusOptionsEl.innerHTML = '<div class="opt-empty">הרשימה עדיין לא הוגדרה בגיליון</div>';
+      } else if (!matches.length) {
+        statusOptionsEl.innerHTML = '<div class="opt-empty">אין התאמה - יש לבחור ערך מהרשימה</div>';
+      } else {
+        statusOptionsEl.innerHTML = matches.map(function (s) {
+          return '<div class="opt" data-value="' + escapeHtml_(s) + '">' + escapeHtml_(s) + '</div>';
+        }).join('');
+      }
+      statusOptionsEl.classList.add('open');
+    }
+
+    function closeStatusOptions_() {
+      statusOptionsEl.classList.remove('open');
+    }
+
+    statusText.addEventListener('input', function () { renderStatusOptions_(statusText.value); });
+    statusText.addEventListener('focus', function () { renderStatusOptions_(statusText.value); });
+    statusOptionsEl.addEventListener('mousedown', function (e) {
+      // mousedown (לא click) - כדי שזה יקרה לפני ה-blur של השדה ולא "יאבד" ללחיצה
+      const opt = e.target.closest('.opt');
+      if (!opt) return;
+      statusText.value = opt.getAttribute('data-value');
+      closeStatusOptions_();
+    });
+    document.addEventListener('click', function (e) {
+      if (e.target !== statusText && !statusOptionsEl.contains(e.target)) closeStatusOptions_();
+    });
+    statusText.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeStatusOptions_();
+    });
 
     // תיבת היסטוריה היא textarea לקריאה בלבד (readonly) - טוענים אליה את
     // כל מחרוזת ההערות הגולמית כמו שהיא (כל הערה כבר שורה נפרדת, החדשה
@@ -2021,6 +2110,7 @@
       currentStatusEl.textContent = (row && row.firstReply) || 'ללא סטטוס';
       populateUsers_(userSel);
       statusText.value = '';
+      closeStatusOptions_();
       noteText.value = '';
       errorEl.textContent = '';
       aiSummaryEl.textContent = 'לא נוצר סיכום עדיין';
@@ -2087,6 +2177,7 @@
       const statusVal = statusText.value.trim();
       const noteVal = noteText.value.trim();
       if (!statusVal && !noteVal) { errorEl.textContent = 'יש להזין סטטוס ו/או הערה'; return; }
+      if (statusVal && !statusIsValid_(statusVal)) { errorEl.textContent = 'יש לבחור סטטוס מתוך הרשימה בלבד'; return; }
       if (!modalPhone || !currentTabName) return;
       saveBtn.disabled = true;
       errorEl.textContent = '';
@@ -2194,6 +2285,7 @@
   };
   const STATUS_COLOR_FALLBACK_PALETTE = ['#DB2777', '#65A30D', '#9333EA', '#0D9488', '#EA580C', '#4338CA'];
   let customStatusColors = {}; // מטאב "צבעי סטטוס" (אופציונלי) - ר' renderCampaign/getStatusColors_
+  let statusList = []; // מטאב "רשימת סטטוסים" - הרשימה הסגורה לבחירה ידנית בחלון "עדכון פנימי", ר' setupCrmModal_
 
   // מנרמלת בדיוק כמו normalizeLabel_ בצד השרת (Code.gs) - מורידה גרשיים/
   // רווח כפול/רווח בקצה/רישיות - כדי שהתאמה לטאב "צבעי סטטוס" לא תישבר
