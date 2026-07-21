@@ -79,7 +79,8 @@ const TEAM_USERS_ = ['מזי', 'טליה'];
 
 // טאבים שהם עזר/לוג בלבד, לעולם לא נחשבים קמפיין גם אם במקרה יש בהם
 // עמודה שנראית כמו טלפון נייד.
-const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns'];
+const STATUS_COLORS_SHEET_NAME = 'צבעי סטטוס';
+const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns', STATUS_COLORS_SHEET_NAME];
 
 // --- Wix (לידים מטופס באתר) ---
 // שם הטאב שאליו נכנסים לידים חדשים מ-Wix - זהו טאב הקמפיין הקיים
@@ -1270,6 +1271,33 @@ function daysActive_(sheetName) {
   return Math.floor((Date.now() - start.getTime()) / msPerDay) + 1;
 }
 
+/**
+ * קוראת טאב אופציונלי "צבעי סטטוס" (אם קיים) - כדי שהלקוחה תוכל לשלוט
+ * בעצמה על צבע הסטטוסים בדשבורד, בלי לגעת בקוד: עמודה א' = טקסט הסטטוס
+ * (בדיוק כמו שהוא כתוב בפועל בעמודת "סטטוס"), עמודה ב' = הצבע - נלקח
+ * מצבע הרקע של התא עצמו, שאותו צובעים עם כלי הצביעה הרגיל של הגיליון
+ * (בדיוק כמו ה-Indicator Tags שלה בפרלה) - לא מקלידים קוד צבע. תא בעמודה
+ * ב' בלי צבע רקע (לבן/ריק) מתעלם ממנו - הסטטוס ימשיך לקבל את הצבע
+ * האוטומטי הרגיל. אם הטאב לא קיים בכלל, מחזירה אובייקט ריק.
+ */
+function getStatusColors_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(STATUS_COLORS_SHEET_NAME);
+  if (!sheet) return {};
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return {};
+
+  const statuses = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  const backgrounds = sheet.getRange(2, 2, lastRow - 1, 1).getBackgrounds();
+  const colors = {};
+  for (let i = 0; i < statuses.length; i++) {
+    const status = String(statuses[i][0] || '').trim();
+    const color = backgrounds[i][0];
+    if (status && color && color.toLowerCase() !== '#ffffff') colors[status] = color;
+  }
+  return colors;
+}
+
 function getCampaignData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
@@ -1375,7 +1403,8 @@ function getCampaignData(sheetName) {
     rows: rows,
     replyBreakdown: replyBreakdown_(rows),
     trend: dailyActivityTrend_(sheetName),
-    teamUsers: TEAM_USERS_
+    teamUsers: TEAM_USERS_,
+    statusColors: getStatusColors_()
   };
 }
 

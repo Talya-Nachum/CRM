@@ -1173,6 +1173,7 @@
     currentData = data;
     if (!data) return;
 
+    customStatusColors = data.statusColors || {};
     markNewRows_(data);
 
     const sentPct = data.total ? Math.round((data.sent / data.total) * 100) : 0;
@@ -2090,9 +2091,13 @@
     'לא ענה': '#6B7280'
   };
   const STATUS_COLOR_FALLBACK_PALETTE = ['#DB2777', '#65A30D', '#9333EA', '#0D9488', '#EA580C', '#4338CA'];
+  let customStatusColors = {}; // מטאב "צבעי סטטוס" (אופציונלי) - ר' renderCampaign/getStatusColors_
 
+  // סדר עדיפות: צבע שהלקוחה הגדירה בעצמה בטאב "צבעי סטטוס" > צבע קבוע
+  // מוכר בקוד > צבע דטרמיניסטי (hash) לכל סטטוס אחר/חדש.
   function colorForStatus_(status) {
     const s = String(status || '');
+    if (customStatusColors[s]) return customStatusColors[s];
     if (KNOWN_STATUS_COLORS[s]) return KNOWN_STATUS_COLORS[s];
     let hash = 0;
     for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
