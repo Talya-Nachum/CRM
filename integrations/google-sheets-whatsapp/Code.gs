@@ -621,6 +621,15 @@ function handleNlpearlWebhook_(ss, payload) {
   const incomingPhone = phoneSuffix_(payload.to);
   if (!incomingPhone) return;
 
+  // מתעלמים מאירועים בלי טקסט קריא ממשי (רק קוד סטטוס פנימי מספרי של
+  // פרלה, למשל payload.status=5, בלי Indicator Tag/summary) - כדי
+  // שהלקוחה לעולם לא תראה "סטטוס: 5" לא מובן בעמודות. מעדכנים רק
+  // כשבאמת יש תגית/סיכום קריא.
+  const summary = (Array.isArray(payload.tags) && payload.tags.length)
+    ? payload.tags.join(', ')
+    : payload.summary;
+  if (!summary) return;
+
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -637,9 +646,6 @@ function handleNlpearlWebhook_(ss, payload) {
         const sheetPhone = phoneSuffix_(data[i][phoneCol]);
         if (sheetPhone && sheetPhone === incomingPhone) {
           const rowIndex = i + 1;
-          const summary = (Array.isArray(payload.tags) && payload.tags.length)
-            ? payload.tags.join(', ')
-            : (payload.summary || 'סטטוס: ' + payload.status);
           const existingResult = data[i][resultCol];
           const combined = existingResult ? (existingResult + '\n' + summary) : summary;
           sheet.getRange(rowIndex, resultCol + 1).setValue(combined);
