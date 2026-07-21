@@ -81,7 +81,22 @@ const TEAM_USERS_ = ['מזי', 'טליה'];
 // עמודה שנראית כמו טלפון נייד.
 const STATUS_COLORS_SHEET_NAME = 'צבעי סטטוס';
 const LEGEND_SHEET_NAME_ = 'מקרא';
-const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns', STATUS_COLORS_SHEET_NAME, LEGEND_SHEET_NAME_];
+// רשימת הסטטוסים הסגורה שהלקוחה שולטת בה - "סטטוס איש קשר" (ידני +
+// כפתורי וואטסאפ) חייב להיות אחד מהערכים כאן; "סטטוס שיחה" (פרלה,
+// ישיר או מזוקק ב-AI) מתעגל לערך הכי קרוב מהרשימה הזו (ר' matchCallStatus_).
+const STATUS_LIST_SHEET_NAME = 'רשימת סטטוסים';
+const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns', STATUS_COLORS_SHEET_NAME, LEGEND_SHEET_NAME_, STATUS_LIST_SHEET_NAME];
+
+// רשימת הפתיחה (זרע) לטאב "רשימת סטטוסים" - לפי בקשת הלקוחה במפורש.
+// נכתבת לגיליון רק פעם אחת, ע"י setupStatusListSheet_() (ר' למטה) - אחרי
+// מכן הלקוחה שולטת ברשימה ישירות מהגיליון, בלי צורך בשינוי קוד.
+const DEFAULT_STATUS_LIST_ = [
+  'שגוי', 'אין פרטי התקשרות', 'לא רלוונטי', 'לא מעוניין', 'לא לפנות', 'כפול', 'כללי', 'חברה נסגרה',
+  'פגישה פרונטלית', 'פגישה מקוונת', 'פגישה למעקב', 'פגישה לחיוב', 'פגישה לא לחיוב', 'פגישה התקיימה', 'פגישה בוטלה', 'לא מאשר הגעה',
+  'בתהליך', 'בתהליך עתידי', 'בתהליך מיידי', 'נשלח מייל', 'נשלח וואטסאפ', 'ממתין להקצאה',
+  'נרשם ע"י מיטוב', 'נרשם לבד', 'ירשם לבד', 'נסלק', 'נסגרה עסקה', 'נכח בכנס', 'לא נכח בכנס',
+  'ליד לא לחיוב', 'ליד הועבר ללקוח'
+];
 
 // --- Wix (לידים מטופס באתר) ---
 // שם הטאב שאליו נכנסים לידים חדשים מ-Wix - זהו טאב הקמפיין הקיים
@@ -594,6 +609,10 @@ function handleInforuWebhook_(ss, payload) {
             const firstReplyCol = ensureColumn_(sheet, headers, FIRST_REPLY_HEADER);
             if (!data[i][firstReplyCol]) {
               sheet.getRange(rowIndex, firstReplyCol + 1).setValue(buttonPayload);
+              // כפתורי וואטסאפ אינם קבועים מראש (הלקוחה מעצבת תבניות
+              // חדשות בעצמה) - כל טקסט כפתור חדש שעדיין לא ב"רשימת
+              // סטטוסים" מתווסף אליה אוטומטית, כדי שהרשימה תישאר מלאה.
+              addStatusIfMissing_(buttonPayload);
             }
           }
           return;
@@ -657,13 +676,12 @@ function handleNlpearlWebhook_(ss, payload) {
           // מגדירה ומשנה בעצמה בפרלה), בלי מיפוי קבוע בקוד, כי הרשימה
           // משתנה אצלה כל הזמן.
           const statusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
-          // כשיש payload.tags זו כבר תווית קצרה וקריאה בהגדרת הלקוחה בפרלה
-          // (כמו "לא מעוניין") - נכתבת ישירות. כשאין tags וה-summary הוא
-          // נרטיב ארוך שפרלה כתבה, מזקקים אותו ב-AI לתווית קצרה לפני
-          // הכתיבה ל"סטטוס שיחה" - כדי שהעמודה הזו תמיד תישאר קריאה
-          // במבט אחד. "סיכום שיחה" למעלה תמיד מקבל את הטקסט המלא, לא נגוע.
-          const hasShortTag = Array.isArray(payload.tags) && payload.tags.length;
-          const statusValue = hasShortTag ? summary : (distillCallStatus_(summary) || summary);
+          // "סטטוס שיחה" תמיד מתעגל לערך היחיד הכי קרוב מתוך "רשימת
+          // סטטוסים" (matchCallStatus_) - בין אם המקור הוא תגית קצרה
+          // שפרלה כבר נתנה (כמו "לא מעוניין") ובין אם זה נרטיב ארוך -
+          // כך שהעמודה הזו תמיד מדברת באותה שפה סגורה כמו "סטטוס איש
+          // קשר" הידני. "סיכום שיחה" למעלה תמיד מקבל את הטקסט המלא, לא נגוע.
+          const statusValue = matchCallStatus_(summary, getStatusList_());
           if (statusCol !== -1) sheet.getRange(rowIndex, statusCol + 1).setValue(statusValue);
           recordDailyActivity_(sheet.getName());
           return;
@@ -672,44 +690,6 @@ function handleNlpearlWebhook_(ss, payload) {
     }
   } finally {
     lock.releaseLock();
-  }
-}
-
-/**
- * מזקקת נרטיב שיחה ארוך (payload.summary מפרלה, כשאין Indicator Tag קצר)
- * לתווית קצרה וקריאה בעברית (עד כמה מילים), באותו סגנון כמו התגיות
- * שהלקוחה מגדירה בעצמה בפרלה ("לא מעוניין", "ליד חם", "ביקש לחזור אליו").
- * לא זורקת שגיאה - אם אין מפתח/יש כשל רשת/תשובה לא תקינה, מחזירה '' כדי
- * שהקורא ייפול חזרה לטקסט המלא (byte for byte) ולעולם לא ייתקע/יאבד מידע.
- */
-function distillCallStatus_(narrative) {
-  try {
-    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-    if (!apiKey || !narrative) return '';
-
-    const prompt = 'סכם את תוצאת שיחת המכירה הבאה בתווית קצרה אחת בעברית ' +
-      '(עד 4 מילים, בלי נקודה בסוף), באותו סגנון כמו תגיות שמשתמשות אנשי מכירות ' +
-      'כמו "לא מעוניין", "ליד חם", "ביקש לחזור אליו", "תואמה פגישה", "לא ענה". ' +
-      'החזירי רק את התווית עצמה, בלי מירכאות ובלי הסבר נוסף.\n\nתמלול/סיכום השיחה:\n' + narrative;
-
-    const response = UrlFetchApp.fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey,
-      {
-        method: 'post',
-        contentType: 'application/json',
-        payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-        muteHttpExceptions: true
-      }
-    );
-
-    const result = JSON.parse(response.getContentText());
-    const rawText = result.candidates && result.candidates[0] && result.candidates[0].content &&
-      result.candidates[0].content.parts && result.candidates[0].content.parts[0] &&
-      result.candidates[0].content.parts[0].text;
-
-    return rawText ? rawText.trim().replace(/^["'״]+|["'״]+$/g, '') : '';
-  } catch (e) {
-    return '';
   }
 }
 
@@ -1123,19 +1103,25 @@ function cleanupPearlNumericStatuses() {
 }
 
 /**
- * כלי חד-פעמי: מזקקת ב-AI (Gemini) שורות "סטטוס שיחה" היסטוריות שבהן
- * נשאר נרטיב ארוך במקום תווית קצרה (כי בשעתו פרלה לא סיפקה Indicator Tag
- * קצר, רק סיכום חופשי) - למשל אחרי cleanupPearlNumericStatuses. מזהה
- * "ארוך מדי" לפי אורך טקסט (מעל DISTILL_LENGTH_THRESHOLD_ תווים - תווית
- * אמיתית כמו "לא מעוניין" תמיד קצרה בהרבה). כותבת **רק** ל"סטטוס שיחה" -
- * "סיכום שיחה" (הטקסט המלא) לעולם לא נגעת. אם Gemini נכשל/מחזירה ריק
- * לשורה מסוימת, השורה הזו נשארת בדיוק כמו שהיתה (לא נמחק/מומצא דבר).
+ * כלי חד-פעמי: מעגלת ב-AI (Gemini) שורות "סטטוס שיחה" היסטוריות שהערך
+ * שלהן **לא** תואם בדיוק ערך מתוך "רשימת סטטוסים" (בין אם זה נרטיב ארוך
+ * שפרלה כתבה, ובין אם זו תגית שהניסוח שלה קצת שונה מהרשימה) - לערך היחיד
+ * הכי קרוב מהרשימה, כדי שהעמודה כולה תדבר באותה שפה סגורה. כותבת **רק**
+ * ל"סטטוס שיחה" - "סיכום שיחה" (הטקסט המלא) לעולם לא נגעת. אם Gemini
+ * נכשל/מחזירה ערך שלא נמצא ברשימה, השורה נשארת בדיוק כמו שהיתה (לא
+ * נמחק/מומצא דבר). דורשת שהטאב "רשימת סטטוסים" כבר קיים - ר' setupStatusListSheet_.
  *
  * מריצים קודם את previewDistillCallStatuses() (לא נוגעת בכלום) ורק אחר
  * כך את distillCallStatuses() שבאמת כותבת לגיליון.
  */
 function collectDistillCallStatuses_(dryRun) {
-  const DISTILL_LENGTH_THRESHOLD_ = 30;
+  const statusList = getStatusList_();
+  if (!statusList.length) {
+    Logger.log('הטאב "' + STATUS_LIST_SHEET_NAME + '" עדיין ריק/לא קיים - יש להריץ קודם setupStatusListSheet_() פעם אחת.');
+    return 0;
+  }
+  const normalizedList = statusList.map(normalizeLabel_);
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = getCampaignSheets_(ss);
   let changed = 0;
@@ -1149,30 +1135,30 @@ function collectDistillCallStatuses_(dryRun) {
 
     for (let i = 1; i < data.length; i++) {
       const rawStatus = String(data[i][statusCol] || '');
-      if (!rawStatus || rawStatus.length <= DISTILL_LENGTH_THRESHOLD_) continue;
+      if (!rawStatus || normalizedList.indexOf(normalizeLabel_(rawStatus)) !== -1) continue; // כבר תואם בדיוק ערך מהרשימה
 
       const name = nameCol !== -1 ? data[i][nameCol] : '';
 
       if (dryRun) {
         Logger.log('[תצוגה מקדימה] טאב "' + sheet.getName() + '", ' + name +
-          ': סטטוס שיחה ארוך (' + rawStatus.length + ' תווים) יזוקק ל-AI: "' + rawStatus + '"');
+          ': סטטוס שיחה לא ברשימה, יעוגל ל-AI: "' + rawStatus + '"');
         changed++;
       } else {
         // ניסיון שני עם השהייה קצרה - נתקלנו בפועל בכשלים שנראים כמו
         // הגבלת קצב (rate limit) של Gemini כשקוראים לו הרבה פעמים ברצף
         // מהיר; השהייה בין שורה לשורה + ניסיון חוזר יחיד מצמצמים את זה
         // משמעותית בלי לסבך את המשתמשת בפרטים טכניים.
-        let distilled = distillCallStatus_(rawStatus);
-        if (!distilled) {
+        let matched = matchCallStatus_(rawStatus, statusList);
+        if (normalizeLabel_(matched) === normalizeLabel_(rawStatus)) {
           Utilities.sleep(3000);
-          distilled = distillCallStatus_(rawStatus);
+          matched = matchCallStatus_(rawStatus, statusList);
         }
-        if (distilled) {
-          sheet.getRange(i + 1, statusCol + 1).setValue(distilled);
-          Logger.log('טאב "' + sheet.getName() + '", ' + name + ': סטטוס שיחה עודכן -> "' + distilled + '" (הטקסט המלא נשאר כמו שהיה בהערות פרלה)');
+        if (normalizeLabel_(matched) !== normalizeLabel_(rawStatus)) {
+          sheet.getRange(i + 1, statusCol + 1).setValue(matched);
+          Logger.log('טאב "' + sheet.getName() + '", ' + name + ': סטטוס שיחה עודכן -> "' + matched + '" (הטקסט המלא נשאר כמו שהיה בהערות פרלה)');
           changed++;
         } else {
-          Logger.log('טאב "' + sheet.getName() + '", ' + name + ': לא הצלחתי לזקק (Gemini לא החזיר תשובה) - השורה נשארה כמו שהיתה, שום דבר לא נמחק. אפשר להריץ את distillCallStatuses שוב, זה ינסה שוב רק את השורות שעדיין ארוכות.');
+          Logger.log('טאב "' + sheet.getName() + '", ' + name + ': לא הצלחתי לעגל (Gemini לא החזיר תשובה תואמת) - השורה נשארה כמו שהיתה, שום דבר לא נמחק. אפשר להריץ את distillCallStatuses שוב.');
         }
         Utilities.sleep(1500);
       }
@@ -1180,7 +1166,7 @@ function collectDistillCallStatuses_(dryRun) {
   });
 
   Logger.log((dryRun ? 'תצוגה מקדימה: ' : 'בוצע בפועל: ') + changed + ' שורות ' +
-    (dryRun ? 'יזוקקו אם תריצי את distillCallStatuses' : 'זוקקו') + '.');
+    (dryRun ? 'יעוגלו אם תריצי את distillCallStatuses' : 'עוגלו') + '.');
   return changed;
 }
 
@@ -1619,6 +1605,110 @@ function getStatusColors_() {
   return colors;
 }
 
+/**
+ * קוראת את הרשימה הסגורה של "רשימת סטטוסים" (טאב שהלקוחה שולטת בו
+ * ישירות, כמו "צבעי סטטוס") - עמודה A, ללא הנחת שורת כותרת (מאותה
+ * סיבה כמו getStatusColors_ - לא להניח שיש כותרת). מחזירה [] אם הטאב
+ * עדיין לא נוצר (ר' setupStatusListSheet_) - כל תלוי-רשימה (matchCallStatus_
+ * וכו') חייב להתנהג בביטחון גם כשזה ריק.
+ */
+function getStatusList_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(STATUS_LIST_SHEET_NAME);
+  if (!sheet) return [];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 1) return [];
+
+  return sheet.getRange(1, 1, lastRow, 1).getValues()
+    .map(function (r) { return String(r[0] || '').trim(); })
+    .filter(function (s) { return !!s; });
+}
+
+/**
+ * יוצרת את טאב "רשימת סטטוסים" ומזריעה אותה ברשימה שהלקוחה נתנה
+ * (DEFAULT_STATUS_LIST_) - **פעם אחת בלבד**, כשהטאב עוד לא קיים או ריק
+ * לגמרי. אם כבר יש בו ערכים (הלקוחה כבר ערכה אותו), לא נוגעת בכלל -
+ * לעולם לא דורסת עריכה ידנית קיימת. מריצים ידנית פעם אחת מהעורך.
+ */
+function setupStatusListSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(STATUS_LIST_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(STATUS_LIST_SHEET_NAME);
+  } else if (sheet.getLastRow() > 0) {
+    Logger.log('הטאב "' + STATUS_LIST_SHEET_NAME + '" כבר קיים ומכיל נתונים - לא נגעתי בו.');
+    return;
+  }
+  sheet.getRange(1, 1, DEFAULT_STATUS_LIST_.length, 1)
+    .setValues(DEFAULT_STATUS_LIST_.map(function (s) { return [s]; }));
+  Logger.log('הטאב "' + STATUS_LIST_SHEET_NAME + '" נוצר והוזרע ב-' + DEFAULT_STATUS_LIST_.length + ' סטטוסים.');
+}
+
+/**
+ * מוסיפה ערך חדש ל"רשימת סטטוסים" אם הוא עוד לא קיים בה (השוואה מנורמלת,
+ * כמו כל התאמת טקסט אחרת בקוד הזה) - נקראת מ-handleInforuWebhook_ כשליד
+ * לוחץ על כפתור וואטסאפ חדש שלא הוגדר מראש. לא נוגעת בטאב אם הוא עדיין
+ * לא נוצר (setupStatusListSheet_ לא רץ) - כדי לא ליצור טאב לא-מתוכנן.
+ */
+function addStatusIfMissing_(text) {
+  if (!text) return;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(STATUS_LIST_SHEET_NAME);
+  if (!sheet) return;
+
+  const existing = getStatusList_();
+  const normalized = normalizeLabel_(text);
+  if (existing.some(function (s) { return normalizeLabel_(s) === normalized; })) return;
+
+  sheet.getRange(sheet.getLastRow() + 1, 1).setValue(text);
+}
+
+/**
+ * "מעגלת" טקסט חופשי (תגית ישירה מפרלה, או נרטיב ארוך) לערך היחיד
+ * הכי מתאים מתוך "רשימת סטטוסים" - כדי ש"סטטוס שיחה" תמיד ידבר באותה
+ * שפה בדיוק כמו "סטטוס איש קשר" (בקשת הלקוחה: "יתעגלו לערך הכי קרוב").
+ * אם עדיין אין רשימה מוגדרת (הטאב לא נוצר) - מחזירה את הטקסט המקורי
+ * כמו שהוא, בלי לנסות לעגל (שום דבר לעיגול). אם ל-AI אין מפתח/יש כשל/
+ * מחזיר ערך שלא נמצא ברשימה בדיוק - נופלת בחזרה לטקסט המקורי, לעולם לא
+ * זורקת שגיאה ולעולם לא ממציאה ערך שלא ברשימה.
+ */
+function matchCallStatus_(text, statusList) {
+  if (!text) return '';
+  if (!statusList || !statusList.length) return text;
+
+  try {
+    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    if (!apiKey) return text;
+
+    const prompt = 'להלן רשימה סגורה של סטטוסים אפשריים, ותקציר/תגית של שיחת מכירה. ' +
+      'בחרי בדיוק ערך אחד מהרשימה שהכי מתאים לתאר את השיחה, והחזירי אותו בדיוק ' +
+      'כפי שהוא כתוב ברשימה (אות באות, בלי לשנות ניסוח ובלי להוסיף שום דבר נוסף).\n\n' +
+      'הרשימה:\n' + statusList.join('\n') + '\n\nהשיחה:\n' + text;
+
+    const response = UrlFetchApp.fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey,
+      {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        muteHttpExceptions: true
+      }
+    );
+
+    const result = JSON.parse(response.getContentText());
+    const rawText = result.candidates && result.candidates[0] && result.candidates[0].content &&
+      result.candidates[0].content.parts && result.candidates[0].content.parts[0] &&
+      result.candidates[0].content.parts[0].text;
+    if (!rawText) return text;
+
+    const normalized = normalizeLabel_(rawText.trim());
+    const match = statusList.find(function (s) { return normalizeLabel_(s) === normalized; });
+    return match || text;
+  } catch (e) {
+    return text;
+  }
+}
+
 function getCampaignData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
@@ -1725,7 +1815,8 @@ function getCampaignData(sheetName) {
     replyBreakdown: replyBreakdown_(rows),
     trend: dailyActivityTrend_(sheetName),
     teamUsers: TEAM_USERS_,
-    statusColors: getStatusColors_()
+    statusColors: getStatusColors_(),
+    statusList: getStatusList_()
   };
 }
 
