@@ -1158,14 +1158,23 @@ function collectDistillCallStatuses_(dryRun) {
           ': סטטוס שיחה ארוך (' + rawStatus.length + ' תווים) יזוקק ל-AI: "' + rawStatus + '"');
         changed++;
       } else {
-        const distilled = distillCallStatus_(rawStatus);
+        // ניסיון שני עם השהייה קצרה - נתקלנו בפועל בכשלים שנראים כמו
+        // הגבלת קצב (rate limit) של Gemini כשקוראים לו הרבה פעמים ברצף
+        // מהיר; השהייה בין שורה לשורה + ניסיון חוזר יחיד מצמצמים את זה
+        // משמעותית בלי לסבך את המשתמשת בפרטים טכניים.
+        let distilled = distillCallStatus_(rawStatus);
+        if (!distilled) {
+          Utilities.sleep(3000);
+          distilled = distillCallStatus_(rawStatus);
+        }
         if (distilled) {
           sheet.getRange(i + 1, statusCol + 1).setValue(distilled);
           Logger.log('טאב "' + sheet.getName() + '", ' + name + ': סטטוס שיחה עודכן -> "' + distilled + '" (הטקסט המלא נשאר כמו שהיה בהערות פרלה)');
           changed++;
         } else {
-          Logger.log('טאב "' + sheet.getName() + '", ' + name + ': לא הצלחתי לזקק (Gemini לא החזיר תשובה) - השורה נשארה כמו שהיתה, שום דבר לא נמחק.');
+          Logger.log('טאב "' + sheet.getName() + '", ' + name + ': לא הצלחתי לזקק (Gemini לא החזיר תשובה) - השורה נשארה כמו שהיתה, שום דבר לא נמחק. אפשר להריץ את distillCallStatuses שוב, זה ינסה שוב רק את השורות שעדיין ארוכות.');
         }
+        Utilities.sleep(1500);
       }
     }
   });
