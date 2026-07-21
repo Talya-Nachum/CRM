@@ -29,7 +29,8 @@
  *
  * כותרות עמודות נדרשות בכל טאב קמפיין: טלפון נייד, שם פרטי, מספר תבנית,
  * סטטוס דיוור (שם ישן שעדיין נתמך: "סטטוס"), תשובת איש קשר, תאריך תשובה,
- * מזהה קמפיין, סטטוס שיחה, מזהה ליד NLPearl, תוצאות שיחה.
+ * מזהה קמפיין, סטטוס שיחה, מזהה ליד NLPearl, סיכום שיחה (שם ישן שעדיין
+ * נתמך: "תוצאות שיחה").
  * עמודות אופציונליות שנוצרות לבד אוטומטית בגיליון בפעם הראשונה שהן
  * נדרשות בפועל (אין צורך להוסיף אותן ידנית מראש): סטטוס איש קשר (עמודה
  * מובילה אחת - מתחילה מלחיצה אמיתית על כפתור תגובה בוואטסאפ, אבל ניתנת
@@ -63,7 +64,8 @@ const DEFAULT_OUTBOUND_ID = '6a27be5ae83373643a10ae34'; // מזהה ה-Pearl (ה
 const CAMPAIGN_HEADER = 'מזהה קמפיין';
 const CALL_STATUS_HEADER = 'סטטוס שיחה';
 const CALL_LEAD_ID_HEADER = 'מזהה ליד NLPearl';
-const CALL_RESULT_HEADER = 'תוצאות שיחה';
+const CALL_RESULT_HEADER = 'סיכום שיחה';
+const CALL_RESULT_HEADER_LEGACY = 'תוצאות שיחה'; // שם ישן - טאבים שטרם שונו ידנית
 const CALL_FIRST_RESULT_HEADER = 'תוצאה ראשונית (שיחה)';
 const CALL_DATE_HEADER = 'תאריך שיחה';
 const CALL_SENT_STATUS = 'שיחה נשלחה';
@@ -412,11 +414,14 @@ function startCallsInSheet_(sheet) {
     const row = data[i];
     const phone = row[phoneCol];
     const name = nameCol !== -1 ? row[nameCol] : '';
-    const callStatus = row[callStatusCol];
     const outboundId = (campaignCol !== -1 && row[campaignCol]) ? String(row[campaignCol]) : sheetOutboundId;
     const rowIndex = i + 1;
+    // "כבר נשלחה שיחה" נבדק לפי קיום מזהה ליד (leadId) - לא לפי טקסט
+    // "סטטוס שיחה", כי העמודה הזו נדרסת עכשיו עם הסטטוס האמיתי מ-NLPearl
+    // (ר' handleNlpearlWebhook_) ולא נשארת "שיחה נשלחה" לצמיתות.
+    const alreadyCalled = leadIdCol !== -1 && !!row[leadIdCol];
 
-    if (!phone || callStatus === CALL_SENT_STATUS) continue;
+    if (!phone || alreadyCalled) continue;
 
     recordLastContact_(phone, sheet.getName());
 
@@ -600,7 +605,7 @@ function handleNlpearlWebhook_(ss, payload) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
       const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
-      const resultCol = findColumnNormalized_(headers, CALL_RESULT_HEADER);
+      const resultCol = findHeaderIndex_(headers, CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
       if (phoneCol === -1 || resultCol === -1) continue;
 
       for (let i = 1; i < data.length; i++) {
@@ -615,6 +620,12 @@ function handleNlpearlWebhook_(ss, payload) {
           sheet.getRange(rowIndex, resultCol + 1).setValue(combined);
           const dateCol = ensureColumn_(sheet, headers, CALL_DATE_HEADER);
           sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
+          // "סטטוס שיחה" מוצג כמצב הנוכחי (נדרס בכל שיחה, לא מצטבר כמו
+          // "סיכום שיחה" למעלה) - אותו ערך בדיוק (ה-Indicator Tags שהלקוחה
+          // מגדירה ומשנה בעצמה בפרלה), בלי מיפוי קבוע בקוד, כי הרשימה
+          // משתנה אצלה כל הזמן.
+          const statusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
+          if (statusCol !== -1) sheet.getRange(rowIndex, statusCol + 1).setValue(summary);
           recordDailyActivity_(sheet.getName());
           return;
         }
@@ -1164,7 +1175,7 @@ function summarizeContact(sheetName, phone) {
 
   const name = get_(NAME_HEADER);
   const whatsappHistory = get_(REPLY_HEADER) || get_(REPLY_HEADER_LEGACY);
-  const callHistory = get_(CALL_RESULT_HEADER);
+  const callHistory = get_(CALL_RESULT_HEADER) || get_(CALL_RESULT_HEADER_LEGACY);
 
   if (!whatsappHistory && !callHistory) {
     throw new Error('אין עדיין שיחה עם הליד הזה לסכם');
@@ -1278,9 +1289,10 @@ function getCampaignData(sheetName) {
   const firstReplyCol = findColumnNormalized_(headers, FIRST_REPLY_HEADER);
   const replyDateCol = findColumnNormalized_(headers, REPLY_DATE_HEADER);
   const callStatusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
-  const callResultCol = findColumnNormalized_(headers, CALL_RESULT_HEADER);
+  const callResultCol = findHeaderIndex_(headers, CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
   const callFirstResultCol = findColumnNormalized_(headers, CALL_FIRST_RESULT_HEADER);
   const callDateCol = findColumnNormalized_(headers, CALL_DATE_HEADER);
+  const callLeadIdCol = findColumnNormalized_(headers, CALL_LEAD_ID_HEADER);
   const userNotesCol = findColumnNormalized_(headers, USER_NOTES_HEADER);
 
   const lastExportIso = lastExportTime_(sheetName);
@@ -1304,10 +1316,15 @@ function getCampaignData(sheetName) {
     const callDate = callDateCol !== -1 ? row[callDateCol] : null;
     const userNotes = userNotesCol !== -1 ? row[userNotesCol] : '';
 
+    // "שיחות בוצעו" נספר לפי קיום מזהה ליד (leadId) - לא לפי טקסט "סטטוס
+    // שיחה", כי העמודה הזו מוצגת עכשיו כתגית האמיתית מ-NLPearl ולא נשארת
+    // "שיחה נשלחה" לצמיתות (ר' handleNlpearlWebhook_/startCallsInSheet_).
+    const callWasSent = callLeadIdCol !== -1 && !!row[callLeadIdCol];
+
     if (status === SENT_STATUS) sent++;
     if (status.indexOf('שגיאה') === 0) errors++;
     if (reply) replies++;
-    if (callStatus === CALL_SENT_STATUS) callsSent++;
+    if (callWasSent) callsSent++;
     if (isToday_(replyDate) || isToday_(callDate)) activityToday++;
 
     const replyMs = (replyDate instanceof Date && !isNaN(replyDate.getTime())) ? replyDate.getTime() : 0;
