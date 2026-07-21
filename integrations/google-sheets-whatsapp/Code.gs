@@ -1013,6 +1013,70 @@ function normalizePhoneNumbers() {
 }
 
 /**
+ * כלי חד-פעמי: מנקה נתוני פרלה היסטוריים שנכתבו **לפני** התיקון ל-
+ * handleNlpearlWebhook_ (שמונע כתיבת קודי סטטוס מספריים לא קריאים כמו
+ * "סטטוס: 5"). מסירה מ"סיכום שיחה" (המצטברת) כל שורה שהיא בדיוק "סטטוס:
+ * N" בלי שום טקסט אמיתי לידה, ומעדכנת את "סטטוס שיחה" (הנדרסת) לשורה
+ * הקריאה **האחרונה** שנשארת אחרי הניקוי - אם לא נשארה אף שורה קריאה
+ * (השיחה מעולם לא קיבלה תגית/סיכום אמיתי מפרלה), משאירה אותה ריקה
+ * במקום להמציא טקסט. לא נוגעת בשורות בלי בעיה כזו כלל.
+ *
+ * מריצים קודם את previewCleanupPearlNumericStatuses() (לא נוגעת בכלום)
+ * ורק אחר כך את cleanupPearlNumericStatuses() שבאמת כותבת לגיליון.
+ */
+function collectPearlNumericCleanup_(dryRun) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = getCampaignSheets_(ss);
+  const NUMERIC_ONLY_RE = /^סטטוס: \d+$/;
+  let changed = 0;
+
+  sheets.forEach(function (sheet) {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+    const resultCol = findHeaderIndex_(headers, CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
+    const statusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
+    if (resultCol === -1) return;
+
+    for (let i = 1; i < data.length; i++) {
+      const rawResult = String(data[i][resultCol] || '');
+      if (!rawResult) continue;
+
+      const lines = rawResult.split('\n');
+      const cleanLines = lines.filter(function (line) { return !NUMERIC_ONLY_RE.test(line.trim()); });
+      if (cleanLines.length === lines.length) continue; // אין כאן שום שורת "סטטוס: N" לנקות
+
+      const newResult = cleanLines.join('\n');
+      const newStatus = cleanLines.length ? cleanLines[cleanLines.length - 1] : '';
+      const name = nameCol !== -1 ? data[i][nameCol] : '';
+
+      if (dryRun) {
+        Logger.log('[תצוגה מקדימה] טאב "' + sheet.getName() + '", ' + name +
+          ': סיכום שיחה "' + rawResult + '" -> "' + newResult + '", סטטוס שיחה -> "' + newStatus + '"');
+      } else {
+        sheet.getRange(i + 1, resultCol + 1).setValue(newResult);
+        if (statusCol !== -1) sheet.getRange(i + 1, statusCol + 1).setValue(newStatus);
+      }
+      changed++;
+    }
+  });
+
+  Logger.log((dryRun ? 'תצוגה מקדימה: ' : 'בוצע בפועל: ') + changed + ' שורות ' +
+    (dryRun ? 'ינוקו אם תריצי את cleanupPearlNumericStatuses' : 'נוקו') + '.');
+  return changed;
+}
+
+/** מריצים את זו קודם - לא נוגעת בגיליון, רק מראה מה היה משתנה. */
+function previewCleanupPearlNumericStatuses() {
+  return collectPearlNumericCleanup_(true);
+}
+
+/** מריצים את זו רק אחרי שבדקת את הפלט של הפונקציה הקודמת ואת מרוצה ממנו. */
+function cleanupPearlNumericStatuses() {
+  return collectPearlNumericCleanup_(false);
+}
+
+/**
  * כלי אבחון חד-פעמי: מדפיסה ליומן הביצוע בדיוק מה הקוד רואה עבור מספר
  * טלפון נתון - שורת הכותרות המדויקת (עם מרכאות, כדי לחשוף רווחים
  * נסתרים), אינדקס העמודות שנמצאו, והערך הגולמי בפועל בתא. סורקת את כל
