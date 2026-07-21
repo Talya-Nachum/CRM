@@ -1388,7 +1388,10 @@ function getStatusColors_() {
   for (let i = 0; i < statuses.length; i++) {
     const status = String(statuses[i][0] || '').trim();
     const color = backgrounds[i][0];
-    if (status && color && color.toLowerCase() !== '#ffffff') colors[status] = color;
+    // מפתח מנורמל (findColumnNormalized_/normalizeLabel_) - כדי שרווח
+    // נסתר/גרש/רישיות בטאב "צבעי סטטוס" לא ישברו את ההתאמה בשקט, בדיוק
+    // כמו כותרות עמודות בשאר הקוד.
+    if (status && color && color.toLowerCase() !== '#ffffff') colors[normalizeLabel_(status)] = color;
   }
   return colors;
 }

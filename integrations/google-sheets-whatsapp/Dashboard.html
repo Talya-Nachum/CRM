@@ -2093,11 +2093,19 @@
   const STATUS_COLOR_FALLBACK_PALETTE = ['#DB2777', '#65A30D', '#9333EA', '#0D9488', '#EA580C', '#4338CA'];
   let customStatusColors = {}; // מטאב "צבעי סטטוס" (אופציונלי) - ר' renderCampaign/getStatusColors_
 
+  // מנרמלת בדיוק כמו normalizeLabel_ בצד השרת (Code.gs) - מורידה גרשיים/
+  // רווח כפול/רווח בקצה/רישיות - כדי שהתאמה לטאב "צבעי סטטוס" לא תישבר
+  // בשקט בגלל הבדל עיצוב קטן בין הטקסטים.
+  function normalizeStatusKey_(s) {
+    return String(s || '').replace(/["'״׳]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
   // סדר עדיפות: צבע שהלקוחה הגדירה בעצמה בטאב "צבעי סטטוס" > צבע קבוע
   // מוכר בקוד > צבע דטרמיניסטי (hash) לכל סטטוס אחר/חדש.
   function colorForStatus_(status) {
     const s = String(status || '');
-    if (customStatusColors[s]) return customStatusColors[s];
+    const customColor = customStatusColors[normalizeStatusKey_(s)];
+    if (customColor) return customColor;
     if (KNOWN_STATUS_COLORS[s]) return KNOWN_STATUS_COLORS[s];
     let hash = 0;
     for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
