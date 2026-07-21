@@ -1055,6 +1055,41 @@ function debugIshai() {
   debugContactByPhone('532742755');
 }
 
+/**
+ * כלי אבחון חד-פעמי: עבור **כל** טאב קמפיין, סופרת וכותבת ליומן בדיוק
+ * אילו שורות (שם + טלפון) יש להן ערך באחת מעמודות פרלה (סטטוס שיחה/
+ * תוצאות שיחה/מזהה ליד NLPearl) - כדי לדעת בוודאות (לא בניחוש) למה
+ * עמודות "סטטוס פרלה"/"הערות פרלה" מוצגות או לא מוצגות בדשבורד לטאב
+ * מסוים. לא נוגעת בכלום, רק קוראת.
+ */
+function debugPearlActivity() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = getCampaignSheets_(ss);
+
+  sheets.forEach(function (sheet) {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+    const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+    const callStatusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
+    const callResultCol = findHeaderIndex_(headers, CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
+    const leadIdCol = findColumnNormalized_(headers, CALL_LEAD_ID_HEADER);
+
+    const found = [];
+    for (let i = 1; i < data.length; i++) {
+      const status = callStatusCol !== -1 ? data[i][callStatusCol] : '';
+      const result = callResultCol !== -1 ? data[i][callResultCol] : '';
+      const leadId = leadIdCol !== -1 ? data[i][leadIdCol] : '';
+      if (status || result || leadId) {
+        const name = nameCol !== -1 ? data[i][nameCol] : '';
+        const phone = phoneCol !== -1 ? data[i][phoneCol] : '';
+        found.push(name + ' / ' + phone + ' - סטטוס שיחה: "' + status + '", תוצאות שיחה: "' + result + '", מזהה ליד: "' + leadId + '"');
+      }
+    }
+    Logger.log('טאב "' + sheet.getName() + '" - ' + found.length + ' שורות עם נתוני פרלה' + (found.length ? ':\n' + found.join('\n') : ''));
+  });
+}
+
 function validateTeamUser_(username) {
   if (TEAM_USERS_.indexOf(username) === -1) {
     throw new Error('שם משתמש לא מוכר: ' + username);
