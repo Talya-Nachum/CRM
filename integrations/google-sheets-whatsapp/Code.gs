@@ -1160,7 +1160,10 @@ function collectDistillCallStatuses_(dryRun) {
         const distilled = distillCallStatus_(rawStatus);
         if (distilled) {
           sheet.getRange(i + 1, statusCol + 1).setValue(distilled);
+          Logger.log('טאב "' + sheet.getName() + '", ' + name + ': סטטוס שיחה עודכן -> "' + distilled + '" (הטקסט המלא נשאר כמו שהיה בהערות פרלה)');
           changed++;
+        } else {
+          Logger.log('טאב "' + sheet.getName() + '", ' + name + ': לא הצלחתי לזקק (Gemini לא החזיר תשובה) - השורה נשארה כמו שהיתה, שום דבר לא נמחק.');
         }
       }
     }
