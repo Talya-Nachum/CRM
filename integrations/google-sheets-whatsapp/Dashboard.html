@@ -1185,7 +1185,7 @@
     data.rows = data.rows.slice().sort(function (a, b) {
       const aNew = a._isNew ? 1 : 0, bNew = b._isNew ? 1 : 0;
       if (aNew !== bNew) return bNew - aNew;
-      const aReplied = a.userNotes ? 1 : 0, bReplied = b.userNotes ? 1 : 0;
+      const aReplied = a.reply ? 1 : 0, bReplied = b.reply ? 1 : 0;
       return bReplied - aReplied;
     });
 
@@ -1210,12 +1210,12 @@
     const prevSnap = rowSnapshots[currentTabName];
     const newSnap = {};
     data.rows.forEach(function (r) {
-      newSnap[r.phone] = { userNotes: r.userNotes, callResult: r.callResult };
+      newSnap[r.phone] = { reply: r.reply, callResult: r.callResult };
       if (prevSnap) {
         const prev = prevSnap[r.phone];
-        const notesChanged = r.userNotes && (!prev || r.userNotes !== prev.userNotes);
+        const replyChanged = r.reply && (!prev || r.reply !== prev.reply);
         const callChanged = r.callResult && (!prev || r.callResult !== prev.callResult);
-        r._isNew = !!(prev && (notesChanged || callChanged));
+        r._isNew = !!(prev && (replyChanged || callChanged));
       }
     });
     rowSnapshots[currentTabName] = newSnap;
@@ -1245,16 +1245,20 @@
         if (r.firstReply) return '<td class="reply-cell">💬 ' + escapeHtml_(r.firstReply) + '</td>';
         return '<td>' + pill_(r.status, r.statusClass, 'ממתין') + '</td>';
       } },
+    { key: 'reply', label: 'הערות איש קשר', always: true,
+      // שיחת הוואטסאפ עם הבוט (טקסט חופשי בלבד - לחיצת כפתור לבדה כבר
+      // מתועדת ב"סטטוס" ולא משוכפלת לכאן). נפרדת מ"הערות מיטוב".
+      filterValue: function (r) { return r.reply ? lastReplyLine_(r.reply) : ''; },
+      cell: function (r) { return '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
     { key: 'notes', label: 'הערות מיטוב', always: true,
-      // עמודה מאוחדת: כל שיחת הוואטסאפ עם הבוט + הערות ידניות של הצוות,
-      // ר' handleInforuWebhook_/appendNoteEntry_ ב-Code.gs. התא מציג
-      // תקציר קצר (מי כתב אחרון + כמות) - הטקסט המלא נפתח ב"+".
+      // יומן הערות ידניות של הצוות בלבד (addUserNote/setUserStatus) -
+      // נפרד מ"הערות איש קשר". התא מציג תקציר קצר (מי כתב אחרון + כמות) -
+      // הטקסט המלא נפתח ב"+".
       filterValue: function (r) { return r.userNotes || ''; },
       cell: function (r) {
         const summary = parseNotesSummary_(r.userNotes);
         if (!summary) return '<td class="reply-cell">—</td>';
-        return '<td><span class="note-chip" data-phone="' + escapeHtml_(r.phone) + '" title="' + escapeHtml_(r.userNotes) + '">📝 ' + escapeHtml_(summary.lastAuthor) + ' (' + summary.count + ')</span>' +
-          (r._isNew ? '<span class="new-badge">חדש</span>' : '') + '</td>';
+        return '<td><span class="note-chip" data-phone="' + escapeHtml_(r.phone) + '" title="' + escapeHtml_(r.userNotes) + '">📝 ' + escapeHtml_(summary.lastAuthor) + ' (' + summary.count + ')</span></td>';
       } },
     { key: 'date', label: 'תאריך', always: true, sortable: true,
       filterValue: function (r) { return r.replyDate || ''; },
@@ -1521,13 +1525,13 @@
   }
 
   /**
-   * הקטגוריה של שורה - התגובה הראשונית (לחיצת כפתור) אם יש, אחרת ריק
-   * (= "טרם ענו"). זהה ללוגיקה שמחשבת את replyBreakdown_ בצד השרת
-   * (Code.gs), כדי שהלחיצה על הלג'נד תסנן בדיוק את מי שנספר תחת אותה
-   * קטגוריה בגרף.
+   * הקטגוריה של שורה - התגובה הראשונית אם יש, אחרת ההודעה הראשונה
+   * בשרשור, אחרת ריק (= "טרם ענו"). זהה ללוגיקה שמחשבת את replyBreakdown_
+   * בצד השרת (Code.gs), כדי שהלחיצה על הלג'נד תסנן בדיוק את מי שנספר
+   * תחת אותה קטגוריה בגרף.
    */
   function categoryOf_(r) {
-    return r.firstReply || '';
+    return r.firstReply || (r.reply ? String(r.reply).split('\n')[0] : '') || '';
   }
 
   function rowMatchesCategory_(r, filter) {
@@ -1697,12 +1701,12 @@
       // הזמינים, רק אלה שהיא באמת רוצה לראות בקובץ שיורד. שתי רמות הדגשה:
       // צהוב = התעדכן היום, ירוק חלש = התעדכן מאז ההורדה הקודמת (ר'
       // updatedToday/recentlyUpdated ב-getCampaignData).
-      const headers = ['שם חברה', 'שם איש קשר', 'טלפון נייד', 'סטטוס', 'הערות מיטוב', 'תאריך'];
+      const headers = ['שם חברה', 'שם איש קשר', 'טלפון נייד', 'סטטוס', 'הערות איש קשר', 'הערות מיטוב', 'תאריך'];
 
       const exportRows = rows.map(function (r) {
         const finalStatus = r.firstReply || r.status || '';
         return {
-          values: [r.company || '', r.name || '', r.phone || '', finalStatus, r.userNotes || '', r.replyDate || ''],
+          values: [r.company || '', r.name || '', r.phone || '', finalStatus, r.reply || '', r.userNotes || '', r.replyDate || ''],
           updatedToday: !!r.updatedToday,
           recentlyUpdated: !!r.recentlyUpdated
         };
