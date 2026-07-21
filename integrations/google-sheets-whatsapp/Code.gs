@@ -209,6 +209,30 @@ function phoneSuffix_(phone) {
 }
 
 /**
+ * ממירה מספר טלפון גולמי (בכל פורמט שהלקוח שלח - עם/בלי מקף, עם/בלי
+ * 0 מוביל, עם/בלי 972+) לפורמט אחיד קבוע: "05X-XXXXXXX" - כדי שפרלה
+ * תמיד תוכל לחייג (וגם כדי שהעמודה תיראה אחידה בגיליון עצמו). מזהה רק
+ * מספרים ישראליים סבירים (9-10 ספרות מקומיות, או 972+ עם 9 ספרות אחריו) -
+ * מחזירה null אם הפורמט לא מזוהה בבירור, כדי לא לנחש/לשבש מספר תקין.
+ */
+function normalizePhoneValue_(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  let local10 = null;
+  if (digits.length === 10 && digits.charAt(0) === '0') {
+    local10 = digits;
+  } else if (digits.length === 9 && digits.charAt(0) !== '0') {
+    local10 = '0' + digits;
+  } else if (digits.length === 12 && digits.indexOf('972') === 0) {
+    local10 = '0' + digits.slice(3);
+  } else if (digits.length === 13 && digits.indexOf('9720') === 0) {
+    local10 = '0' + digits.slice(4);
+  } else {
+    return null;
+  }
+  return local10.slice(0, 3) + '-' + local10.slice(3);
+}
+
+/**
  * כלי עזר חד-פעמי: מציג את כל קמפייני ה-Outbound של NLPearl (עם ה-
  * outboundId האמיתי שלהם, שונה ממזהה ה-Pearl/הסוכנת) בטאב "NLPearlCampaigns",
  * כי מזהה ה-Pearl שמופיע בכתובת ה-URL בפלטפורמה הוא לא ה-outboundId
@@ -769,7 +793,10 @@ function addContactRow_(sheet, fields) {
   };
 
   const row = new Array(headers.length).fill('');
-  row[phoneCol] = fields.phone;
+  // מנרמלת לפורמט אחיד "05X-XXXXXXX" תמיד (כדי שפרלה תוכל לחייג בלי
+  // תלות באיך הלקוח שלח את המספר) - אם הפורמט לא מזוהה בבירור, נשמר
+  // המספר הגולמי כמו שהוא ולא מנוחש/משובש.
+  row[phoneCol] = normalizePhoneValue_(fields.phone) || fields.phone;
   Object.keys(columnByField).forEach(function (key) {
     const col = findColumnNormalized_(headers, columnByField[key]);
     if (col !== -1) row[col] = (fields && fields[key]) || '';
@@ -912,6 +939,71 @@ function previewCleanupHistoricalButtonEchoes() {
 /** מריצים את זו רק אחרי שבדקת את הפלט של הפונקציה הקודמת ואת מרוצה ממנו. */
 function cleanupHistoricalButtonEchoes() {
   return collectButtonEchoCleanup_(false);
+}
+
+/**
+ * כלי חד-פעמי: מתקנת את עמודת "טלפון נייד" בכל טאבי הקמפיינים לפורמט
+ * אחיד "05X-XXXXXXX" (ר' normalizePhoneValue_) - כדי שפרלה תמיד תוכל
+ * לחייג, בלי קשר לאיך הלקוח שלח את המספר במקור. שורות עתידיות (הוספה
+ * מהדשבורד/לידים מ-Wix) מתוקנות אוטומטית כבר ב-addContactRow_ - הכלי
+ * הזה רק לניקוי מה שכבר קיים בגיליון. נוגעת אך ורק במספרים שמזוהים
+ * בבירור כמספר ישראלי תקין - מספר בפורמט לא ברור נשאר כמו שהוא (מודפס
+ * ליומן כ"לא זוהה"), לא מנוחש/משובש.
+ *
+ * מריצים קודם את previewNormalizePhoneNumbers() (לא נוגעת בכלום) ורק
+ * אחר כך את normalizePhoneNumbers() שבאמת כותבת לגיליון.
+ */
+function collectPhoneNormalization_(dryRun) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = getCampaignSheets_(ss);
+  let changed = 0;
+  let unrecognized = 0;
+
+  sheets.forEach(function (sheet) {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+    const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+    if (phoneCol === -1) return;
+
+    if (!dryRun) sheet.getRange(2, phoneCol + 1, data.length - 1, 1).setNumberFormat('@');
+
+    for (let i = 1; i < data.length; i++) {
+      const raw = data[i][phoneCol];
+      if (!raw) continue;
+      const name = nameCol !== -1 ? data[i][nameCol] : '';
+      const normalized = normalizePhoneValue_(raw);
+
+      if (!normalized) {
+        Logger.log('[לא זוהה - לא שונה] טאב "' + sheet.getName() + '", ' + name + ': "' + raw + '"');
+        unrecognized++;
+        continue;
+      }
+      if (String(raw).trim() === normalized) continue;
+
+      if (dryRun) {
+        Logger.log('[תצוגה מקדימה] טאב "' + sheet.getName() + '", ' + name + ': "' + raw + '" -> "' + normalized + '"');
+      } else {
+        sheet.getRange(i + 1, phoneCol + 1).setValue(normalized);
+      }
+      changed++;
+    }
+  });
+
+  Logger.log((dryRun ? 'תצוגה מקדימה: ' : 'בוצע בפועל: ') + changed + ' מספרים ' +
+    (dryRun ? 'ישתנו אם תריצי את normalizePhoneNumbers' : 'תוקנו') +
+    '. ' + unrecognized + ' מספרים לא זוהו בבירור ולא נגעו בהם (ר\' פירוט למעלה ביומן).');
+  return changed;
+}
+
+/** מריצים את זו קודם - לא נוגעת בגיליון, רק מראה מה היה משתנה. */
+function previewNormalizePhoneNumbers() {
+  return collectPhoneNormalization_(true);
+}
+
+/** מריצים את זו רק אחרי שבדקת את הפלט של הפונקציה הקודמת ואת מרוצה ממנו. */
+function normalizePhoneNumbers() {
+  return collectPhoneNormalization_(false);
 }
 
 /**
