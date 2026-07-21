@@ -1275,22 +1275,41 @@
     { key: 'phone', label: 'טלפון נייד', always: true,
       filterValue: function (r) { return r.phone || ''; },
       cell: function (r) { return '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>'; } },
-    { key: 'finalStatus', label: 'סטטוס', always: true, sortable: true,
-      // רק לחיצה אמיתית על כפתור - לא תשובה חופשית (זו כבר מוצגת בעמודת
-      // "הערות איש קשר"). כל עוד לא הגיעה תגובה כזו, נשאר הסטטוס הבסיסי
-      // ("נשלח וואטסאפ" וכו') - וניתן לדריסה חופשית תמיד ע"י הצוות. לכל
-      // סטטוס יש צבע קבוע/עקבי משלו (colorForStatus_) - לא רק ירוק/אדום.
+    { key: 'finalStatus', label: 'סטטוס', always: false, sortable: true,
+      // מוצגת רק אם בפועל רץ קמפיין וואטסאפ (יש ערך סטטוס/תגובה אצל מישהו) -
+      // אם לא, אין טעם להציג עמודה ריקה. רק לחיצה אמיתית על כפתור - לא
+      // תשובה חופשית (זו כבר מוצגת בעמודת "הערות איש קשר"). כל עוד לא
+      // הגיעה תגובה כזו, נשאר הסטטוס הבסיסי ("נשלח וואטסאפ" וכו') - וניתן
+      // לדריסה חופשית תמיד ע"י הצוות. לכל סטטוס יש צבע קבוע/עקבי משלו
+      // (colorForStatus_) - לא רק ירוק/אדום.
+      hasValue: function (r) { return !!(r.firstReply || r.status); },
       filterValue: function (r) { return r.firstReply || r.status || ''; },
       cell: function (r) {
         const statusText = r.firstReply || r.status || 'ממתין';
         const c = colorForStatus_(statusText);
         return '<td><span class="status-pill" style="background:' + softStatusColor_(c) + ';color:' + c + ';">' + escapeHtml_(statusText) + '</span></td>';
       } },
-    { key: 'reply', label: 'הערות איש קשר', always: true,
+    { key: 'reply', label: 'הערות איש קשר', always: false,
       // שיחת הוואטסאפ עם הבוט (טקסט חופשי בלבד - לחיצת כפתור לבדה כבר
-      // מתועדת ב"סטטוס" ולא משוכפלת לכאן). נפרדת מ"הערות מיטוב".
+      // מתועדת ב"סטטוס" ולא משוכפלת לכאן). נפרדת מ"הערות מיטוב". מוצגת
+      // רק אם למישהו יש בפועל שיחה כזו.
+      hasValue: function (r) { return !!r.reply; },
       filterValue: function (r) { return r.reply ? lastReplyLine_(r.reply) : ''; },
       cell: function (r) { return '<td class="reply-cell" title="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
+    { key: 'callStatus', label: 'סטטוס פרלה', always: false, sortable: true,
+      // מוצגת רק אם בפועל בוצעה שיחת פרלה (יש ערך) - אם לא הרצנו שיחות
+      // בקמפיין הזה בכלל, אין טעם בעמודה ריקה. אותו מנגנון צבע כמו "סטטוס".
+      hasValue: function (r) { return !!r.callStatus; },
+      filterValue: function (r) { return r.callStatus || ''; },
+      cell: function (r) {
+        const c = colorForStatus_(r.callStatus);
+        return '<td><span class="status-pill" style="background:' + softStatusColor_(c) + ';color:' + c + ';">' + escapeHtml_(r.callStatus) + '</span></td>';
+      } },
+    { key: 'callResult', label: 'הערות פרלה', always: false,
+      // תוצאות/סיכום שיחות הפרלה - מוצגת רק אם בפועל בוצעה שיחה.
+      hasValue: function (r) { return !!r.callResult; },
+      filterValue: function (r) { return r.callResult ? lastReplyLine_(r.callResult) : ''; },
+      cell: function (r) { return '<td class="reply-cell" title="' + (r.callResult ? escapeHtml_(r.callResult) : '') + '">' + (r.callResult ? escapeHtml_(lastReplyLine_(r.callResult)) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
     { key: 'notes', label: 'הערות מיטוב', always: true,
       // יומן הערות ידניות של הצוות בלבד (addUserNote/setUserStatus) -
       // נפרד מ"הערות איש קשר". התא מציג תקציר קצר (מי כתב אחרון + כמות) -
