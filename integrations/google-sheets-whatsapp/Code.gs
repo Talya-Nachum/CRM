@@ -80,7 +80,7 @@ const CALL_LAST_ATTEMPT_HEADER = 'תאריך ניסיון אחרון';
 const MAX_CALL_ATTEMPTS_ = 3;
 const MIN_HOURS_BETWEEN_CALL_ATTEMPTS_ = 3;
 const AUTO_CALL_ENABLED_PROP_PREFIX_ = 'AUTO_CALL_ENABLED_';
-const AUTO_CALL_TRIGGER_FN_ = 'runAutoCalls_';
+const AUTO_CALL_TRIGGER_FN_ = 'runAutoCalls';
 
 // --- CRM פנימי (הערות הצוות; הסטטוס הידני משותף עם FIRST_REPLY_HEADER) ---
 // יומן הערות ידניות של הצוות בלבד - נפרד מ"תשובת איש קשר" (שיחת
@@ -100,7 +100,7 @@ const STATUS_LIST_SHEET_NAME = 'רשימת סטטוסים';
 const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns', STATUS_COLORS_SHEET_NAME, LEGEND_SHEET_NAME_, STATUS_LIST_SHEET_NAME];
 
 // רשימת הפתיחה (זרע) לטאב "רשימת סטטוסים" - לפי בקשת הלקוחה במפורש.
-// נכתבת לגיליון רק פעם אחת, ע"י setupStatusListSheet_() (ר' למטה) - אחרי
+// נכתבת לגיליון רק פעם אחת, ע"י setupStatusListSheet() (ר' למטה) - אחרי
 // מכן הלקוחה שולטת ברשימה ישירות מהגיליון, בלי צורך בשינוי קוד.
 const DEFAULT_STATUS_LIST_ = [
   'שגוי', 'אין פרטי התקשרות', 'לא רלוונטי', 'לא מעוניין', 'לא לפנות', 'כפול', 'כללי', 'חברה נסגרה',
@@ -447,7 +447,7 @@ function startCalls() {
 
 /**
  * קובעת אם שורה מסוימת זכאית לשיחת פרלה עכשיו - נקראת גם מהלחיצה
- * הידנית (startCallsInSheet_) וגם מהריצה האוטומטית המתוזמנת (runAutoCalls_),
+ * הידנית (startCallsInSheet_) וגם מהריצה האוטומטית המתוזמנת (runAutoCalls),
  * כדי ששתיהן יתנהגו לפי אותו חוק בדיוק:
  * - ליד בלי "מזהה ליד NLPearl" בכלל (מעולם לא קיבל שיחה) - תמיד זכאי.
  * - אחרת: הסטטוס הנוכחי חייב להיות אחד מ"פתוח להתקשרות חוזרת"
@@ -483,7 +483,7 @@ function isRowEligibleForCall_(row, cols, openStatuses, now) {
 /**
  * הליבה המשותפת שבאמת מבצעת שיחת פרלה על שורה זכאית - קוראת ל-API,
  * וכותבת סטטוס/מזהה ליד/מונה ניסיונות/תאריך ניסיון אחרון. משמשת גם את
- * startCallsInSheet_ (לחיצה ידנית) וגם runAutoCalls_ (אוטומטי).
+ * startCallsInSheet_ (לחיצה ידנית) וגם runAutoCalls (אוטומטי).
  */
 function placeCallForRow_(sheet, row, rowIndex, phone, name, outboundId, cols) {
   recordLastContact_(phone, sheet.getName());
@@ -608,7 +608,7 @@ function isWithinCallingWindow_() {
  * "רץ" (isAutoCallEnabled_), ורק בתוך שעות הפעילות (isWithinCallingWindow_).
  * לא נוגעת כלל בטאבים שלא הופעלו במפורש מהדשבורד.
  */
-function runAutoCalls_() {
+function runAutoCalls() {
   if (!isWithinCallingWindow_()) return;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   getCampaignSheets_(ss).forEach(function (sheet) {
@@ -617,11 +617,11 @@ function runAutoCalls_() {
 }
 
 /**
- * מתקינה את ה-Trigger המתוזמן (כל שעה) שמריץ את runAutoCalls_ ברקע -
+ * מתקינה את ה-Trigger המתוזמן (כל שעה) שמריץ את runAutoCalls ברקע -
  * גם כשהגיליון סגור. מריצים **פעם אחת בלבד** מהעורך. בטוחה להרצה חוזרת -
  * תמיד מוחקת קודם כל Trigger ישן עם אותו שם, כדי לא ליצור כפילויות.
  */
-function installAutoCallTrigger_() {
+function installAutoCallTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === AUTO_CALL_TRIGGER_FN_) ScriptApp.deleteTrigger(t);
   });
@@ -630,7 +630,7 @@ function installAutoCallTrigger_() {
 }
 
 /** מסירה את ה-Trigger המתוזמן לגמרי (למשל אם רוצים לחזור להפעלה ידנית בלבד). */
-function removeAutoCallTrigger_() {
+function removeAutoCallTrigger() {
   let removed = 0;
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === AUTO_CALL_TRIGGER_FN_) { ScriptApp.deleteTrigger(t); removed++; }
@@ -1248,7 +1248,7 @@ function cleanupPearlNumericStatuses() {
  * הכי קרוב מהרשימה, כדי שהעמודה כולה תדבר באותה שפה סגורה. כותבת **רק**
  * ל"סטטוס שיחה" - "סיכום שיחה" (הטקסט המלא) לעולם לא נגעת. אם Gemini
  * נכשל/מחזירה ערך שלא נמצא ברשימה, השורה נשארת בדיוק כמו שהיתה (לא
- * נמחק/מומצא דבר). דורשת שהטאב "רשימת סטטוסים" כבר קיים - ר' setupStatusListSheet_.
+ * נמחק/מומצא דבר). דורשת שהטאב "רשימת סטטוסים" כבר קיים - ר' setupStatusListSheet.
  *
  * מריצים קודם את previewDistillCallStatuses() (לא נוגעת בכלום) ורק אחר
  * כך את distillCallStatuses() שבאמת כותבת לגיליון.
@@ -1256,7 +1256,7 @@ function cleanupPearlNumericStatuses() {
 function collectDistillCallStatuses_(dryRun) {
   const statusList = getStatusList_();
   if (!statusList.length) {
-    Logger.log('הטאב "' + STATUS_LIST_SHEET_NAME + '" עדיין ריק/לא קיים - יש להריץ קודם setupStatusListSheet_() פעם אחת.');
+    Logger.log('הטאב "' + STATUS_LIST_SHEET_NAME + '" עדיין ריק/לא קיים - יש להריץ קודם setupStatusListSheet() פעם אחת.');
     return 0;
   }
   const normalizedList = statusList.map(normalizeLabel_);
@@ -1748,7 +1748,7 @@ function getStatusColors_() {
  * קוראת את הרשימה הסגורה של "רשימת סטטוסים" (טאב שהלקוחה שולטת בו
  * ישירות, כמו "צבעי סטטוס") - עמודה A, ללא הנחת שורת כותרת (מאותה
  * סיבה כמו getStatusColors_ - לא להניח שיש כותרת). מחזירה [] אם הטאב
- * עדיין לא נוצר (ר' setupStatusListSheet_) - כל תלוי-רשימה (matchCallStatus_
+ * עדיין לא נוצר (ר' setupStatusListSheet) - כל תלוי-רשימה (matchCallStatus_
  * וכו') חייב להתנהג בביטחון גם כשזה ריק.
  */
 function getStatusList_() {
@@ -1769,7 +1769,7 @@ function getStatusList_() {
  * לגמרי. אם כבר יש בו ערכים (הלקוחה כבר ערכה אותו), לא נוגעת בכלל -
  * לעולם לא דורסת עריכה ידנית קיימת. מריצים ידנית פעם אחת מהעורך.
  */
-function setupStatusListSheet_() {
+function setupStatusListSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(STATUS_LIST_SHEET_NAME);
   if (!sheet) {
@@ -1817,7 +1817,7 @@ function getOpenStatuses_() {
  * מוסיפה ערך חדש ל"רשימת סטטוסים" אם הוא עוד לא קיים בה (השוואה מנורמלת,
  * כמו כל התאמת טקסט אחרת בקוד הזה) - נקראת מ-handleInforuWebhook_ כשליד
  * לוחץ על כפתור וואטסאפ חדש שלא הוגדר מראש. לא נוגעת בטאב אם הוא עדיין
- * לא נוצר (setupStatusListSheet_ לא רץ) - כדי לא ליצור טאב לא-מתוכנן.
+ * לא נוצר (setupStatusListSheet לא רץ) - כדי לא ליצור טאב לא-מתוכנן.
  */
 function addStatusIfMissing_(text) {
   if (!text) return;
