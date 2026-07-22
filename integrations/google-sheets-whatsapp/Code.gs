@@ -457,18 +457,23 @@ function startCalls() {
  *   (או שאין תאריך ניסיון קודם בכלל).
  */
 function isRowEligibleForCall_(row, cols, openStatuses, now) {
-  const hasLeadId = cols.leadIdCol !== -1 && !!row[cols.leadIdCol];
-  if (!hasLeadId) return true;
+  // מספר הניסיונות עד כה. **לא** מסתמכים רק על קיום leadId - שיחה
+  // שנכשלה (למשל מספר טלפון לא תקין) אף פעם לא מקבלת leadId, וסימוך
+  // עליו לבד היה הופך שורה כזו ל"זכאית לנצח" בלי שום הגבלת ניסיונות
+  // (ה-Trigger היה מנסה אליה כל שעה עד אינסוף על אותו מספר לא תקין).
+  // אם העמודה עצמה עוד ריקה (שורות מלפני הפיצ'ר הזה) - leadId קיים
+  // מרמז על ניסיון קודם אחד לפחות (לא מאפסים בטעות מכסה של מי שכבר
+  // התקשרו אליו); בלי leadId ובלי ערך בעמודה - זה באמת עוד לא נוסה כלל.
+  const attemptCount = (cols.attemptCountCol !== -1 && row[cols.attemptCountCol] !== '')
+    ? Number(row[cols.attemptCountCol])
+    : (cols.leadIdCol !== -1 && row[cols.leadIdCol] ? 1 : 0);
+
+  if (attemptCount === 0) return true; // מעולם לא ניסינו בכלל - תמיד זכאי
 
   const currentStatus = cols.callStatusCol !== -1 ? String(row[cols.callStatusCol] || '') : '';
   const normalizedOpen = openStatuses.map(normalizeLabel_);
   if (normalizedOpen.indexOf(normalizeLabel_(currentStatus)) === -1) return false;
 
-  // שורות ישנות מלפני התכונה הזו (כבר יש leadId אבל אין עדיין ערך
-  // ב"מספר ניסיונות שיחה") - מניחים ניסיון אחד קודם, לא מאפסים בטעות
-  // את מכסת הניסיונות למישהו שכבר התקשרו אליו.
-  const attemptCount = (cols.attemptCountCol !== -1 && row[cols.attemptCountCol] !== '')
-    ? Number(row[cols.attemptCountCol]) : 1;
   if (attemptCount >= MAX_CALL_ATTEMPTS_) return false;
 
   const lastAttempt = cols.lastAttemptCol !== -1 ? row[cols.lastAttemptCol] : null;
@@ -1274,7 +1279,10 @@ function collectDistillCallStatuses_(dryRun) {
 
     for (let i = 1; i < data.length; i++) {
       const rawStatus = String(data[i][statusCol] || '');
-      if (!rawStatus || normalizedList.indexOf(normalizeLabel_(rawStatus)) !== -1) continue; // כבר תואם בדיוק ערך מהרשימה
+      // "שיחה נשלחה" הוא placeholder זמני שנכתב ברגע שהשיחה יצאה, לפני
+      // שהתקבלה תוצאה אמיתית מפרלה - אין בו שום מידע על מה שקרה בפועל,
+      // אז אין מה "לעגל" (AI היה חייב להמציא ערך שרירותי). מדלגים עליו.
+      if (!rawStatus || rawStatus === CALL_SENT_STATUS || normalizedList.indexOf(normalizeLabel_(rawStatus)) !== -1) continue; // כבר תואם בדיוק ערך מהרשימה, או שאין עדיין תוצאה אמיתית
 
       const name = nameCol !== -1 ? data[i][nameCol] : '';
 
