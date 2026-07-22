@@ -456,6 +456,19 @@ function startCalls() {
  * - וגם: עברו לפחות MIN_HOURS_BETWEEN_CALL_ATTEMPTS_ שעות מהניסיון האחרון
  *   (או שאין תאריך ניסיון קודם בכלל).
  */
+/**
+ * true אם התא הזה "ריק" מבחינת עמודה שרק נוצרה עכשיו ב-ensureColumn_ -
+ * חייב לבדוק גם undefined/null, לא רק '' - כי ensureColumn_ מוסיפה
+ * עמודה חדשה לגיליון ולמערך headers, אבל שורות הנתונים שכבר נקראו
+ * (getDataRange לפני ההוספה) נשארות **קצרות יותר**, אז row[colIdx]
+ * מחזיר undefined (חריגה מגבולות המערך), לא ''. אם מתייחסים ל-undefined
+ * כ"יש כאן ערך אמיתי" ומריצים עליו Number(undefined) מקבלים NaN,
+ * שנכתב לגיליון כשגיאת #NUM! (זה בדיוק מה שקרה בפועל).
+ */
+function cellIsEmpty_(v) {
+  return v === '' || v === undefined || v === null;
+}
+
 function isRowEligibleForCall_(row, cols, openStatuses, now) {
   // מספר הניסיונות עד כה. **לא** מסתמכים רק על קיום leadId - שיחה
   // שנכשלה (למשל מספר טלפון לא תקין) אף פעם לא מקבלת leadId, וסימוך
@@ -464,7 +477,7 @@ function isRowEligibleForCall_(row, cols, openStatuses, now) {
   // אם העמודה עצמה עוד ריקה (שורות מלפני הפיצ'ר הזה) - leadId קיים
   // מרמז על ניסיון קודם אחד לפחות (לא מאפסים בטעות מכסה של מי שכבר
   // התקשרו אליו); בלי leadId ובלי ערך בעמודה - זה באמת עוד לא נוסה כלל.
-  const attemptCount = (cols.attemptCountCol !== -1 && row[cols.attemptCountCol] !== '')
+  const attemptCount = (cols.attemptCountCol !== -1 && !cellIsEmpty_(row[cols.attemptCountCol]))
     ? Number(row[cols.attemptCountCol])
     : (cols.leadIdCol !== -1 && row[cols.leadIdCol] ? 1 : 0);
 
@@ -526,7 +539,7 @@ function placeCallForRow_(sheet, row, rowIndex, phone, name, outboundId, cols) {
     sheet.getRange(rowIndex, cols.leadIdCol + 1).setValue(leadId);
   }
   if (cols.attemptCountCol !== -1) {
-    const current = (row[cols.attemptCountCol] !== '') ? Number(row[cols.attemptCountCol]) : 0;
+    const current = !cellIsEmpty_(row[cols.attemptCountCol]) ? Number(row[cols.attemptCountCol]) : 0;
     sheet.getRange(rowIndex, cols.attemptCountCol + 1).setValue(current + 1);
   }
   if (cols.lastAttemptCol !== -1) {
