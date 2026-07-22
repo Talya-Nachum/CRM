@@ -1291,13 +1291,14 @@ function collectDistillCallStatuses_(dryRun) {
           ': סטטוס שיחה לא ברשימה, יעוגל ל-AI: "' + rawStatus + '"');
         changed++;
       } else {
-        // ניסיון שני עם השהייה קצרה - נתקלנו בפועל בכשלים שנראים כמו
-        // הגבלת קצב (rate limit) של Gemini כשקוראים לו הרבה פעמים ברצף
-        // מהיר; השהייה בין שורה לשורה + ניסיון חוזר יחיד מצמצמים את זה
-        // משמעותית בלי לסבך את המשתמשת בפרטים טכניים.
+        // עד 3 ניסיונות עם השהייה גוברת (3, 8, 15 שניות) - בפועל נתקלנו
+        // בהגבלת קצב (rate limit) של Gemini שמצטברת לאורך הרצה ארוכה עם
+        // הרבה שורות ברצף; יותר ניסיונות + השהייה ארוכה יותר בין שורה
+        // לשורה מצמצמים משמעותית את הצורך להריץ את הכלי שוב ושוב ידנית.
+        const RETRY_DELAYS_MS_ = [3000, 8000, 15000];
         let matched = matchCallStatus_(rawStatus, statusList);
-        if (normalizeLabel_(matched) === normalizeLabel_(rawStatus)) {
-          Utilities.sleep(3000);
+        for (let attempt = 0; attempt < RETRY_DELAYS_MS_.length && normalizeLabel_(matched) === normalizeLabel_(rawStatus); attempt++) {
+          Utilities.sleep(RETRY_DELAYS_MS_[attempt]);
           matched = matchCallStatus_(rawStatus, statusList);
         }
         if (normalizeLabel_(matched) !== normalizeLabel_(rawStatus)) {
@@ -1307,7 +1308,7 @@ function collectDistillCallStatuses_(dryRun) {
         } else {
           Logger.log('טאב "' + sheet.getName() + '", ' + name + ': לא הצלחתי לעגל (Gemini לא החזיר תשובה תואמת) - השורה נשארה כמו שהיתה, שום דבר לא נמחק. אפשר להריץ את distillCallStatuses שוב.');
         }
-        Utilities.sleep(1500);
+        Utilities.sleep(4000);
       }
     }
   });
