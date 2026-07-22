@@ -563,6 +563,7 @@ function callEligibleLeadsInSheet_(sheet) {
   const sheetOutboundId = (campaignCol !== -1 && data[1] && data[1][campaignCol])
     ? String(data[1][campaignCol]) : DEFAULT_OUTBOUND_ID;
 
+  let called = 0;
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const phone = row[phoneCol];
@@ -572,7 +573,10 @@ function callEligibleLeadsInSheet_(sheet) {
 
     if (!phone || !isRowEligibleForCall_(row, cols, openStatuses, now)) continue;
     placeCallForRow_(sheet, row, rowIndex, phone, name, outboundId, cols);
+    Logger.log('טאב "' + sheet.getName() + '", ' + name + ' (' + phone + '): שיחה יצאה.');
+    called++;
   }
+  Logger.log('טאב "' + sheet.getName() + '": ' + (data.length - 1) + ' שורות נבדקו, ' + called + ' שיחות יצאו.');
 }
 
 function startCallsInSheet_(sheet) {
@@ -614,11 +618,20 @@ function isWithinCallingWindow_() {
  * לא נוגעת כלל בטאבים שלא הופעלו במפורש מהדשבורד.
  */
 function runAutoCalls() {
-  if (!isWithinCallingWindow_()) return;
+  if (!isWithinCallingWindow_()) {
+    Logger.log('runAutoCalls: מחוץ לשעות הפעילות (א׳-ה׳ 9:00-17:00) - לא נבדק אף טאב.');
+    return;
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  getCampaignSheets_(ss).forEach(function (sheet) {
-    if (isAutoCallEnabled_(sheet.getName())) callEligibleLeadsInSheet_(sheet);
-  });
+  const sheets = getCampaignSheets_(ss);
+  const enabledSheets = sheets.filter(function (sheet) { return isAutoCallEnabled_(sheet.getName()); });
+  if (!enabledSheets.length) {
+    Logger.log('runAutoCalls: אין אף טאב עם שיחות אוטומטיות מופעלות (לחצי "🤖 שיחות אוטומטיות" בדשבורד לקמפיין הרצוי).');
+    return;
+  }
+  Logger.log('runAutoCalls: בודקת ' + enabledSheets.length + ' טאב/ים עם שיחות אוטומטיות מופעלות: ' +
+    enabledSheets.map(function (s) { return s.getName(); }).join(', '));
+  enabledSheets.forEach(callEligibleLeadsInSheet_);
 }
 
 /**
