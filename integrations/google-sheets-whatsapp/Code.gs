@@ -69,18 +69,6 @@ const CALL_RESULT_HEADER_LEGACY = 'תוצאות שיחה'; // שם ישן - טא
 const CALL_FIRST_RESULT_HEADER = 'תוצאה ראשונית (שיחה)';
 const CALL_DATE_HEADER = 'תאריך שיחה';
 const CALL_SENT_STATUS = 'שיחה נשלחה';
-const CALL_ATTEMPT_COUNT_HEADER = 'מספר ניסיונות שיחה';
-const CALL_LAST_ATTEMPT_HEADER = 'תאריך ניסיון אחרון';
-
-// --- שיחות אוטומטיות (Trigger מתוזמן) ---
-// עד כמה ניסיונות שיחה סה"כ לליד "פתוח" (לא ענה/ממתין/וכו'), ומרווח
-// מינימלי בין ניסיון לניסיון - לפי בקשת הלקוחה במפורש. שעות/ימי הפעילות
-// (א'-ה', 9:00-17:00) כבר מוגדרים אצל הלקוחה בפרלה עצמה (כולל חגים) -
-// isWithinCallingWindow_ היא רק "חגורה ושלייקס" בצד שלנו, בלי מודעות לחגים.
-const MAX_CALL_ATTEMPTS_ = 3;
-const MIN_HOURS_BETWEEN_CALL_ATTEMPTS_ = 3;
-const AUTO_CALL_ENABLED_PROP_PREFIX_ = 'AUTO_CALL_ENABLED_';
-const AUTO_CALL_TRIGGER_FN_ = 'runAutoCalls';
 
 // --- CRM פנימי (הערות הצוות; הסטטוס הידני משותף עם FIRST_REPLY_HEADER) ---
 // יומן הערות ידניות של הצוות בלבד - נפרד מ"תשובת איש קשר" (שיחת
@@ -446,113 +434,15 @@ function startCalls() {
 }
 
 /**
- * קובעת אם שורה מסוימת זכאית לשיחת פרלה עכשיו - נקראת גם מהלחיצה
- * הידנית (startCallsInSheet_) וגם מהריצה האוטומטית המתוזמנת (runAutoCalls),
- * כדי ששתיהן יתנהגו לפי אותו חוק בדיוק:
- * - ליד בלי "מזהה ליד NLPearl" בכלל (מעולם לא קיבל שיחה) - תמיד זכאי.
- * - אחרת: הסטטוס הנוכחי חייב להיות אחד מ"פתוח להתקשרות חוזרת"
- *   (openStatuses, מ-getOpenStatuses_) - סטטוס סגור/לא ברשימה הפתוחה עוצר לצמיתות.
- * - וגם: מספר הניסיונות עד כה קטן מ-MAX_CALL_ATTEMPTS_.
- * - וגם: עברו לפחות MIN_HOURS_BETWEEN_CALL_ATTEMPTS_ שעות מהניסיון האחרון
- *   (או שאין תאריך ניסיון קודם בכלל).
+ * מתקשרת פעם אחת לכל ליד שעדיין אין לו "מזהה ליד NLPearl" (מעולם לא
+ * נרשם לפרלה). פרלה עצמה מנהלת את כל ההמשך - ניסיונות חוזרים ללידים
+ * שלא ענו, שעות פעילות - לפי ההגדרות שהלקוחה כבר קבעה בקמפיין שלה
+ * בפרלה. הצד שלנו לא מנהל שום retry/eligibility - רק "רושם" פעם אחת,
+ * ואז מקשיב ל-Webhook (handleNlpearlWebhook_) ומעדכן את הגיליון בכל
+ * פעם שפרלה מדווחת על ניסיון/תוצאה, בין אם השיחה יצאה דרכנו ובין אם
+ * הלידים נטענו ישירות למערכת של פרלה בלי לעבור דרך הקוד הזה בכלל.
  */
-/**
- * true אם התא הזה "ריק" מבחינת עמודה שרק נוצרה עכשיו ב-ensureColumn_ -
- * חייב לבדוק גם undefined/null, לא רק '' - כי ensureColumn_ מוסיפה
- * עמודה חדשה לגיליון ולמערך headers, אבל שורות הנתונים שכבר נקראו
- * (getDataRange לפני ההוספה) נשארות **קצרות יותר**, אז row[colIdx]
- * מחזיר undefined (חריגה מגבולות המערך), לא ''. אם מתייחסים ל-undefined
- * כ"יש כאן ערך אמיתי" ומריצים עליו Number(undefined) מקבלים NaN,
- * שנכתב לגיליון כשגיאת #NUM! (זה בדיוק מה שקרה בפועל).
- */
-function cellIsEmpty_(v) {
-  return v === '' || v === undefined || v === null;
-}
-
-function isRowEligibleForCall_(row, cols, openStatuses, now) {
-  // מספר הניסיונות עד כה. **לא** מסתמכים רק על קיום leadId - שיחה
-  // שנכשלה (למשל מספר טלפון לא תקין) אף פעם לא מקבלת leadId, וסימוך
-  // עליו לבד היה הופך שורה כזו ל"זכאית לנצח" בלי שום הגבלת ניסיונות
-  // (ה-Trigger היה מנסה אליה כל שעה עד אינסוף על אותו מספר לא תקין).
-  // אם העמודה עצמה עוד ריקה (שורות מלפני הפיצ'ר הזה) - leadId קיים
-  // מרמז על ניסיון קודם אחד לפחות (לא מאפסים בטעות מכסה של מי שכבר
-  // התקשרו אליו); בלי leadId ובלי ערך בעמודה - זה באמת עוד לא נוסה כלל.
-  const attemptCount = (cols.attemptCountCol !== -1 && !cellIsEmpty_(row[cols.attemptCountCol]))
-    ? Number(row[cols.attemptCountCol])
-    : (cols.leadIdCol !== -1 && row[cols.leadIdCol] ? 1 : 0);
-
-  if (attemptCount === 0) return true; // מעולם לא ניסינו בכלל - תמיד זכאי
-
-  const currentStatus = cols.callStatusCol !== -1 ? String(row[cols.callStatusCol] || '') : '';
-  const normalizedOpen = openStatuses.map(normalizeLabel_);
-  if (normalizedOpen.indexOf(normalizeLabel_(currentStatus)) === -1) return false;
-
-  if (attemptCount >= MAX_CALL_ATTEMPTS_) return false;
-
-  const lastAttempt = cols.lastAttemptCol !== -1 ? row[cols.lastAttemptCol] : null;
-  if (lastAttempt instanceof Date && !isNaN(lastAttempt.getTime())) {
-    const hoursSince = (now.getTime() - lastAttempt.getTime()) / (1000 * 60 * 60);
-    if (hoursSince < MIN_HOURS_BETWEEN_CALL_ATTEMPTS_) return false;
-  }
-
-  return true;
-}
-
-/**
- * הליבה המשותפת שבאמת מבצעת שיחת פרלה על שורה זכאית - קוראת ל-API,
- * וכותבת סטטוס/מזהה ליד/מונה ניסיונות/תאריך ניסיון אחרון. משמשת גם את
- * startCallsInSheet_ (לחיצה ידנית) וגם runAutoCalls (אוטומטי).
- */
-function placeCallForRow_(sheet, row, rowIndex, phone, name, outboundId, cols) {
-  recordLastContact_(phone, sheet.getName());
-
-  const digits = String(phone).replace(/\D/g, '');
-  const internationalPhone = digits.startsWith('0') ? '+972' + digits.slice(1) : '+' + digits;
-
-  const payload = {
-    phoneNumber: internationalPhone,
-    externalId: digits + '-' + Date.now(),
-    callData: { firstName: name }
-  };
-
-  const response = UrlFetchApp.fetch(NLPEARL_API_BASE + outboundId + '/Lead', {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: getNlpearlAuthHeader_() },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  });
-
-  const responseText = response.getContentText();
-  const success = response.getResponseCode() < 300;
-  if (cols.callStatusCol !== -1) {
-    sheet.getRange(rowIndex, cols.callStatusCol + 1).setValue(success ? CALL_SENT_STATUS : 'שגיאה: ' + responseText);
-  }
-  if (success && cols.leadIdCol !== -1) {
-    let leadId = responseText;
-    try {
-      const parsed = JSON.parse(responseText);
-      leadId = parsed.leadId || parsed.id || responseText;
-    } catch (err) {
-      // התשובה הייתה טקסט רגיל (מזהה הליד עצמו) - להשתמש בו כמו שהוא
-    }
-    sheet.getRange(rowIndex, cols.leadIdCol + 1).setValue(leadId);
-  }
-  if (cols.attemptCountCol !== -1) {
-    const current = !cellIsEmpty_(row[cols.attemptCountCol]) ? Number(row[cols.attemptCountCol]) : 0;
-    sheet.getRange(rowIndex, cols.attemptCountCol + 1).setValue(current + 1);
-  }
-  if (cols.lastAttemptCol !== -1) {
-    sheet.getRange(rowIndex, cols.lastAttemptCol + 1).setValue(new Date());
-  }
-}
-
-/**
- * עוברת על טאב קמפיין אחד ומתקשרת לכל שורה זכאית (ר' isRowEligibleForCall_).
- * משותפת ללחיצה הידנית ("התחל שיחות") ולריצה האוטומטית המתוזמנת -
- * outboundId (התבנית/הקמפיין בפרלה) עדיין נקבע פר-טאב/פר-שורה בדיוק כמו קודם.
- */
-function callEligibleLeadsInSheet_(sheet) {
+function startCallsInSheet_(sheet) {
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
@@ -561,110 +451,72 @@ function callEligibleLeadsInSheet_(sheet) {
   const campaignCol = findColumnNormalized_(headers, CAMPAIGN_HEADER);
   const callStatusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
   const leadIdCol = findColumnNormalized_(headers, CALL_LEAD_ID_HEADER);
+
   if (phoneCol === -1 || callStatusCol === -1) return;
 
-  const attemptCountCol = ensureColumn_(sheet, headers, CALL_ATTEMPT_COUNT_HEADER);
-  const lastAttemptCol = ensureColumn_(sheet, headers, CALL_LAST_ATTEMPT_HEADER);
-  const cols = { callStatusCol: callStatusCol, leadIdCol: leadIdCol, attemptCountCol: attemptCountCol, lastAttemptCol: lastAttemptCol };
-
   recordCampaignStart_(sheet.getName());
-
-  const openStatuses = getOpenStatuses_();
-  const now = new Date();
 
   // ברירת מחדל לכל הטאב: מה שכתוב בשורה 2 (השורה הראשונה עם נתונים) של הטאב הזה.
   const sheetOutboundId = (campaignCol !== -1 && data[1] && data[1][campaignCol])
     ? String(data[1][campaignCol]) : DEFAULT_OUTBOUND_ID;
 
-  let called = 0;
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const phone = row[phoneCol];
     const name = nameCol !== -1 ? row[nameCol] : '';
     const outboundId = (campaignCol !== -1 && row[campaignCol]) ? String(row[campaignCol]) : sheetOutboundId;
     const rowIndex = i + 1;
+    // "כבר נרשם לפרלה" נבדק לפי קיום מזהה ליד (leadId) - לא לפי טקסט
+    // "סטטוס שיחה", כי העמודה הזו נדרסת עם הסטטוס האמיתי מ-NLPearl.
+    const alreadyCalled = leadIdCol !== -1 && !!row[leadIdCol];
 
-    if (!phone || !isRowEligibleForCall_(row, cols, openStatuses, now)) continue;
-    placeCallForRow_(sheet, row, rowIndex, phone, name, outboundId, cols);
-    Logger.log('טאב "' + sheet.getName() + '", ' + name + ' (' + phone + '): שיחה יצאה.');
-    called++;
+    if (!phone || alreadyCalled) continue;
+
+    recordLastContact_(phone, sheet.getName());
+
+    const digits = String(phone).replace(/\D/g, '');
+    const internationalPhone = digits.startsWith('0') ? '+972' + digits.slice(1) : '+' + digits;
+
+    const payload = {
+      phoneNumber: internationalPhone,
+      externalId: digits + '-' + Date.now(),
+      callData: { firstName: name }
+    };
+
+    const response = UrlFetchApp.fetch(NLPEARL_API_BASE + outboundId + '/Lead', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: getNlpearlAuthHeader_() },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+
+    const responseText = response.getContentText();
+    const success = response.getResponseCode() < 300;
+    sheet.getRange(rowIndex, callStatusCol + 1).setValue(success ? CALL_SENT_STATUS : 'שגיאה: ' + responseText);
+    if (success && leadIdCol !== -1) {
+      let leadId = responseText;
+      try {
+        const parsed = JSON.parse(responseText);
+        leadId = parsed.leadId || parsed.id || responseText;
+      } catch (err) {
+        // התשובה הייתה טקסט רגיל (מזהה הליד עצמו) - להשתמש בו כמו שהוא
+      }
+      sheet.getRange(rowIndex, leadIdCol + 1).setValue(leadId);
+    }
   }
-  Logger.log('טאב "' + sheet.getName() + '": ' + (data.length - 1) + ' שורות נבדקו, ' + called + ' שיחות יצאו.');
-}
-
-function startCallsInSheet_(sheet) {
-  callEligibleLeadsInSheet_(sheet);
 }
 
 /**
- * בודקת מ-Script Properties אם שיחות אוטומטיות "רצות" עבור טאב מסוים -
- * נשלטת מהדשבורד (כפתור ▶/⏸ לכל קמפיין, ר' setAutoCallEnabled).
+ * ניקוי חד-פעמי: אם כבר הותקן Trigger מתוזמן של runAutoCalls (מהתכונה
+ * הישנה שהוסרה - הלקוחה גילתה שפרלה כבר מנהלת retry/שעות בעצמה, ושני
+ * המנגנונים ביחד היו עלולים לגרום להתקשרות כפולה) - מריצים את זה פעם
+ * אחת כדי להסיר אותו. בטוחה להרצה גם אם אין שום Trigger כזה.
  */
-function isAutoCallEnabled_(sheetName) {
-  return PropertiesService.getScriptProperties().getProperty(AUTO_CALL_ENABLED_PROP_PREFIX_ + sheetName) === 'true';
-}
-
-/** נקראת מהדשבורד - מפעילה/עוצרת שיחות אוטומטיות לטאב קמפיין ספציפי. */
-function setAutoCallEnabled(sheetName, enabled) {
-  PropertiesService.getScriptProperties().setProperty(AUTO_CALL_ENABLED_PROP_PREFIX_ + sheetName, enabled ? 'true' : 'false');
-  return enabled;
-}
-
-/**
- * בדיקת "חגורה ושלייקס" בצד שלנו - א'-ה', 9:00-17:00 שעון ישראל - בנוסף
- * (לא במקום) להגדרות שעות הפעילות שכבר קיימות בפרלה עצמה. **לא** מודעת
- * לחגי ישראל (זה כבר מטופל בפרלה) - רק מונעת קריאות API מיותרות בלילה/
- * בסופ"ש מהצד שלנו.
- */
-function isWithinCallingWindow_() {
-  const tz = 'Asia/Jerusalem';
-  const now = new Date();
-  const dayName = Utilities.formatDate(now, tz, 'EEE'); // Sun, Mon, Tue, Wed, Thu, Fri, Sat
-  const hour = Number(Utilities.formatDate(now, tz, 'H'));
-  const allowedDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu'];
-  return allowedDays.indexOf(dayName) !== -1 && hour >= 9 && hour < 17;
-}
-
-/**
- * הפונקציה שה-Trigger המתוזמן מריץ כל שעה - עוברת רק על טאבים שסומנו
- * "רץ" (isAutoCallEnabled_), ורק בתוך שעות הפעילות (isWithinCallingWindow_).
- * לא נוגעת כלל בטאבים שלא הופעלו במפורש מהדשבורד.
- */
-function runAutoCalls() {
-  if (!isWithinCallingWindow_()) {
-    Logger.log('runAutoCalls: מחוץ לשעות הפעילות (א׳-ה׳ 9:00-17:00) - לא נבדק אף טאב.');
-    return;
-  }
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheets = getCampaignSheets_(ss);
-  const enabledSheets = sheets.filter(function (sheet) { return isAutoCallEnabled_(sheet.getName()); });
-  if (!enabledSheets.length) {
-    Logger.log('runAutoCalls: אין אף טאב עם שיחות אוטומטיות מופעלות (לחצי "🤖 שיחות אוטומטיות" בדשבורד לקמפיין הרצוי).');
-    return;
-  }
-  Logger.log('runAutoCalls: בודקת ' + enabledSheets.length + ' טאב/ים עם שיחות אוטומטיות מופעלות: ' +
-    enabledSheets.map(function (s) { return s.getName(); }).join(', '));
-  enabledSheets.forEach(callEligibleLeadsInSheet_);
-}
-
-/**
- * מתקינה את ה-Trigger המתוזמן (כל שעה) שמריץ את runAutoCalls ברקע -
- * גם כשהגיליון סגור. מריצים **פעם אחת בלבד** מהעורך. בטוחה להרצה חוזרת -
- * תמיד מוחקת קודם כל Trigger ישן עם אותו שם, כדי לא ליצור כפילויות.
- */
-function installAutoCallTrigger() {
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === AUTO_CALL_TRIGGER_FN_) ScriptApp.deleteTrigger(t);
-  });
-  ScriptApp.newTrigger(AUTO_CALL_TRIGGER_FN_).timeBased().everyHours(1).create();
-  Logger.log('Trigger מותקן - ' + AUTO_CALL_TRIGGER_FN_ + ' ירוץ כל שעה.');
-}
-
-/** מסירה את ה-Trigger המתוזמן לגמרי (למשל אם רוצים לחזור להפעלה ידנית בלבד). */
 function removeAutoCallTrigger() {
   let removed = 0;
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === AUTO_CALL_TRIGGER_FN_) { ScriptApp.deleteTrigger(t); removed++; }
+    if (t.getHandlerFunction() === 'runAutoCalls') { ScriptApp.deleteTrigger(t); removed++; }
   });
   Logger.log('הוסרו ' + removed + ' Triggers.');
 }
@@ -1826,29 +1678,6 @@ function setupStatusListSheet() {
 }
 
 /**
- * קוראת מ"רשימת סטטוסים" רק את הסטטוסים שהלקוחה סימנה ✓ בעמודה B
- * ("פתוח להתקשרות חוזרת") - אלה שהתקשרות אוטומטית חוזרת מותרת אליהם.
- * מחזירה [] אם הטאב לא קיים/עמודה B ריקה לגמרי (בטוח - לא יתקשר לאף אחד
- * שוב אם הלקוחה עדיין לא סימנה שום דבר).
- */
-function getOpenStatuses_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(STATUS_LIST_SHEET_NAME);
-  if (!sheet) return [];
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 1) return [];
-
-  const statuses = sheet.getRange(1, 1, lastRow, 1).getValues();
-  const openFlags = sheet.getRange(1, 2, lastRow, 1).getValues();
-  const open = [];
-  for (let i = 0; i < statuses.length; i++) {
-    const status = String(statuses[i][0] || '').trim();
-    if (status && openFlags[i][0] === true) open.push(status);
-  }
-  return open;
-}
-
-/**
  * מוסיפה ערך חדש ל"רשימת סטטוסים" אם הוא עוד לא קיים בה (השוואה מנורמלת,
  * כמו כל התאמת טקסט אחרת בקוד הזה) - נקראת מ-handleInforuWebhook_ כשליד
  * לוחץ על כפתור וואטסאפ חדש שלא הוגדר מראש. לא נוגעת בטאב אם הוא עדיין
@@ -2020,8 +1849,7 @@ function getCampaignData(sheetName) {
     trend: dailyActivityTrend_(sheetName),
     teamUsers: TEAM_USERS_,
     statusColors: getStatusColors_(),
-    statusList: getStatusList_(),
-    autoCallEnabled: isAutoCallEnabled_(sheetName)
+    statusList: getStatusList_()
   };
 }
 

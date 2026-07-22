@@ -1093,7 +1093,6 @@
   <div class="card table-card">
     <h2>אנשי קשר</h2>
     <div class="table-toolbar">
-      <button class="btn" id="autoCallToggleBtn" type="button" title="שיחות פרלה אוטומטיות ללידים פתוחים, א'-ה' 9:00-17:00">🤖 שיחות אוטומטיות</button>
       <button class="btn" id="exportBtn" type="button">📥 ייצוא לאקסל</button>
       <button class="btn btn-accent" id="addContactBtn" type="button">➕ הוספת איש קשר</button>
       <input type="text" class="search-input" id="searchInput" placeholder="חיפוש לפי שם או טלפון...">
@@ -1247,7 +1246,6 @@
 
     customStatusColors = data.statusColors || {};
     statusList = data.statusList || [];
-    renderAutoCallButton_(!!data.autoCallEnabled);
     markNewRows_(data);
 
     const sentPct = data.total ? Math.round((data.sent / data.total) * 100) : 0;
@@ -1887,36 +1885,6 @@
     document.removeEventListener('click', closeColumnFilterPopoverOnOutsideClick_);
   }
 
-  // מצב הכפתור "שיחות אוטומטיות" - משקף את הדגל שנשמר ב-Script Properties
-  // (ר' isAutoCallEnabled_/setAutoCallEnabled ב-Code.gs) עבור הטאב הנוכחי בלבד.
-  function renderAutoCallButton_(enabled) {
-    const btn = document.getElementById('autoCallToggleBtn');
-    if (!btn) return;
-    btn.textContent = enabled ? '⏸ עצור שיחות אוטומטיות' : '🤖 הפעל שיחות אוטומטיות';
-    btn.classList.toggle('btn-accent', enabled);
-    btn.setAttribute('data-enabled', enabled ? 'true' : 'false');
-  }
-
-  function setupAutoCallToggle_() {
-    const btn = document.getElementById('autoCallToggleBtn');
-    btn.addEventListener('click', function () {
-      if (!currentTabName) return;
-      const currentlyEnabled = btn.getAttribute('data-enabled') === 'true';
-      const next = !currentlyEnabled;
-      btn.disabled = true;
-      google.script.run
-        .withSuccessHandler(function () {
-          btn.disabled = false;
-          renderAutoCallButton_(next);
-        })
-        .withFailureHandler(function (err) {
-          btn.disabled = false;
-          alert('שגיאה בעדכון שיחות אוטומטיות: ' + (err.message || err));
-        })
-        .setAutoCallEnabled(currentTabName, next);
-    });
-  }
-
   function setupExport_() {
     const exportBtn = document.getElementById('exportBtn');
     exportBtn.addEventListener('click', function () {
@@ -2422,7 +2390,6 @@
   setupCrmModal_();
   setupShare_();
   setupCellTooltips_();
-  setupAutoCallToggle_();
 
   // רענון אוטומטי: כל 30 שניות טוענים מחדש את נתוני הטאב הפעיל (בלי לגעת
   // ברשימת הטאבים עצמה, כדי לא "לקפוץ" למשתמש בזמן שהוא מסתכל).
