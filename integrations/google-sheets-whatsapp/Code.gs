@@ -729,7 +729,17 @@ function pullOutgoingWhatsAppMessages() {
   }
 
   if (result.StatusId !== 1) {
-    Logger.log('pullOutgoingWhatsAppMessages: שגיאה - ' + (result.StatusDescription || '') + ' ' + (result.DetailedDescription || ''));
+    const description = (result.StatusDescription || '') + ' ' + (result.DetailedDescription || '');
+    // "Couldn't find active chat" זו לא שגיאה - זו הדרך של InforU להגיד
+    // "אין אף שיחה בטווח הזמן הזה" (אף אחד לא כתב/ענה ב-5 הדקות
+    // האחרונות). מקדמים את חלון הזמן כרגיל (כמו הרצה מוצלחת עם 0
+    // תוצאות) ולא מציגים "שגיאה" ביומן, כדי לא להבהיל את מי שמסתכלת בו.
+    if (description.indexOf("Couldn't find active chat") !== -1) {
+      props.setProperty(WHATSAPP_PULL_LAST_TIME_PROP_, now.toISOString());
+      Logger.log('pullOutgoingWhatsAppMessages: אין שיחות חדשות בטווח - תקין, אין מה לעדכן.');
+      return;
+    }
+    Logger.log('pullOutgoingWhatsAppMessages: שגיאה - ' + description);
     return;
   }
 
