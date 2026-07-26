@@ -646,6 +646,143 @@ function handleInforuWebhook_(ss, payload) {
   }
 }
 
+// --- משיכת הודעות וואטסאפ יוצאות שנשלחו ידנית (Inbox של InforU) ---
+const WHATSAPP_PULL_ENDPOINT_ = 'https://capi.inforu.co.il/api/v2/WhatsApp/GetWhatsAppChats';
+const WHATSAPP_PULL_LAST_TIME_PROP_ = 'WHATSAPP_PULL_LAST_TIME';
+const WHATSAPP_PULL_BACKFILL_MINUTES_ = 10; // אם עוד לא נשמר זמן קודם - כמה אחורה למשוך בהרצה הראשונה
+const WHATSAPP_PULL_TRIGGER_FN_ = 'pullOutgoingWhatsAppMessages';
+
+/**
+ * מוסיפה שורה בודדת ל"תשובת איש קשר" (REPLY_HEADER, מצטברת) של איש
+ * הקשר עם הטלפון הנתון - זהה לחלוטין לתבנית ההצטברות שכבר קיימת
+ * ב-handleInforuWebhook_, רק כתובה כפונקציה נפרדת כי כאן מטפלים
+ * בכמה הודעות ברצף (לא ניתן להשתמש ב-return מוקדם מתוך פונקציה אחת
+ * כמו שם). מחזירה true אם נמצאה שורה מתאימה ונכתב אליה.
+ */
+function appendOutgoingMessageToSheet_(ss, incomingPhone, text) {
+  const tracked = lastContactSheet_(ss, incomingPhone);
+  const sheets = tracked ? [tracked] : getCampaignSheets_(ss);
+  for (const sheet of sheets) {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+    const replyCol = findHeaderIndex_(headers, REPLY_HEADER, REPLY_HEADER_LEGACY);
+    if (phoneCol === -1 || replyCol === -1) continue;
+
+    for (let i = 1; i < data.length; i++) {
+      const sheetPhone = phoneSuffix_(data[i][phoneCol]);
+      if (sheetPhone && sheetPhone === incomingPhone) {
+        const rowIndex = i + 1;
+        const existingReply = data[i][replyCol];
+        const combined = existingReply ? (existingReply + '\n' + text) : text;
+        sheet.getRange(rowIndex, replyCol + 1).setValue(combined);
+        recordDailyActivity_(sheet.getName());
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * מושכת (Pull, לא Webhook) מ-InforU הודעות וואטסאפ **יוצאות** (Direction:
+ * "Outgoing") שנשלחו ידנית מתוך ה-Inbox שלהם - למשל כשהבוט "נתקע" והצוות
+ * עונה בעצמו ישירות בשיחה. הודעות **נכנסות** (Direction: "Incoming")
+ * מדולגות במפורש - הן כבר מגיעות ומתועדות דרך ה-Webhook הרגיל
+ * (handleInforuWebhook_), וכתיבה כפולה כאן הייתה יוצרת שכפול.
+ *
+ * זוכרת ב-Script Properties (WHATSAPP_PULL_LAST_TIME_PROP_) עד איזה
+ * זמן כבר נמשך בהצלחה, כדי שכל הרצה תמשוך רק הודעות **חדשות** מאז
+ * ההרצה הקודמת - בלי חפיפה ובלי לפספס טווח. רצה מ-Trigger מתוזמן כל
+ * 5 דקות (ר' installWhatsAppPullTrigger) - התדירות הזו לפי המלצת
+ * InforU עצמם.
+ */
+function pullOutgoingWhatsAppMessages() {
+  const props = PropertiesService.getScriptProperties();
+  const now = new Date();
+  const lastPullIso = props.getProperty(WHATSAPP_PULL_LAST_TIME_PROP_);
+  const fromDate = lastPullIso ? new Date(lastPullIso) : new Date(now.getTime() - WHATSAPP_PULL_BACKFILL_MINUTES_ * 60 * 1000);
+
+  const formatForInforu_ = function (d) {
+    return Utilities.formatDate(d, 'Asia/Jerusalem', "yyyy-MM-dd'T'HH:mm:ss.SS");
+  };
+
+  const response = UrlFetchApp.fetch(WHATSAPP_PULL_ENDPOINT_, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: getInforuAuthHeader_() },
+    payload: JSON.stringify({
+      Data: {
+        FromDateTime: formatForInforu_(fromDate),
+        ToDateTime: formatForInforu_(now)
+      }
+    }),
+    muteHttpExceptions: true
+  });
+
+  let result;
+  try {
+    result = JSON.parse(response.getContentText());
+  } catch (err) {
+    Logger.log('pullOutgoingWhatsAppMessages: תשובה לא תקינה מ-InforU: ' + response.getContentText());
+    return;
+  }
+
+  if (result.StatusId !== 1) {
+    Logger.log('pullOutgoingWhatsAppMessages: שגיאה - ' + (result.StatusDescription || '') + ' ' + (result.DetailedDescription || ''));
+    return;
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const chats = (result.Data && result.Data.Results) || [];
+  let written = 0;
+  let skippedIncoming = 0;
+  let notFound = 0;
+
+  chats.forEach(function (chat) {
+    const messages = chat.Messages || [];
+    messages.forEach(function (msg) {
+      if (msg.Direction !== 'Outgoing') { skippedIncoming++; return; }
+      const phone = phoneSuffix_(msg.PhoneNumber);
+      if (!phone) return;
+
+      const outgoingLine = '👤 מיטוב: ' + (msg.MessageText || '');
+      if (appendOutgoingMessageToSheet_(ss, phone, outgoingLine)) {
+        written++;
+      } else {
+        notFound++;
+      }
+    });
+  });
+
+  props.setProperty(WHATSAPP_PULL_LAST_TIME_PROP_, now.toISOString());
+  Logger.log('pullOutgoingWhatsAppMessages: ' + chats.length + ' שיחות נמשכו, ' + written +
+    ' הודעות יוצאות נכתבו, ' + skippedIncoming + ' הודעות נכנסות דולגו (כבר מתועדות ע"י ה-Webhook), ' +
+    notFound + ' לא נמצאה עבורן שורה בגיליון.');
+}
+
+/**
+ * מתקינה Trigger מתוזמן שמריץ את pullOutgoingWhatsAppMessages כל 5
+ * דקות - לפי המלצת InforU. מריצים **פעם אחת בלבד** מהעורך. בטוחה
+ * להרצה חוזרת - תמיד מוחקת קודם Trigger ישן עם אותו שם.
+ */
+function installWhatsAppPullTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === WHATSAPP_PULL_TRIGGER_FN_) ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger(WHATSAPP_PULL_TRIGGER_FN_).timeBased().everyMinutes(5).create();
+  Logger.log('Trigger מותקן - ' + WHATSAPP_PULL_TRIGGER_FN_ + ' ירוץ כל 5 דקות.');
+}
+
+/** מסירה את ה-Trigger המתוזמן של משיכת ההודעות היוצאות. */
+function removeWhatsAppPullTrigger() {
+  let removed = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === WHATSAPP_PULL_TRIGGER_FN_) { ScriptApp.deleteTrigger(t); removed++; }
+  });
+  Logger.log('הוסרו ' + removed + ' Triggers.');
+}
+
 /**
  * כמו ב-handleInforuWebhook_ למעלה: מחפשים קודם רק בטאב שאליו הותחלה
  * לאחרונה שיחה למספר הזה (lastContactSheet_), כדי שתוצאת שיחה תעדכן
