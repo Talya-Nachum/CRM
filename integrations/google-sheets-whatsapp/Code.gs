@@ -794,7 +794,45 @@ function removeWhatsAppPullTrigger() {
 }
 
 /**
- * סדר העדיפויות לניתוב תוצאת שיחה לטאב הנכון (כשאותו מספר קיים בכמה):
+ * מיפוי סטטוסי ליד של NLPearl לעברית קריאה - לפי טבלת "Lead Statuses"
+ * מהתיעוד הרשמי של NLPearl (developers.nlpearl.ai), שהלקוחה העתיקה לנו
+ * מילה במילה. אלה סטטוסי-מערכת ("מה קורה עם החיוג עכשיו") - לא תוצאה
+ * עסקית - ולכן הם לעולם לא דורסים תוצאה אמיתית (תגית/סיכום), ר'
+ * isPearlSystemStatus_ למטה.
+ */
+const PEARL_LEAD_STATUS_LABELS_ = {
+  1: 'טרם חויג',
+  10: 'לא ענה - ינוסה שוב',
+  20: 'בתור לחיוג',
+  30: 'מספר לא תואם קידומת מדינה',
+  40: 'בשיחה כרגע',
+  70: 'הושארה הודעה קולית',
+  100: 'הסתיים בהצלחה',
+  110: 'הסתיים ללא הצלחה',
+  130: 'הושלמו כל הניסיונות',
+  150: 'לא ניתן להשגה',
+  220: 'ברשימה שחורה',
+  300: 'החיוג בוטל בתור',
+  500: 'שגיאת מערכת בפרלה'
+};
+
+/**
+ * true אם ערך "סטטוס שיחה" הנוכחי הוא סטטוס-מערכת (מהמיפוי למעלה, או
+ * placeholder "שיחה נשלחה") - כלומר מותר לדרוס אותו בסטטוס-מערכת עדכני.
+ * ערך אחר (תגית אמיתית מפרלה / תווית מעוגלת מהרשימה של הלקוחה) הוא
+ * תוצאה עסקית - סטטוס-מערכת גנרי לעולם לא דורס אותה.
+ */
+function isPearlSystemStatus_(value) {
+  if (!value) return true;
+  const normalized = normalizeLabel_(value);
+  if (normalized === normalizeLabel_(CALL_SENT_STATUS)) return true;
+  return Object.keys(PEARL_LEAD_STATUS_LABELS_).some(function (code) {
+    return normalizeLabel_(PEARL_LEAD_STATUS_LABELS_[code]) === normalized;
+  });
+}
+
+/**
+ * סדר העדיפויות לניתוב אירוע פרלה לטאב הנכון (כשאותו מספר קיים בכמה):
  * 1. טאב שבעמודת "מזהה קמפיין" שלו (שורה 2) רשום אותו pearlId שמגיע
  *    באירוע - זה הזיהוי הכי אמין, כי הוא אומר במפורש "הטאב הזה שייך
  *    לפרל הזאת". חיוני לתהליך שבו הלקוחה טוענת לידים ישירות למערכת של
@@ -802,52 +840,104 @@ function removeWhatsAppPullTrigger() {
  *    מתעדכן, ולידים שהופיעו גם בקמפיין ישן היו מקבלים את התוצאה בטאב הישן.
  * 2. הטאב שאליו הותחלה לאחרונה שיחה/הודעה למספר (lastContactSheet_).
  * 3. כל שאר טאבי הקמפיין.
+ */
+function orderedPearlSheets_(ss, incomingPhone, eventPearlId) {
+  const allSheets = getCampaignSheets_(ss);
+  const tracked = lastContactSheet_(ss, incomingPhone);
+
+  const sheetMatchesPearl_ = function (sheet) {
+    if (!eventPearlId) return false;
+    const headers = sheet.getDataRange().getValues()[0] || [];
+    const campaignCol = findColumnNormalized_(headers, CAMPAIGN_HEADER);
+    if (campaignCol === -1) return false;
+    const row2Value = sheet.getLastRow() >= 2 ? sheet.getRange(2, campaignCol + 1).getValue() : '';
+    return normalizeLabel_(row2Value) === normalizeLabel_(eventPearlId);
+  };
+
+  const pearlMatched = allSheets.filter(sheetMatchesPearl_);
+  const rest = allSheets.filter(function (s) { return pearlMatched.indexOf(s) === -1; });
+  if (tracked && pearlMatched.indexOf(tracked) === -1) {
+    rest.splice(rest.indexOf(tracked), 1);
+    rest.unshift(tracked);
+  }
+  return pearlMatched.concat(rest);
+}
+
+/**
+ * אירוע Lead Webhook מפרלה (מזוהה לפי "phoneNumber", בלי "to") - נושא
+ * סטטוס-מערכת מספרי (ר' PEARL_LEAD_STATUS_LABELS_). כותבים את התרגום
+ * העברי שלו ל"סטטוס שיחה" בלבד ("מה קורה עם הליד עכשיו" - לא ענה/בתור/
+ * בשיחה/הושלם), כדי שהלקוחה תראה אצלנו את אותם סטטוסים שהיא רואה במסך
+ * של פרלה. לא נוגעים ב"סיכום שיחה" (המצטברת), לא דורסים תוצאה עסקית
+ * אמיתית שכבר נכתבה (תגית/סיכום), ולא סופרים את זה כ"פעילות" בגרפים.
+ */
+function handlePearlLeadStatusEvent_(ss, payload, eventPearlId) {
+  const label = PEARL_LEAD_STATUS_LABELS_[Number(payload.status)];
+  if (!label) return; // קוד לא מוכר - לא ממציאים תווית
+
+  const incomingPhone = phoneSuffix_(payload.phoneNumber);
+  if (!incomingPhone) return;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheets = orderedPearlSheets_(ss, incomingPhone, eventPearlId);
+    for (const sheet of sheets) {
+      const data = sheet.getDataRange().getValues();
+      const headers = data[0];
+      const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+      const statusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
+      if (phoneCol === -1 || statusCol === -1) continue;
+
+      for (let i = 1; i < data.length; i++) {
+        const sheetPhone = phoneSuffix_(data[i][phoneCol]);
+        if (sheetPhone && sheetPhone === incomingPhone) {
+          const rowIndex = i + 1;
+          if (isPearlSystemStatus_(data[i][statusCol])) {
+            sheet.getRange(rowIndex, statusCol + 1).setValue(label);
+            const dateCol = ensureColumn_(sheet, headers, CALL_DATE_HEADER);
+            sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
+          }
+          return;
+        }
+      }
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
  * "תוצאות שיחה" מצטברת (כל שיחה חדשה מתווספת לקיים, לא דורסת) - בדיוק
  * כמו "תשובת איש קשר" בוואטסאפ. "תאריך שיחה" נוצרת לבד בפעם הראשונה שצריך.
  */
 function handleNlpearlWebhook_(ss, payload) {
-  // מטפלים רק באירועי Call Webhook (מזוהים לפי "to") לצורך עמודת התוצאה -
-  // אירועי Lead Webhook (מזוהים לפי "phoneNumber" במקום) לא נושאים את
-  // התוצאה הקריאה (tags/summary) ורק היו דורסים תוצאה טובה בנתונים גולמיים פחות שימושיים.
+  const eventPearlId = payload.pearlId ? String(payload.pearlId) : '';
+
+  // אירוע Lead Webhook (סטטוס-מערכת: לא ענה/בתור/בשיחה/הושלם) - מטופל
+  // בנפרד, כותב רק ל"סטטוס שיחה" בלי לגעת בתוצאות.
+  if (!payload.to && payload.phoneNumber) {
+    handlePearlLeadStatusEvent_(ss, payload, eventPearlId);
+    return;
+  }
   if (!payload.to) return;
 
   const incomingPhone = phoneSuffix_(payload.to);
   if (!incomingPhone) return;
 
-  // מתעלמים מאירועים בלי טקסט קריא ממשי (רק קוד סטטוס פנימי מספרי של
-  // פרלה, למשל payload.status=5, בלי Indicator Tag/summary) - כדי
-  // שהלקוחה לעולם לא תראה "סטטוס: 5" לא מובן בעמודות. מעדכנים רק
-  // כשבאמת יש תגית/סיכום קריא.
+  // מתעלמים מאירועי שיחה בלי טקסט קריא ממשי (רק קוד סטטוס פנימי מספרי
+  // של פרלה, בלי Indicator Tag/summary) - כדי שהלקוחה לעולם לא תראה
+  // "סטטוס: 5" לא מובן בעמודות. הסטטוסים השוטפים (לא ענה וכו') מגיעים
+  // דרך אירועי ה-Lead שמטופלים למעלה.
   const summary = (Array.isArray(payload.tags) && payload.tags.length)
     ? payload.tags.join(', ')
     : payload.summary;
   if (!summary) return;
 
-  const eventPearlId = payload.pearlId ? String(payload.pearlId) : '';
-
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    const allSheets = getCampaignSheets_(ss);
-    const tracked = lastContactSheet_(ss, incomingPhone);
-
-    // טאבים שה"מזהה קמפיין" שלהם (שורה 2) תואם את ה-pearlId של האירוע.
-    const sheetMatchesPearl_ = function (sheet) {
-      if (!eventPearlId) return false;
-      const headers = sheet.getDataRange().getValues()[0] || [];
-      const campaignCol = findColumnNormalized_(headers, CAMPAIGN_HEADER);
-      if (campaignCol === -1) return false;
-      const row2Value = sheet.getLastRow() >= 2 ? sheet.getRange(2, campaignCol + 1).getValue() : '';
-      return normalizeLabel_(row2Value) === normalizeLabel_(eventPearlId);
-    };
-
-    const pearlMatched = allSheets.filter(sheetMatchesPearl_);
-    const rest = allSheets.filter(function (s) { return pearlMatched.indexOf(s) === -1; });
-    if (tracked && pearlMatched.indexOf(tracked) === -1) {
-      rest.splice(rest.indexOf(tracked), 1);
-      rest.unshift(tracked);
-    }
-    const sheets = pearlMatched.concat(rest);
+    const sheets = orderedPearlSheets_(ss, incomingPhone, eventPearlId);
 
     for (const sheet of sheets) {
       const data = sheet.getDataRange().getValues();
@@ -1329,10 +1419,11 @@ function collectDistillCallStatuses_(dryRun) {
 
     for (let i = 1; i < data.length; i++) {
       const rawStatus = String(data[i][statusCol] || '');
-      // "שיחה נשלחה" הוא placeholder זמני שנכתב ברגע שהשיחה יצאה, לפני
-      // שהתקבלה תוצאה אמיתית מפרלה - אין בו שום מידע על מה שקרה בפועל,
-      // אז אין מה "לעגל" (AI היה חייב להמציא ערך שרירותי). מדלגים עליו.
-      if (!rawStatus || rawStatus === CALL_SENT_STATUS || normalizedList.indexOf(normalizeLabel_(rawStatus)) !== -1) continue; // כבר תואם בדיוק ערך מהרשימה, או שאין עדיין תוצאה אמיתית
+      // מדלגים על: ערך שכבר תואם את הרשימה; "שיחה נשלחה" (placeholder
+      // בלי תוצאה); וכל סטטוס-מערכת של פרלה ("לא ענה - ינוסה שוב" וכו',
+      // ר' isPearlSystemStatus_) - אלה מצבי-חיוג מדויקים כמו שהם, ואין
+      // מה "לעגל" אותם לתווית עסקית (AI היה ממציא ערך שרירותי).
+      if (!rawStatus || isPearlSystemStatus_(rawStatus) || normalizedList.indexOf(normalizeLabel_(rawStatus)) !== -1) continue;
 
       const name = nameCol !== -1 ? data[i][nameCol] : '';
 
