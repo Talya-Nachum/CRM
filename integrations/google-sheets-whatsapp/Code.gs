@@ -794,12 +794,16 @@ function removeWhatsAppPullTrigger() {
 }
 
 /**
- * כמו ב-handleInforuWebhook_ למעלה: מחפשים קודם רק בטאב שאליו הותחלה
- * לאחרונה שיחה למספר הזה (lastContactSheet_), כדי שתוצאת שיחה תעדכן
- * רק את הקמפיין הרלוונטי ולא כל טאב אחר שבו קיים במקרה אותו מספר.
+ * סדר העדיפויות לניתוב תוצאת שיחה לטאב הנכון (כשאותו מספר קיים בכמה):
+ * 1. טאב שבעמודת "מזהה קמפיין" שלו (שורה 2) רשום אותו pearlId שמגיע
+ *    באירוע - זה הזיהוי הכי אמין, כי הוא אומר במפורש "הטאב הזה שייך
+ *    לפרל הזאת". חיוני לתהליך שבו הלקוחה טוענת לידים ישירות למערכת של
+ *    פרלה (בלי לחייג דרכנו) - אז ה"זיכרון" (lastContactSheet_) בכלל לא
+ *    מתעדכן, ולידים שהופיעו גם בקמפיין ישן היו מקבלים את התוצאה בטאב הישן.
+ * 2. הטאב שאליו הותחלה לאחרונה שיחה/הודעה למספר (lastContactSheet_).
+ * 3. כל שאר טאבי הקמפיין.
  * "תוצאות שיחה" מצטברת (כל שיחה חדשה מתווספת לקיים, לא דורסת) - בדיוק
- * כמו "תשובת איש קשר" בוואטסאפ, כדי לשמור היסטוריה אם היו כמה שיחות/ניסיונות.
- * "תאריך שיחה" נוצרת לבד בפעם הראשונה שצריך אותה, כמו "סטטוס איש קשר".
+ * כמו "תשובת איש קשר" בוואטסאפ. "תאריך שיחה" נוצרת לבד בפעם הראשונה שצריך.
  */
 function handleNlpearlWebhook_(ss, payload) {
   // מטפלים רק באירועי Call Webhook (מזוהים לפי "to") לצורך עמודת התוצאה -
@@ -819,11 +823,32 @@ function handleNlpearlWebhook_(ss, payload) {
     : payload.summary;
   if (!summary) return;
 
+  const eventPearlId = payload.pearlId ? String(payload.pearlId) : '';
+
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
+    const allSheets = getCampaignSheets_(ss);
     const tracked = lastContactSheet_(ss, incomingPhone);
-    const sheets = tracked ? [tracked] : getCampaignSheets_(ss);
+
+    // טאבים שה"מזהה קמפיין" שלהם (שורה 2) תואם את ה-pearlId של האירוע.
+    const sheetMatchesPearl_ = function (sheet) {
+      if (!eventPearlId) return false;
+      const headers = sheet.getDataRange().getValues()[0] || [];
+      const campaignCol = findColumnNormalized_(headers, CAMPAIGN_HEADER);
+      if (campaignCol === -1) return false;
+      const row2Value = sheet.getLastRow() >= 2 ? sheet.getRange(2, campaignCol + 1).getValue() : '';
+      return normalizeLabel_(row2Value) === normalizeLabel_(eventPearlId);
+    };
+
+    const pearlMatched = allSheets.filter(sheetMatchesPearl_);
+    const rest = allSheets.filter(function (s) { return pearlMatched.indexOf(s) === -1; });
+    if (tracked && pearlMatched.indexOf(tracked) === -1) {
+      rest.splice(rest.indexOf(tracked), 1);
+      rest.unshift(tracked);
+    }
+    const sheets = pearlMatched.concat(rest);
+
     for (const sheet of sheets) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
