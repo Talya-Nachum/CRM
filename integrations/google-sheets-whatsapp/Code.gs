@@ -386,6 +386,7 @@ function sendMessagesInSheet_(sheet) {
   const sheetTemplateId = (templateCol !== -1 && data[1] && data[1][templateCol])
     ? String(data[1][templateCol]) : DEFAULT_TEMPLATE_ID;
 
+  let sent = 0;
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const phone = String(row[phoneCol]).replace(/\D/g, '');
@@ -396,9 +397,10 @@ function sendMessagesInSheet_(sheet) {
 
     // שולחים רק לשורה שסומנה ידנית כ"מאושר לשליחה" - כדי לאפשר להעלות
     // רשימה שלמה (למשל 300 אנשי קשר) ולשלוח בפעימות נשלטות, על ידי
-    // שינוי הסטטוס רק לחלק מהשורות בכל פעם. trim() כדי שרווח מיותר
-    // בתא (בהקלדה/הדבקה) לא ימנע שליחה.
-    if (!phone || status !== APPROVED_STATUS) continue;
+    // שינוי הסטטוס רק לחלק מהשורות בכל פעם. ההשוואה עוברת דרך
+    // normalizeLabel_ (ולא === ישיר) - דפוס באג מתועד בפרויקט: רווח נסתר/
+    // רווח קשיח (NBSP) מהדבקה או מרשימה נפתחת שובר השוואה מדויקת בשקט.
+    if (!phone || normalizeLabel_(status) !== normalizeLabel_(APPROVED_STATUS)) continue;
 
     recordLastContact_(phone, sheet.getName());
 
@@ -423,10 +425,13 @@ function sendMessagesInSheet_(sheet) {
     });
 
     const result = JSON.parse(response.getContentText());
-    sheet.getRange(rowIndex, statusCol + 1).setValue(
-      result.StatusId === 1 ? SENT_STATUS : 'שגיאה: ' + result.StatusDescription
-    );
+    const newStatus = result.StatusId === 1 ? SENT_STATUS : 'שגיאה: ' + result.StatusDescription;
+    sheet.getRange(rowIndex, statusCol + 1).setValue(newStatus);
+    sent++;
+    Logger.log('טאב "' + sheet.getName() + '", ' + name + ' (' + phone + '): ' + newStatus);
   }
+  Logger.log('טאב "' + sheet.getName() + '": ' + sent + ' הודעות נשלחו מתוך ' + (data.length - 1) +
+    ' שורות (נשלח רק למי שמסומן "' + APPROVED_STATUS + '").');
 }
 
 function startCalls() {
@@ -747,12 +752,20 @@ function pullOutgoingWhatsAppMessages() {
   const chats = (result.Data && result.Data.Results) || [];
   let written = 0;
   let skippedIncoming = 0;
+  let skippedTemplates = 0;
   let notFound = 0;
 
   chats.forEach(function (chat) {
     const messages = chat.Messages || [];
     messages.forEach(function (msg) {
       if (msg.Direction !== 'Outgoing') { skippedIncoming++; return; }
+      // הודעת התבנית של הקמפיין (ההודעה הראשונה שנשלחה לכולם) לא מתועדת -
+      // היא זהה לכל הלידים, מעמיסה את עמודת ההערות ולא מוסיפה מידע. מזוהה
+      // לפי השדה WhatsappTemplateInfo שקיים רק בהודעות תבנית (ר' התיעוד
+      // של InforU) - לא לפי ניחוש טקסט. רק המשך השיחה הידני מתועד.
+      const additional = msg.AddtionalInfo || msg.AdditionalInfo || {};
+      if (additional.WhatsappTemplateInfo) { skippedTemplates++; return; }
+
       const phone = phoneSuffix_(msg.PhoneNumber);
       if (!phone) return;
 
@@ -768,6 +781,7 @@ function pullOutgoingWhatsAppMessages() {
   props.setProperty(WHATSAPP_PULL_LAST_TIME_PROP_, now.toISOString());
   Logger.log('pullOutgoingWhatsAppMessages: ' + chats.length + ' שיחות נמשכו, ' + written +
     ' הודעות יוצאות נכתבו, ' + skippedIncoming + ' הודעות נכנסות דולגו (כבר מתועדות ע"י ה-Webhook), ' +
+    skippedTemplates + ' הודעות תבנית דולגו (ההודעה הראשונה של הקמפיין), ' +
     notFound + ' לא נמצאה עבורן שורה בגיליון.');
 }
 
@@ -965,8 +979,15 @@ function handleNlpearlWebhook_(ss, payload) {
           // שפרלה כבר נתנה (כמו "לא מעוניין") ובין אם זה נרטיב ארוך -
           // כך שהעמודה הזו תמיד מדברת באותה שפה סגורה כמו "סטטוס איש
           // קשר" הידני. "סיכום שיחה" למעלה תמיד מקבל את הטקסט המלא, לא נגוע.
-          const statusValue = matchCallStatus_(summary, getStatusList_());
-          if (statusCol !== -1) sheet.getRange(rowIndex, statusCol + 1).setValue(statusValue);
+          const statusList = getStatusList_();
+          const statusValue = matchCallStatus_(summary, statusList);
+          // אחידות מוחלטת: כותבים ל"סטטוס שיחה" **רק** ערך מאוצר המילים
+          // הסגור. אם העיגול ב-AI נכשל והוחזר הנרטיב הגולמי - לא כותבים
+          // כלום (הסטטוס הקודם נשאר), והטקסט המלא ממילא כבר נשמר
+          // ב"סיכום שיחה" למעלה. כך פסקה חופשית לעולם לא נוחתת בעמודת הסטטוס.
+          if (statusCol !== -1 && isAllowedStatusValue_(statusValue, statusList)) {
+            sheet.getRange(rowIndex, statusCol + 1).setValue(statusValue);
+          }
           recordDailyActivity_(sheet.getName());
           return;
         }
@@ -1697,11 +1718,19 @@ function exportCampaignExcel(sheetName, headers, rows) {
   sheet.getRange(1, 1, 1, numCols).setFontWeight('bold').setBackground('#F3F4F6');
 
   if (numRows > 0) {
-    // עמודת הטלפון (אינדקס 2 - "טלפון נייד") - setNumberFormat('@') לבדו
-    // לא מספיק כשכותבים ערך שה-JS רואה כ-Number: הגיליון עדיין שומר אותו
-    // כמספר, ובאקסל זה מוצג ב"כתיב מדעי" (למשל 972544701930 -> 9.72544E+11).
-    // גרש מוביל (') מכריח פירוש כטקסט, ממש כמו הקלדה ידנית בגיליון.
-    const PHONE_COL_INDEX = 2;
+    // עמודת הטלפון - setNumberFormat('@') לבדו לא מספיק כשכותבים ערך
+    // שה-JS רואה כ-Number: הגיליון עדיין שומר אותו כמספר, ובאקסל זה מוצג
+    // ב"כתיב מדעי" (למשל 972544701930 -> 9.72544E+11). גרש מוביל (')
+    // מכריח פירוש כטקסט, ממש כמו הקלדה ידנית בגיליון.
+    // האינדקס נמצא לפי **שם הכותרת** ולא מקובע - סדר העמודות בייצוא
+    // משתנה מדי פעם לפי בקשות הלקוחה, ואינדקס קשיח נשבר בשקט בכל שינוי כזה.
+    const PHONE_COL_INDEX = (function () {
+      for (let i = 0; i < headers.length; i++) {
+        const h = normalizeLabel_(headers[i]);
+        if (h === normalizeLabel_(PHONE_HEADER) || h === normalizeLabel_('נייד')) return i;
+      }
+      return -1;
+    })();
     const values = rows.map(function (r) {
       return r.values.map(function (v, idx) {
         if (idx === PHONE_COL_INDEX && v !== '' && v !== null && v !== undefined) {
@@ -2005,6 +2034,97 @@ function matchCallStatus_(text, statusList) {
   }
 }
 
+/**
+ * אוצר המילים הסגור של הסטטוסים - כל ערך שמותר להופיע בעמודת הסטטוס:
+ * הרשימה שהלקוחה מנהלת ("רשימת סטטוסים") + סטטוסי המערכת הקבועים שלנו
+ * (נשלח וואטסאפ / שיחה נשלחה / מאושר לשליחה) + סטטוסי הליד של פרלה
+ * (PEARL_LEAD_STATUS_LABELS_). כל ערך אחר - טקסט חופשי/נרטיב - נחשב
+ * "לא אחיד" ולעולם לא ייכתב לעמודת הסטטוס (הוא הולך להערות בלבד).
+ */
+function allowedStatusValues_(statusList) {
+  const list = (statusList || []).slice();
+  [SENT_STATUS, CALL_SENT_STATUS, APPROVED_STATUS].forEach(function (s) { list.push(s); });
+  Object.keys(PEARL_LEAD_STATUS_LABELS_).forEach(function (code) {
+    list.push(PEARL_LEAD_STATUS_LABELS_[code]);
+  });
+  return list;
+}
+
+/** true אם הערך שייך לאוצר המילים הסגור (השוואה מנורמלת). */
+function isAllowedStatusValue_(value, statusList) {
+  if (!value) return false;
+  const normalized = normalizeLabel_(value);
+  return allowedStatusValues_(statusList).some(function (s) {
+    return normalizeLabel_(s) === normalized;
+  });
+}
+
+/**
+ * הסטטוס האחיד היחיד שמוצג בדשבורד, לפי סדר עדיפויות:
+ * 1. "סטטוס איש קשר" - התוצאה העסקית (לחיצת כפתור בוואטסאפ או עדכון
+ *    ידני של הצוות). מנצח תמיד - הצוות/הליד קובעים.
+ * 2. "סטטוס שיחה" - מה שפרלה דיווחה (תגית או סטטוס-ליד).
+ * 3. "סטטוס דיוור" - סטטוס השליחה ("נשלח וואטסאפ"/"מאושר לשליחה"/שגיאה).
+ * ערך שאינו באוצר המילים הסגור מדולג (כדי לשמור על אחידות מוחלטת) -
+ * חוץ משגיאות שליחה, שחשוב שיוצגו כמו שהן.
+ */
+function unifiedStatus_(contactStatus, callStatus, sendStatus, statusList) {
+  const candidates = [contactStatus, callStatus, sendStatus];
+  for (let i = 0; i < candidates.length; i++) {
+    const value = String(candidates[i] || '').trim();
+    if (!value) continue;
+    if (value.indexOf('שגיאה') === 0) return value;
+    if (isAllowedStatusValue_(value, statusList)) return value;
+  }
+  return '';
+}
+
+/**
+ * בונה את יומן ההערות המאוחד שמוצג בעמודה אחת - כל התיעוד יחד, החדש
+ * למעלה, כשלכל שורה מסומן מי כתב אותה:
+ *   lead  - מה שהליד כתב בוואטסאפ
+ *   team  - מה שהצוות כתב (ידנית ב-CRM, או תשובה ידנית מה-Inbox של InforU)
+ *   pearl - סיכומי השיחות מפרלה
+ * מחזיר מערך [{ who, text }] - הפורמט עצמו נקבע בצד הלקוח.
+ */
+function buildNotesEntries_(reply, callResult, userNotes) {
+  const entries = [];
+  const pushLines_ = function (raw, who) {
+    String(raw || '').split('\n').forEach(function (line) {
+      const text = line.trim();
+      if (text) entries.push({ who: who, text: text });
+    });
+  };
+
+  // הערות ידניות של הצוות - כבר שמורות "החדשה למעלה" (ר' appendNoteEntry_).
+  pushLines_(userNotes, 'team');
+
+  // שיחת הוואטסאפ - מצטברת "הישן למעלה", אז הופכים לסדר החדש-קודם.
+  // שורות שנמשכו מה-Inbox של InforU מסומנות מראש ב-"👤 מיטוב:" (ר'
+  // pullOutgoingWhatsAppMessages) - הן של הצוות, לא של הליד.
+  const replyEntries = [];
+  String(reply || '').split('\n').forEach(function (line) {
+    const text = line.trim();
+    if (!text) return;
+    if (text.indexOf('👤 מיטוב:') === 0) {
+      replyEntries.push({ who: 'team', text: text.replace('👤 מיטוב:', '').trim() });
+    } else {
+      replyEntries.push({ who: 'lead', text: text });
+    }
+  });
+  replyEntries.reverse().forEach(function (e) { entries.push(e); });
+
+  // סיכומי פרלה - גם הם מצטברים "הישן למעלה", אז אותו היפוך.
+  const callEntries = [];
+  String(callResult || '').split('\n').forEach(function (line) {
+    const text = line.trim();
+    if (text) callEntries.push({ who: 'pearl', text: text });
+  });
+  callEntries.reverse().forEach(function (e) { entries.push(e); });
+
+  return entries;
+}
+
 function getCampaignData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
@@ -2032,6 +2152,7 @@ function getCampaignData(sheetName) {
 
   const lastExportIso = lastExportTime_(sheetName);
   const lastExportMs = lastExportIso ? new Date(lastExportIso).getTime() : null;
+  const statusList = getStatusList_();
 
   let sent = 0, errors = 0, replies = 0, callsSent = 0, activityToday = 0;
   const rows = [];
@@ -2090,6 +2211,15 @@ function getCampaignData(sheetName) {
       callDate: (callDate instanceof Date && !isNaN(callDate.getTime()))
         ? Utilities.formatDate(callDate, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
       userNotes: userNotes,
+      // --- השדות המאוחדים שהדשבורד מציג בפועל (עמודת סטטוס אחת + הערות אחת) ---
+      unifiedStatus: unifiedStatus_(firstReply, callStatus, status, statusList),
+      notesEntries: buildNotesEntries_(reply, callResult, userNotes),
+      lastActivity: lastActivityMs > 0
+        ? Utilities.formatDate(new Date(lastActivityMs), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
+      lastActivityMs: lastActivityMs,
+      // "הגיב" = יצר איתנו אינטראקציה אמיתית: כתב/לחץ כפתור בוואטסאפ, או
+      // שפרלה החזירה תוצאה. סטטוס-מערכת ("לא ענה") לבדו אינו תגובה.
+      hasResponded: !!(reply || firstReply || callResult),
       updatedToday: updatedToday,
       recentlyUpdated: recentlyUpdated
     });

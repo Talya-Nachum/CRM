@@ -849,6 +849,65 @@
     color: var(--text-muted);
   }
 
+  /* עמודות טקסט קצרות - חיתוך לשורה אחת, הטקסט המלא בטולטיפ של הדפדפן */
+  .company-cell, .title-cell, .email-cell {
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .title-cell, .email-cell { color: var(--text-muted); }
+
+  /* קוביית ההערות המאוחדת - עד 3 שורות, כל אחת עם סימון מי כתב.
+     הטקסט המלא נפתח בטולטיפ המותאם (.cell-tooltip) במעבר עכבר. */
+  .notes-cell { max-width: 380px; }
+  .notes-box {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .note-line {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+  }
+  .note-who { font-weight: 700; }
+  .who-lead  { color: var(--good); }
+  .who-pearl { color: var(--pending); }
+  .who-team  { color: var(--accent); }
+  .note-more { color: var(--text-muted); font-size: 11.5px; opacity: .8; }
+  .notes-empty { color: var(--text-muted); }
+
+  /* מתג "רק מי שהגיב" / "הצג הכל" */
+  .view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn, 8px);
+    overflow: hidden;
+  }
+  .view-toggle button {
+    padding: 7px 13px;
+    font-size: 13px;
+    border: none;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .view-toggle button.on {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+
   /* טולטיפ מותאם אישית לתאים חתוכים (תשובת איש קשר / הערות פרלה) - לא
      נשענים על ה-title המובנה של הדפדפן, כי הוא מגיע באיחור ולפעמים לא
      עולה בכלל; זה מבטיח שמעבר עכבר תמיד ומיד מציג את הטקסט המלא. */
@@ -1093,6 +1152,10 @@
   <div class="card table-card">
     <h2>אנשי קשר</h2>
     <div class="table-toolbar">
+      <div class="view-toggle" id="viewToggle">
+        <button type="button" data-mode="responded" class="on">רק מי שהגיב</button>
+        <button type="button" data-mode="all">הצג הכל</button>
+      </div>
       <button class="btn" id="exportBtn" type="button">📥 ייצוא לאקסל</button>
       <button class="btn btn-accent" id="addContactBtn" type="button">➕ הוספת איש קשר</button>
       <input type="text" class="search-input" id="searchInput" placeholder="חיפוש לפי שם או טלפון...">
@@ -1189,6 +1252,7 @@
   let namedCategoryLabels = []; // תוויות הקטגוריות "האמיתיות" (לא "אחר"/"טרם ענו") - לחישוב סינון "אחר"
   let columnFilters = {}; // { columnKey: Set(ערכים מותרים) } - סינון לפי עמודה (כמו Excel)
   let sortState = { key: null, dir: 1 }; // מיון א-ב בלחיצה על כותרת עמודה - ר' setupColumnSortClicks_
+  let viewMode = 'responded'; // 'responded' = רק מי שהגיב (ברירת מחדל) | 'all' = הכל. ר' setupViewToggle_
   const PAGE_SIZE = 10;
   const AUTO_REFRESH_MS = 30000;
 
@@ -1337,64 +1401,70 @@
    * תמיד; שאר העמודות מוצגות רק אם יש לפחות שורה אחת עם ערך בהן
    * (ראו computeVisibleColumns_) - כדי לא להציג עמודות ריקות לגמרי.
    */
+  // תווית מקור לכל שורת הערה ביומן המאוחד (ר' buildNotesEntries_ ב-Code.gs).
+  const NOTE_AUTHORS = {
+    lead:  { icon: '💬', label: 'ליד',  cls: 'who-lead'  },
+    pearl: { icon: '📞', label: 'פרלה', cls: 'who-pearl' },
+    team:  { icon: '👤', label: 'מיטוב', cls: 'who-team' }
+  };
+
+  /** טקסט שטוח של כל היומן - לחיפוש/סינון ולטולטיפ המלא. */
+  function notesPlainText_(entries) {
+    return (entries || []).map(function (e) {
+      const a = NOTE_AUTHORS[e.who] || NOTE_AUTHORS.team;
+      return a.icon + ' ' + a.label + ': ' + e.text;
+    }).join('\n');
+  }
+
   const COLUMN_DEFS = [
+    { key: 'date', label: 'תאריך', always: true, sortable: true,
+      // תאריך הפעילות האחרונה (תגובת וואטסאפ או שיחת פרלה - המאוחר מביניהם).
+      filterValue: function (r) { return r.lastActivity || ''; },
+      sortValue: function (r) { return Number(r.lastActivityMs) || 0; },
+      cell: function (r) { return '<td class="date-cell">' + (r.lastActivity ? escapeHtml_(r.lastActivity) : '—') + '</td>'; } },
     { key: 'company', label: 'שם חברה', always: true, sortable: true,
       filterValue: function (r) { return r.company || ''; },
-      cell: function (r) { return '<td class="reply-cell">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
-    { key: 'name', label: 'שם איש קשר', always: true, sortable: true,
+      cell: function (r) { return '<td class="company-cell">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
+    { key: 'name', label: 'איש קשר', always: true, sortable: true,
       filterValue: function (r) { return r.name || ''; },
       cell: function (r) { return '<td class="name-cell">' + escapeHtml_(r.name) + '</td>'; } },
-    { key: 'phone', label: 'טלפון נייד', always: true,
+    { key: 'title', label: 'תפקיד', always: true,
+      filterValue: function (r) { return r.title || ''; },
+      cell: function (r) { return '<td class="title-cell">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>'; } },
+    { key: 'phone', label: 'נייד', always: true,
       filterValue: function (r) { return r.phone || ''; },
       cell: function (r) { return '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>'; } },
-    { key: 'finalStatus', label: 'סטטוס', always: false, sortable: true,
-      // מוצגת רק אם בפועל רץ קמפיין וואטסאפ (יש ערך סטטוס/תגובה אצל מישהו) -
-      // אם לא, אין טעם להציג עמודה ריקה. רק לחיצה אמיתית על כפתור - לא
-      // תשובה חופשית (זו כבר מוצגת בעמודת "הערות איש קשר"). כל עוד לא
-      // הגיעה תגובה כזו, נשאר הסטטוס הבסיסי ("נשלח וואטסאפ" וכו') - וניתן
-      // לדריסה חופשית תמיד ע"י הצוות. לכל סטטוס יש צבע קבוע/עקבי משלו
-      // (colorForStatus_) - לא רק ירוק/אדום.
-      hasValue: function (r) { return !!(r.firstReply || r.status); },
-      filterValue: function (r) { return r.firstReply || r.status || ''; },
+    { key: 'email', label: 'אימייל', always: true,
+      filterValue: function (r) { return r.email || ''; },
+      cell: function (r) { return '<td class="email-cell">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>'; } },
+    { key: 'status', label: 'סטטוס', always: true, sortable: true,
+      // עמודת סטטוס **אחת** לכל הערוצים (וואטסאפ + פרלה + ידני). הערך
+      // מגיע מוכן מהשרת (unifiedStatus_) ותמיד שייך לאוצר המילים הסגור -
+      // אף פעם לא פסקה חופשית. לכל סטטוס צבע קבוע ועקבי (colorForStatus_),
+      // וניתן לשנות ידנית תמיד דרך כפתור ה-"+".
+      filterValue: function (r) { return r.unifiedStatus || ''; },
       cell: function (r) {
-        const statusText = r.firstReply || r.status || 'ממתין';
+        const statusText = r.unifiedStatus || 'ממתין';
         const c = colorForStatus_(statusText);
         return '<td><span class="status-pill" style="background:' + softStatusColor_(c) + ';color:' + c + ';">' + escapeHtml_(statusText) + '</span></td>';
       } },
-    { key: 'reply', label: 'הערות איש קשר', always: false,
-      // שיחת הוואטסאפ עם הבוט (טקסט חופשי בלבד - לחיצת כפתור לבדה כבר
-      // מתועדת ב"סטטוס" ולא משוכפלת לכאן). נפרדת מ"הערות מיטוב". מוצגת
-      // רק אם למישהו יש בפועל שיחה כזו.
-      hasValue: function (r) { return !!r.reply; },
-      filterValue: function (r) { return r.reply ? lastReplyLine_(r.reply) : ''; },
-      cell: function (r) { return '<td class="reply-cell" data-tip="' + (r.reply ? escapeHtml_(r.reply) : '') + '">' + (r.reply ? escapeHtml_(lastReplyLine_(r.reply)) : '—') + (r._isNew && r.reply ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
-    { key: 'callStatus', label: 'סטטוס פרלה', always: false, sortable: true,
-      // מוצגת רק אם בפועל בוצעה שיחת פרלה (יש ערך) - אם לא הרצנו שיחות
-      // בקמפיין הזה בכלל, אין טעם בעמודה ריקה. אותו מנגנון צבע כמו "סטטוס".
-      hasValue: function (r) { return !!r.callStatus; },
-      filterValue: function (r) { return r.callStatus || ''; },
+    { key: 'notes', label: 'הערות', always: true,
+      // יומן מאוחד: כל התיעוד יחד (ליד/פרלה/מיטוב), החדש למעלה. התא מציג
+      // קוביה עם עד 3 שורות; הטקסט המלא נפתח בטולטיפ במעבר עכבר.
+      filterValue: function (r) { return notesPlainText_(r.notesEntries); },
       cell: function (r) {
-        const c = colorForStatus_(r.callStatus);
-        return '<td><span class="status-pill" style="background:' + softStatusColor_(c) + ';color:' + c + ';">' + escapeHtml_(r.callStatus) + '</span></td>';
+        const entries = r.notesEntries || [];
+        if (!entries.length) return '<td class="notes-cell"><span class="notes-empty">—</span></td>';
+        const shown = entries.slice(0, 3).map(function (e) {
+          const a = NOTE_AUTHORS[e.who] || NOTE_AUTHORS.team;
+          return '<span class="note-line"><span class="note-who ' + a.cls + '">' + a.icon + ' ' + a.label + ':</span> ' + escapeHtml_(e.text) + '</span>';
+        }).join('');
+        const more = entries.length > 3
+          ? '<span class="note-more">ועוד ' + (entries.length - 3) + '…</span>' : '';
+        const badge = r._isNew ? '<span class="new-badge">חדש</span>' : '';
+        return '<td class="notes-cell" data-tip="' + escapeHtml_(notesPlainText_(entries)) + '">' +
+          '<div class="notes-box">' + shown + more + badge + '</div></td>';
       } },
-    { key: 'callResult', label: 'הערות פרלה', always: false,
-      // תוצאות/סיכום שיחות הפרלה - מוצגת רק אם בפועל בוצעה שיחה.
-      hasValue: function (r) { return !!r.callResult; },
-      filterValue: function (r) { return r.callResult ? lastReplyLine_(r.callResult) : ''; },
-      cell: function (r) { return '<td class="reply-cell" data-tip="' + (r.callResult ? escapeHtml_(r.callResult) : '') + '">' + (r.callResult ? escapeHtml_(lastReplyLine_(r.callResult)) : '—') + (r._isNew && r.callResult ? '<span class="new-badge">חדש</span>' : '') + '</td>'; } },
-    { key: 'notes', label: 'הערות מיטוב', always: true,
-      // יומן הערות ידניות של הצוות בלבד (addUserNote/setUserStatus) -
-      // נפרד מ"הערות איש קשר". התא מציג תקציר קצר (מי כתב אחרון + כמות) -
-      // הטקסט המלא נפתח ב"+".
-      filterValue: function (r) { return r.userNotes || ''; },
-      cell: function (r) {
-        const summary = parseNotesSummary_(r.userNotes);
-        if (!summary) return '<td class="reply-cell">—</td>';
-        return '<td><span class="note-chip" data-phone="' + escapeHtml_(r.phone) + '" title="' + escapeHtml_(r.userNotes) + '">📝 ' + escapeHtml_(summary.lastAuthor) + ' (' + summary.count + ')</span></td>';
-      } },
-    { key: 'date', label: 'תאריך', always: true, sortable: true,
-      filterValue: function (r) { return r.replyDate || ''; },
-      cell: function (r) { return '<td class="date-cell">' + (r.replyDate ? escapeHtml_(r.replyDate) : '—') + '</td>'; } },
     { key: 'actions', label: '', always: true,
       cell: function (r) {
         const p = escapeHtml_(r.phone);
@@ -1627,14 +1697,14 @@
     }
 
     tbody.addEventListener('mouseover', function (e) {
-      const cell = e.target.closest('.reply-cell[data-tip]');
+      const cell = e.target.closest('[data-tip]');
       if (!cell || !cell.getAttribute('data-tip')) { hide(); return; }
       tip.textContent = cell.getAttribute('data-tip');
       positionNear(cell);
     });
 
     tbody.addEventListener('mouseout', function (e) {
-      const cell = e.target.closest('.reply-cell[data-tip]');
+      const cell = e.target.closest('[data-tip]');
       if (!cell) return;
       const toEl = e.relatedTarget;
       if (toEl && cell.contains(toEl)) return;
@@ -1693,13 +1763,25 @@
    * + עמודות) - משמשת גם את applyFilters_ (לתצוגה בטבלה) וגם את
    * setupExport_ (כדי שהייצוא לאקסל יכבד בדיוק את מה שמסונן על המסך).
    */
-  function getFilteredRows_() {
+  /**
+   * @param {boolean} [ignoreViewMode] - true מתעלם ממתג "רק מי שהגיב"
+   *   ומחזיר גם את מי שטרם הגיב. משמש את הייצוא לאקסל, שלפי בקשת
+   *   הלקוחה תמיד מוציא את כולם (סינונים מפורשים - חיפוש/קטגוריה/
+   *   עמודה - כן ממשיכים לחול עליו, עם ההתראה שכבר קיימת).
+   */
+  function getFilteredRows_(ignoreViewMode) {
     if (!currentData) return [];
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
     let rows = !q ? currentData.rows : currentData.rows.filter(function (r) {
       return String(r.name || '').toLowerCase().indexOf(q) !== -1 ||
         String(r.phone || '').toLowerCase().indexOf(q) !== -1;
     });
+    // מתג התצוגה - "רק מי שהגיב" מסתיר את מי שעדיין לא יצר איתנו
+    // אינטראקציה. משפיע על הטבלה בלבד; הייצוא לאקסל תמיד מוציא הכל
+    // (ר' setupExport_, שעובד על currentData.rows במלואו).
+    if (viewMode === 'responded' && !ignoreViewMode) {
+      rows = rows.filter(function (r) { return !!r.hasResponded; });
+    }
     if (activeCategoryFilter) {
       rows = rows.filter(function (r) { return rowMatchesCategory_(r, activeCategoryFilter); });
     }
@@ -1713,6 +1795,11 @@
       const sortCol = COLUMN_DEFS.filter(function (c) { return c.key === sortState.key; })[0];
       if (sortCol) {
         rows = rows.slice().sort(function (a, b) {
+          // עמודות עם sortValue (למשל תאריך) ממוינות מספרית - השוואת
+          // מחרוזת על "dd/MM/yyyy" הייתה ממיינת לפי היום בחודש ולא לפי זמן.
+          if (sortCol.sortValue) {
+            return (sortCol.sortValue(a) - sortCol.sortValue(b)) * sortState.dir;
+          }
           const av = String(sortCol.filterValue(a) || '');
           const bv = String(sortCol.filterValue(b) || '');
           return av.localeCompare(bv, 'he') * sortState.dir;
@@ -1885,6 +1972,24 @@
     document.removeEventListener('click', closeColumnFilterPopoverOnOutsideClick_);
   }
 
+  /**
+   * מתג "רק מי שהגיב" / "הצג הכל" - משפיע רק על מה שמוצג בטבלה.
+   * הייצוא לאקסל מתעלם ממנו במכוון ותמיד מוציא את כל אנשי הקשר.
+   */
+  function setupViewToggle_() {
+    const wrap = document.getElementById('viewToggle');
+    if (!wrap) return;
+    wrap.addEventListener('click', function (e) {
+      const btn = e.target.closest('button[data-mode]');
+      if (!btn) return;
+      viewMode = btn.getAttribute('data-mode');
+      Array.prototype.forEach.call(wrap.querySelectorAll('button'), function (b) {
+        b.classList.toggle('on', b === btn);
+      });
+      applyFilters_(true);
+    });
+  }
+
   function setupExport_() {
     const exportBtn = document.getElementById('exportBtn');
     exportBtn.addEventListener('click', function () {
@@ -1893,7 +1998,9 @@
       // עמודות בסגנון אקסל) - לא מייצא סתם את כל השורות בקמפיין. אם יש
       // סינון פעיל שמצמצם את מה שבאמת ייצא, מתריעים לפני ההורדה - כדי
       // שלעולם לא יקרה שוב "חשבתי שפניתי לכולם" בגלל סינון ששכחו שהיה פעיל.
-      const rows = getFilteredRows_();
+      // ignoreViewMode=true - הייצוא תמיד כולל גם את מי שטרם הגיב, גם
+      // כשהטבלה על המסך מציגה "רק מי שהגיב".
+      const rows = getFilteredRows_(true);
       const totalInCampaign = currentData.rows.length;
       if (rows.length < totalInCampaign) {
         const proceed = confirm(
@@ -1907,12 +2014,16 @@
       // הזמינים, רק אלה שהיא באמת רוצה לראות בקובץ שיורד. שתי רמות הדגשה:
       // צהוב = התעדכן היום, ירוק חלש = התעדכן מאז ההורדה הקודמת (ר'
       // updatedToday/recentlyUpdated ב-getCampaignData).
-      const headers = ['שם חברה', 'שם איש קשר', 'טלפון נייד', 'סטטוס', 'הערות איש קשר', 'הערות מיטוב', 'תאריך'];
+      // אותו סדר עמודות בדיוק כמו בטבלה על המסך, כדי שלא יהיה בלבול.
+      const headers = ['תאריך', 'שם חברה', 'איש קשר', 'תפקיד', 'נייד', 'אימייל', 'סטטוס', 'הערות'];
 
       const exportRows = rows.map(function (r) {
-        const finalStatus = r.firstReply || r.status || '';
         return {
-          values: [r.company || '', r.name || '', r.phone || '', finalStatus, r.reply || '', r.userNotes || '', r.replyDate || ''],
+          values: [
+            r.lastActivity || '', r.company || '', r.name || '', r.title || '',
+            r.phone || '', r.email || '', r.unifiedStatus || '',
+            notesPlainText_(r.notesEntries)
+          ],
           updatedToday: !!r.updatedToday,
           recentlyUpdated: !!r.recentlyUpdated
         };
@@ -2390,6 +2501,7 @@
   setupCrmModal_();
   setupShare_();
   setupCellTooltips_();
+  setupViewToggle_();
 
   // רענון אוטומטי: כל 30 שניות טוענים מחדש את נתוני הטאב הפעיל (בלי לגעת
   // ברשימת הטאבים עצמה, כדי לא "לקפוץ" למשתמש בזמן שהוא מסתכל).
