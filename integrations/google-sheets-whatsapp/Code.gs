@@ -135,9 +135,21 @@ function onOpen() {
     .addToUi();
 }
 
+/**
+ * קוראת **רק את שורת הכותרות** של הטאב. חשוב מאוד לביצועים: getDataRange()
+ * מושך את כל תוכן הגיליון (מאות שורות עם סיכומי שיחות ארוכים) גם כשצריך רק
+ * את שורה 1. כשזה נעשה לכל טאב בנפרד - בכל טעינת דשבורד ובכל וובהוק - זה
+ * מגיע למגבלת הזמן של Apps Script ומחזיר "שגיאת שרת" גנרית בצד הלקוח.
+ */
+function headerRow_(sheet) {
+  const lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return [];
+  return sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
+}
+
 function isCampaignSheet_(sheet) {
   if (NON_CAMPAIGN_SHEETS_.indexOf(sheet.getName()) !== -1) return false;
-  const headers = sheet.getDataRange().getValues()[0] || [];
+  const headers = headerRow_(sheet);
   return findColumnNormalized_(headers, PHONE_HEADER) !== -1;
 }
 
@@ -878,7 +890,7 @@ function orderedPearlSheets_(ss, incomingPhone, eventPearlId) {
 
   const sheetMatchesPearl_ = function (sheet) {
     if (!eventPearlId) return false;
-    const headers = sheet.getDataRange().getValues()[0] || [];
+    const headers = headerRow_(sheet);
     const campaignCol = findColumnNormalized_(headers, CAMPAIGN_HEADER);
     if (campaignCol === -1) return false;
     const row2Value = sheet.getLastRow() >= 2 ? sheet.getRange(2, campaignCol + 1).getValue() : '';
@@ -1127,7 +1139,7 @@ function addContact(sheetName, fields) {
  * (מהדשבורד) וגם את handleWixWebhook_ (לידים אוטומטיים מהאתר).
  */
 function addContactRow_(sheet, fields) {
-  const headers = sheet.getDataRange().getValues()[0];
+  const headers = headerRow_(sheet);
   const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
   if (phoneCol === -1) {
     throw new Error('לא נמצאה עמודת "' + PHONE_HEADER + '" בטאב "' + sheet.getName() + '"');

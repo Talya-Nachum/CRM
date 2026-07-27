@@ -1266,8 +1266,23 @@
     bot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><circle cx="8" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1" fill="currentColor" stroke="none"/></svg>'
   };
 
-  function loadTabs() {
-    google.script.run.withSuccessHandler(renderTabs).withFailureHandler(showError).getCampaignNames();
+  // טעינת רשימת הטאבים עם ניסיונות חוזרים: "שגיאת שרת" של Apps Script היא
+  // לרוב חולפת (עומס/מכסה רגעית). בלי ניסיון חוזר המשתמשת נשארת בלי אף טאב
+  // וחייבת לרענן ידנית - עדיף שהדשבורד יתאושש לבד.
+  function loadTabs(attempt) {
+    const tries = attempt || 1;
+    google.script.run
+      .withSuccessHandler(renderTabs)
+      .withFailureHandler(function (err) {
+        if (tries < 3) {
+          const tabsEl = document.getElementById('tabs');
+          if (tabsEl) tabsEl.innerHTML = '<span class="empty-state">טוען קמפיינים... (ניסיון ' + (tries + 1) + ')</span>';
+          setTimeout(function () { loadTabs(tries + 1); }, tries * 2000);
+          return;
+        }
+        showError(err);
+      })
+      .getCampaignNames();
   }
 
   function renderTabs(names) {
