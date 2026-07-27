@@ -171,7 +171,10 @@
   .page {
     flex: 1;
     min-width: 0;
-    max-width: 1180px;
+    /* ללא הגבלת רוחב - הטבלה מנצלת את כל רוחב המסך כדי שכל העמודות
+       ייכנסו בלי גלילה אופקית (בקשת הלקוחה: להרחיב את הגבולות, לא
+       להקטין גופן). 1800px כתקרה כדי שבמסכים ענקיים זה לא יתמתח לאינסוף. */
+    max-width: 1800px;
     margin: 0 auto;
     padding: 32px 28px 80px;
     display: flex;
@@ -743,9 +746,10 @@
   }
 
   tbody td {
-    padding: 13px 10px;
+    padding: 12px 8px;
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
+    vertical-align: top;
   }
 
   tbody tr:last-child td { border-bottom: none; }
@@ -849,28 +853,27 @@
     color: var(--text-muted);
   }
 
-  /* עמודות טקסט קצרות - חיתוך לשורה אחת, הטקסט המלא בטולטיפ של הדפדפן */
+  /* עמודות טקסט קצרות - חיתוך לשורה אחת כדי שהכל ייכנס למסך בלי גלילה
+     אופקית. הטקסט המלא זמין בטולטיפ במעבר עכבר (ר' setupCellTooltips_). */
+  .company-cell { max-width: 155px; }
+  .title-cell   { max-width: 135px; }
+  .email-cell   { max-width: 150px; }
   .company-cell, .title-cell, .email-cell {
-    max-width: 170px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .title-cell, .email-cell { color: var(--text-muted); }
+  .date-cell { white-space: nowrap; }
 
   /* קוביית ההערות המאוחדת - עד 3 שורות, כל אחת עם סימון מי כתב.
      הטקסט המלא נפתח בטולטיפ המותאם (.cell-tooltip) במעבר עכבר. */
-  .notes-cell { max-width: 380px; }
+  .notes-cell { max-width: 340px; }
   .notes-box {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 7px 9px;
-    font-size: 12.5px;
-    line-height: 1.5;
+    gap: 2px;
+    line-height: 1.55;
   }
   .note-line {
     display: block;
@@ -883,7 +886,7 @@
   .who-lead  { color: var(--good); }
   .who-pearl { color: var(--pending); }
   .who-team  { color: var(--accent); }
-  .note-more { color: var(--text-muted); font-size: 11.5px; opacity: .8; }
+  .note-more { color: var(--text-muted); opacity: .75; }
   .notes-empty { color: var(--text-muted); }
 
   /* מתג "רק מי שהגיב" / "הצג הכל" */
@@ -1408,6 +1411,19 @@
     team:  { icon: '👤', label: 'מיטוב', cls: 'who-team' }
   };
 
+  /**
+   * שורות ההערות שיוצגו בפועל - בלי שורה שהטקסט שלה זהה לסטטוס המוצג.
+   * כשפרלה מחזירה תגית קצרה (למשל "לא מעוניין") היא כבר מוצגת כסטטוס,
+   * ואין טעם לחזור עליה מילה במילה גם בהערות. תיעוד אמיתי (תיאור השיחה)
+   * תמיד מוצג. סינון תצוגה בלבד - הגיליון והייצוא לאקסל כוללים הכל.
+   */
+  function visibleNotes_(r) {
+    const status = normalizeStatusKey_(r.unifiedStatus || '');
+    return (r.notesEntries || []).filter(function (e) {
+      return !status || normalizeStatusKey_(e.text) !== status;
+    });
+  }
+
   /** טקסט שטוח של כל היומן - לחיפוש/סינון ולטולטיפ המלא. */
   function notesPlainText_(entries) {
     return (entries || []).map(function (e) {
@@ -1424,19 +1440,19 @@
       cell: function (r) { return '<td class="date-cell">' + (r.lastActivity ? escapeHtml_(r.lastActivity) : '—') + '</td>'; } },
     { key: 'company', label: 'שם חברה', always: true, sortable: true,
       filterValue: function (r) { return r.company || ''; },
-      cell: function (r) { return '<td class="company-cell">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
+      cell: function (r) { return '<td class="company-cell" data-tip="' + escapeHtml_(r.company || '') + '">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
     { key: 'name', label: 'איש קשר', always: true, sortable: true,
       filterValue: function (r) { return r.name || ''; },
       cell: function (r) { return '<td class="name-cell">' + escapeHtml_(r.name) + '</td>'; } },
     { key: 'title', label: 'תפקיד', always: true,
       filterValue: function (r) { return r.title || ''; },
-      cell: function (r) { return '<td class="title-cell">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>'; } },
+      cell: function (r) { return '<td class="title-cell" data-tip="' + escapeHtml_(r.title || '') + '">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>'; } },
     { key: 'phone', label: 'נייד', always: true,
       filterValue: function (r) { return r.phone || ''; },
       cell: function (r) { return '<td class="phone-cell">' + escapeHtml_(r.phone) + '</td>'; } },
     { key: 'email', label: 'אימייל', always: true,
       filterValue: function (r) { return r.email || ''; },
-      cell: function (r) { return '<td class="email-cell">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>'; } },
+      cell: function (r) { return '<td class="email-cell" data-tip="' + escapeHtml_(r.email || '') + '">' + (r.email ? escapeHtml_(r.email) : '—') + '</td>'; } },
     { key: 'status', label: 'סטטוס', always: true, sortable: true,
       // עמודת סטטוס **אחת** לכל הערוצים (וואטסאפ + פרלה + ידני). הערך
       // מגיע מוכן מהשרת (unifiedStatus_) ותמיד שייך לאוצר המילים הסגור -
@@ -1453,7 +1469,7 @@
       // קוביה עם עד 3 שורות; הטקסט המלא נפתח בטולטיפ במעבר עכבר.
       filterValue: function (r) { return notesPlainText_(r.notesEntries); },
       cell: function (r) {
-        const entries = r.notesEntries || [];
+        const entries = visibleNotes_(r);
         if (!entries.length) return '<td class="notes-cell"><span class="notes-empty">—</span></td>';
         const shown = entries.slice(0, 3).map(function (e) {
           const a = NOTE_AUTHORS[e.who] || NOTE_AUTHORS.team;

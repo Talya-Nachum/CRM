@@ -814,19 +814,27 @@ function removeWhatsAppPullTrigger() {
  * עסקית - ולכן הם לעולם לא דורסים תוצאה אמיתית (תגית/סיכום), ר'
  * isPearlSystemStatus_ למטה.
  */
+// כל מצבי ה"עוד לא נסגר, פרלה תחזור אליו" מאוחדים לתווית אחת לפי בקשת
+// הלקוחה - במקום ניואנסים טכניים (בתור/מחייג/ינוסה שוב) שלא משנים לה בפועל.
+const PEARL_PENDING_LABEL_ = 'ממתין לשיחה נוספת';
+
+// מעל האורך הזה טקסט נחשב "נרטיב" (תיאור שיחה) ולא תווית סטטוס - תגיות
+// אמיתיות תמיד קצרות ("לא מעוניין", "פגישה מקוונת"), תיאורי שיחה תמיד ארוכים.
+const NARRATIVE_MIN_LENGTH_ = 40;
+
 const PEARL_LEAD_STATUS_LABELS_ = {
-  1: 'טרם חויג',
-  10: 'לא ענה - ינוסה שוב',
-  20: 'בתור לחיוג',
+  1: PEARL_PENDING_LABEL_,
+  10: PEARL_PENDING_LABEL_,
+  20: PEARL_PENDING_LABEL_,
   30: 'מספר לא תואם קידומת מדינה',
-  40: 'בשיחה כרגע',
+  40: PEARL_PENDING_LABEL_,
   70: 'הושארה הודעה קולית',
   100: 'הסתיים בהצלחה',
   110: 'הסתיים ללא הצלחה',
   130: 'הושלמו כל הניסיונות',
   150: 'לא ניתן להשגה',
   220: 'ברשימה שחורה',
-  300: 'החיוג בוטל בתור',
+  300: PEARL_PENDING_LABEL_,
   500: 'שגיאת מערכת בפרלה'
 };
 
@@ -840,9 +848,18 @@ function isPearlSystemStatus_(value) {
   if (!value) return true;
   const normalized = normalizeLabel_(value);
   if (normalized === normalizeLabel_(CALL_SENT_STATUS)) return true;
-  return Object.keys(PEARL_LEAD_STATUS_LABELS_).some(function (code) {
+  const isKnownSystemLabel = Object.keys(PEARL_LEAD_STATUS_LABELS_).some(function (code) {
     return normalizeLabel_(PEARL_LEAD_STATUS_LABELS_[code]) === normalized;
   });
+  if (isKnownSystemLabel) return true;
+  // נרטיב ארוך שנתקע בעמודת הסטטוס לפני כלל האחידות - אינו תוצאה עסקית
+  // ואינו אמור לשבת שם מלכתחילה (הטקסט המלא ממילא שמור ב"סיכום שיחה").
+  // מותר לסטטוס אמיתי מפרלה לדרוס אותו, אחרת השורה נתקעת על נרטיב לנצח.
+  // הזיהוי לפי **אורך** ולא לפי "לא ברשימת הסטטוסים": אילו הסתמכנו על
+  // הרשימה, תקלה רגעית בקריאת הטאב הייתה הופכת כל תגית עסקית אמיתית
+  // ("לא מעוניין") לניתנת לדריסה - ואיבוד תוצאות אמיתיות. תגית אמיתית
+  // תמיד קצרה; נרטיב תמיד ארוך.
+  return String(value).length > NARRATIVE_MIN_LENGTH_;
 }
 
 /**
@@ -2076,6 +2093,12 @@ function unifiedStatus_(contactStatus, callStatus, sendStatus, statusList) {
     if (value.indexOf('שגיאה') === 0) return value;
     if (isAllowedStatusValue_(value, statusList)) return value;
   }
+  // אף אחד מהערכים אינו תווית מוכרת - אבל אם בפועל התנהלה שיחה (נשאר
+  // בעמודה נרטיב ארוך מלפני כלל האחידות, או תגית שפרלה לא סיווגה),
+  // המשמעות היא "השיחה עוד לא הסתיימה בתוצאה ברורה". מציגים את תווית
+  // ההמתנה האחידה. זה קורה **בזמן קריאה**, ולכן חל מיד גם על שיחות
+  // שכבר התקיימו - בלי צורך בכלי ניקוי או בהרצה חד-פעמית כלשהי.
+  if (String(callStatus || '').trim()) return PEARL_PENDING_LABEL_;
   return '';
 }
 
