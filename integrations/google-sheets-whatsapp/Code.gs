@@ -57,6 +57,21 @@ const REPLY_DATE_HEADER = 'תאריך תשובה';
 const SENT_STATUS = 'נשלח וואטסאפ';
 const APPROVED_STATUS = 'מאושר לשליחה';
 
+// --- תזמון שליחה ---
+// שני סטטוסים נפרדים במכוון, כדי שהסטטוס עצמו יגיד מה יקרה ולא נצטרך
+// לנחש לפי אם תא התאריך ריק:
+//   "מאושר לשליחה"    - יוצא בהרצה ידנית מהתפריט. בדיוק ההתנהגות הקיימת.
+//   "מתוזמן לשליחה"   - יוצא לבד כשמגיע הזמן שבעמודת SCHEDULE_HEADER,
+//                       וההרצה הידנית **מדלגת** עליו כדי שלא ייצא בטעות מוקדם.
+// לשיחות פרלה יש סטטוס תזמון נפרד ("מתוזמן לשיחה") שמשתמש **באותה**
+// עמודת תאריך. שני סטטוסים ולא אחד - אחרת שורה שתוזמנה לוואטסאפ הייתה
+// נתפסת גם ע"י סריקת השיחות ואותו איש קשר היה מקבל גם הודעה וגם שיחה.
+const SCHEDULED_STATUS = 'מתוזמן לשליחה';
+const SCHEDULED_CALL_STATUS = 'מתוזמן לשיחה';
+const SCHEDULE_HEADER = 'תאריך ושעת שליחה';
+const SCHEDULE_TRIGGER_FN_ = 'runScheduledSends';
+const SCHEDULE_INTERVAL_MINUTES_ = 15;
+
 // --- NLPearl (שיחות קוליות) ---
 const NLPEARL_API_BASE = 'https://api.nlpearl.ai/v2/Outbound/';
 const DEFAULT_OUTBOUND_ID = '6a27be5ae83373643a10ae34'; // מזהה ה-Pearl (הפרמטר שב-v2), לא מזהה קמפיין ה-Outbound
@@ -95,7 +110,8 @@ const DEFAULT_STATUS_LIST_ = [
   'פגישה פרונטלית', 'פגישה מקוונת', 'פגישה למעקב', 'פגישה לחיוב', 'פגישה לא לחיוב', 'פגישה התקיימה', 'פגישה בוטלה', 'לא מאשר הגעה',
   'בתהליך', 'בתהליך עתידי', 'בתהליך מיידי', 'נשלח מייל', 'נשלח וואטסאפ', 'ממתין להקצאה',
   'נרשם ע"י מיטוב', 'נרשם לבד', 'ירשם לבד', 'נסלק', 'נסגרה עסקה', 'נכח בכנס', 'לא נכח בכנס',
-  'ליד לא לחיוב', 'ליד הועבר ללקוח'
+  'ליד לא לחיוב', 'ליד הועבר ללקוח',
+  SCHEDULED_STATUS, SCHEDULED_CALL_STATUS
 ];
 
 // --- Wix (לידים מטופס באתר) ---
@@ -377,11 +393,67 @@ function dailyActivityTrend_(sheetName) {
   return trend;
 }
 
-function sendMessages() {
-  getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet()).forEach(sendMessagesInSheet_);
+/**
+ * קוראת את תא "תאריך ושעת שליחה" ומחזירה Date או null.
+ * התא עשוי לחזור כאובייקט Date (כשהתא מעוצב כתאריך) או כמחרוזת
+ * (כשהוא מעוצב כטקסט או הודבק) - שני המקרים נתמכים, אחרת תזמון היה
+ * "נעלם" בשקט לפי עיצוב התא, וזה בדיוק סוג הכשל שאסור שיקרה כאן.
+ * מחרוזת ריקה/לא מזוהה מחזירה null - לעולם לא "היום ב-00:00".
+ */
+function parseScheduleValue_(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return isNaN(value.getTime()) ? null : value;
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const dmy = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})(?:[\s,]+(\d{1,2}):(\d{2}))?/);
+  if (dmy) {
+    const d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]),
+      Number(dmy[4] || 0), Number(dmy[5] || 0));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const ymd = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT](\d{1,2}):(\d{2}))?/);
+  if (ymd) {
+    const d = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]),
+      Number(ymd[4] || 0), Number(ymd[5] || 0));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  return null;
 }
 
-function sendMessagesInSheet_(sheet) {
+/**
+ * מחליטה אם שורה נשלחת בהרצה הנוכחית:
+ *   mode='manual'    - הרצה ידנית מהתפריט. רק "מאושר לשליחה", בדיוק כמו
+ *                      עד היום. שורה "מתוזמן לשליחה" **תמיד** מדולגת, גם
+ *                      אם זמנה כבר עבר - בקשה מפורשת של הלקוחה, כדי
+ *                      שהרצה ידנית לא תוציא מוקדם משהו שתוזמן לעתיד.
+ *   mode='scheduled' - הטריגר שרץ ברקע. רק "מתוזמן לשליחה" שיש לו תאריך
+ *                      שכבר הגיע. בלי תאריך לא יוצא לעולם - במכוון, כדי
+ *                      ששורה שסומנה בטעות לא תישלח בלי שנקבע לה זמן.
+ */
+function shouldSendNow_(status, scheduleAt, mode, now) {
+  const normalized = normalizeLabel_(status);
+  if (mode === 'scheduled') {
+    if (normalized !== normalizeLabel_(SCHEDULED_STATUS)) return false;
+    return !!scheduleAt && scheduleAt.getTime() <= now.getTime();
+  }
+  return normalized === normalizeLabel_(APPROVED_STATUS);
+}
+
+function sendMessages() {
+  getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet()).forEach(function (sheet) {
+    sendMessagesInSheet_(sheet);
+  });
+}
+
+function sendMessagesInSheet_(sheet, mode) {
+  const runMode = mode || 'manual';
+  const now = new Date();
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
@@ -389,8 +461,11 @@ function sendMessagesInSheet_(sheet) {
   const nameCol = findColumnNormalized_(headers, NAME_HEADER);
   const statusCol = findHeaderIndex_(headers, STATUS_HEADER, STATUS_HEADER_LEGACY);
   const templateCol = findColumnNormalized_(headers, TEMPLATE_HEADER);
+  // עמודת התזמון אופציונלית לגמרי - טאב בלי העמודה הזו פשוט עובד כמו
+  // שעבד עד היום, בלי שגיאות ובלי שינוי התנהגות.
+  const scheduleCol = findColumnNormalized_(headers, SCHEDULE_HEADER);
 
-  if (phoneCol === -1 || nameCol === -1 || statusCol === -1) return;
+  if (phoneCol === -1 || nameCol === -1 || statusCol === -1) return 0;
 
   recordCampaignStart_(sheet.getName());
 
@@ -404,15 +479,17 @@ function sendMessagesInSheet_(sheet) {
     const phone = String(row[phoneCol]).replace(/\D/g, '');
     const name = row[nameCol];
     const status = String(row[statusCol] || '').trim();
+    const scheduleAt = scheduleCol !== -1 ? parseScheduleValue_(row[scheduleCol]) : null;
     const templateId = (templateCol !== -1 && row[templateCol]) ? String(row[templateCol]) : sheetTemplateId;
     const rowIndex = i + 1;
 
     // שולחים רק לשורה שסומנה ידנית כ"מאושר לשליחה" - כדי לאפשר להעלות
     // רשימה שלמה (למשל 300 אנשי קשר) ולשלוח בפעימות נשלטות, על ידי
-    // שינוי הסטטוס רק לחלק מהשורות בכל פעם. ההשוואה עוברת דרך
-    // normalizeLabel_ (ולא === ישיר) - דפוס באג מתועד בפרויקט: רווח נסתר/
-    // רווח קשיח (NBSP) מהדבקה או מרשימה נפתחת שובר השוואה מדויקת בשקט.
-    if (!phone || normalizeLabel_(status) !== normalizeLabel_(APPROVED_STATUS)) continue;
+    // שינוי הסטטוס רק לחלק מהשורות בכל פעם. ההשוואה (בתוך shouldSendNow_)
+    // עוברת דרך normalizeLabel_ ולא === ישיר - דפוס באג מתועד בפרויקט:
+    // רווח נסתר/רווח קשיח (NBSP) מהדבקה או מרשימה נפתחת שובר השוואה
+    // מדויקת בשקט.
+    if (!phone || !shouldSendNow_(status, scheduleAt, runMode, now)) continue;
 
     recordLastContact_(phone, sheet.getName());
 
@@ -443,11 +520,15 @@ function sendMessagesInSheet_(sheet) {
     Logger.log('טאב "' + sheet.getName() + '", ' + name + ' (' + phone + '): ' + newStatus);
   }
   Logger.log('טאב "' + sheet.getName() + '": ' + sent + ' הודעות נשלחו מתוך ' + (data.length - 1) +
-    ' שורות (נשלח רק למי שמסומן "' + APPROVED_STATUS + '").');
+    ' שורות (נשלח רק למי שמסומן "' +
+    (runMode === 'scheduled' ? SCHEDULED_STATUS + '" שהגיע זמנו' : APPROVED_STATUS + '"') + ').');
+  return sent;
 }
 
 function startCalls() {
-  getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet()).forEach(startCallsInSheet_);
+  getCampaignSheets_(SpreadsheetApp.getActiveSpreadsheet()).forEach(function (sheet) {
+    startCallsInSheet_(sheet);
+  });
 }
 
 /**
@@ -459,7 +540,9 @@ function startCalls() {
  * פעם שפרלה מדווחת על ניסיון/תוצאה, בין אם השיחה יצאה דרכנו ובין אם
  * הלידים נטענו ישירות למערכת של פרלה בלי לעבור דרך הקוד הזה בכלל.
  */
-function startCallsInSheet_(sheet) {
+function startCallsInSheet_(sheet, mode) {
+  const runMode = mode || 'manual';
+  const now = new Date();
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
@@ -468,8 +551,10 @@ function startCallsInSheet_(sheet) {
   const campaignCol = findColumnNormalized_(headers, CAMPAIGN_HEADER);
   const callStatusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
   const leadIdCol = findColumnNormalized_(headers, CALL_LEAD_ID_HEADER);
+  const statusCol = findHeaderIndex_(headers, STATUS_HEADER, STATUS_HEADER_LEGACY);
+  const scheduleCol = findColumnNormalized_(headers, SCHEDULE_HEADER);
 
-  if (phoneCol === -1 || callStatusCol === -1) return;
+  if (phoneCol === -1 || callStatusCol === -1) return 0;
 
   recordCampaignStart_(sheet.getName());
 
@@ -477,6 +562,7 @@ function startCallsInSheet_(sheet) {
   const sheetOutboundId = (campaignCol !== -1 && data[1] && data[1][campaignCol])
     ? String(data[1][campaignCol]) : DEFAULT_OUTBOUND_ID;
 
+  let called = 0;
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const phone = row[phoneCol];
@@ -486,8 +572,11 @@ function startCallsInSheet_(sheet) {
     // "כבר נרשם לפרלה" נבדק לפי קיום מזהה ליד (leadId) - לא לפי טקסט
     // "סטטוס שיחה", כי העמודה הזו נדרסת עם הסטטוס האמיתי מ-NLPearl.
     const alreadyCalled = leadIdCol !== -1 && !!row[leadIdCol];
+    const dialStatus = statusCol !== -1 ? String(row[statusCol] || '').trim() : '';
+    const scheduleAt = scheduleCol !== -1 ? parseScheduleValue_(row[scheduleCol]) : null;
 
     if (!phone || alreadyCalled) continue;
+    if (!shouldCallNow_(dialStatus, scheduleAt, runMode, now)) continue;
 
     recordLastContact_(phone, sheet.getName());
 
@@ -521,7 +610,105 @@ function startCallsInSheet_(sheet) {
       }
       sheet.getRange(rowIndex, leadIdCol + 1).setValue(leadId);
     }
+    called++;
   }
+  return called;
+}
+
+/**
+ * מקבילה ל-shouldSendNow_, לשיחות פרלה:
+ *   mode='manual'    - שומרת בדיוק על ההתנהגות הקיימת (מתקשרת לכל מי
+ *                      שאין לו עדיין מזהה ליד), ורק **מדלגת** על שורה
+ *                      שתוזמנה - כדי שהרצה ידנית לא תקדים תזמון לעתיד.
+ *   mode='scheduled' - רק "מתוזמן לשיחה" שהגיע זמנו. שימי לב שזה סטטוס
+ *                      נפרד מ"מתוזמן לשליחה" - אחרת שורה שתוזמנה לוואטסאפ
+ *                      הייתה מקבלת גם שיחה, ואותו איש קשר היה נדלק פעמיים.
+ */
+/** true אם הסטטוס הוא אחד משני סטטוסי התזמון (שליחה או שיחה). */
+function isScheduledStatus_(status) {
+  const normalized = normalizeLabel_(status);
+  return normalized === normalizeLabel_(SCHEDULED_STATUS) ||
+    normalized === normalizeLabel_(SCHEDULED_CALL_STATUS);
+}
+
+function shouldCallNow_(dialStatus, scheduleAt, mode, now) {
+  const normalized = normalizeLabel_(dialStatus);
+  const scheduledForCall = normalized === normalizeLabel_(SCHEDULED_CALL_STATUS);
+  const scheduledForSend = normalized === normalizeLabel_(SCHEDULED_STATUS);
+
+  if (mode === 'scheduled') {
+    if (!scheduledForCall) return false;
+    return !!scheduleAt && scheduleAt.getTime() <= now.getTime();
+  }
+
+  if (scheduledForCall || scheduledForSend) return false;
+  if (scheduleAt && scheduleAt.getTime() > now.getTime()) return false;
+  return true;
+}
+
+/**
+ * הסורק שרץ ברקע על השרתים של גוגל (לא על המחשב של הלקוחה) ומוציא
+ * הודעות/שיחות שהגיע זמנן. רץ כל SCHEDULE_INTERVAL_MINUTES_ דקות דרך
+ * Trigger, אבל אפשר גם להריץ אותו ידנית מהעורך כדי "לדחוף" מיד.
+ *
+ * למה זה בטוח:
+ *  - שולח **רק** שורות שסומנו במפורש "מתוזמן לשליחה"/"מתוזמן לשיחה"
+ *    ושיש להן תאריך שכבר עבר. שורה בלי תאריך לא יוצאת לעולם.
+ *  - אחרי שליחה הסטטוס משתנה ל"נשלח וואטסאפ", ולכן הסריקה הבאה כבר
+ *    לא תתפוס אותה - אין סיכון לשליחה כפולה.
+ *  - נעילה (LockService) מונעת משתי הרצות לחפוף אם אחת מתעכבת.
+ *  - אם גוגל לא הריצה בזמן (תחזוקה/מכסה), ההודעה תצא בהרצה הבאה
+ *    באיחור - ולא "תיעלם".
+ */
+function runScheduledSends() {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+  } catch (err) {
+    Logger.log('סריקת תזמון: הרצה קודמת עדיין פועלת - מדלג על הפעימה הזו.');
+    return;
+  }
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let totalSent = 0;
+    let totalCalled = 0;
+
+    getCampaignSheets_(ss).forEach(function (sheet) {
+      totalSent += sendMessagesInSheet_(sheet, 'scheduled') || 0;
+      totalCalled += startCallsInSheet_(sheet, 'scheduled') || 0;
+    });
+
+    Logger.log('סריקת תזמון הסתיימה: ' + totalSent + ' הודעות וואטסאפ, ' +
+      totalCalled + ' שיחות פרלה יצאו.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * מתקינה את הטריגר של התזמון. מריצים **פעם אחת** ידנית מהעורך.
+ * בטוחה להרצה חוזרת - מסירה קודם טריגר קיים כדי שלא ייווצרו כפילויות
+ * (שתי פעימות במקביל = ניסיון שליחה כפול).
+ */
+function installScheduleTrigger() {
+  removeScheduleTrigger();
+  ScriptApp.newTrigger(SCHEDULE_TRIGGER_FN_)
+    .timeBased()
+    .everyMinutes(SCHEDULE_INTERVAL_MINUTES_)
+    .create();
+  Logger.log('טריגר התזמון הותקן - רץ כל ' + SCHEDULE_INTERVAL_MINUTES_ + ' דקות.');
+}
+
+function removeScheduleTrigger() {
+  let removed = 0;
+  ScriptApp.getProjectTriggers().forEach(function (trigger) {
+    if (trigger.getHandlerFunction() === SCHEDULE_TRIGGER_FN_) {
+      ScriptApp.deleteTrigger(trigger);
+      removed++;
+    }
+  });
+  Logger.log(removed ? 'הוסרו ' + removed + ' טריגרים של תזמון.' : 'לא נמצא טריגר תזמון להסרה.');
 }
 
 /**
@@ -2072,7 +2259,8 @@ function matchCallStatus_(text, statusList) {
  */
 function allowedStatusValues_(statusList) {
   const list = (statusList || []).slice();
-  [SENT_STATUS, CALL_SENT_STATUS, APPROVED_STATUS].forEach(function (s) { list.push(s); });
+  [SENT_STATUS, CALL_SENT_STATUS, APPROVED_STATUS, SCHEDULED_STATUS, SCHEDULED_CALL_STATUS]
+    .forEach(function (s) { list.push(s); });
   Object.keys(PEARL_LEAD_STATUS_LABELS_).forEach(function (code) {
     list.push(PEARL_LEAD_STATUS_LABELS_[code]);
   });
@@ -2184,6 +2372,7 @@ function getCampaignData(sheetName) {
   const callDateCol = findColumnNormalized_(headers, CALL_DATE_HEADER);
   const callLeadIdCol = findColumnNormalized_(headers, CALL_LEAD_ID_HEADER);
   const userNotesCol = findColumnNormalized_(headers, USER_NOTES_HEADER);
+  const scheduleCol = findColumnNormalized_(headers, SCHEDULE_HEADER);
 
   const lastExportIso = lastExportTime_(sheetName);
   const lastExportMs = lastExportIso ? new Date(lastExportIso).getTime() : null;
@@ -2206,6 +2395,7 @@ function getCampaignData(sheetName) {
     const callFirstResult = callFirstResultCol !== -1 ? row[callFirstResultCol] : '';
     const callDate = callDateCol !== -1 ? row[callDateCol] : null;
     const userNotes = userNotesCol !== -1 ? row[userNotesCol] : '';
+    const scheduleAt = scheduleCol !== -1 ? parseScheduleValue_(row[scheduleCol]) : null;
 
     // "שיחות בוצעו" נספר לפי קיום מזהה ליד (leadId) - לא לפי טקסט "סטטוס
     // שיחה", כי העמודה הזו מוצגת עכשיו כתגית האמיתית מ-NLPearl ולא נשארת
@@ -2255,6 +2445,13 @@ function getCampaignData(sheetName) {
       // "הגיב" = יצר איתנו אינטראקציה אמיתית: כתב/לחץ כפתור בוואטסאפ, או
       // שפרלה החזירה תוצאה. סטטוס-מערכת ("לא ענה") לבדו אינו תגובה.
       hasResponded: !!(reply || firstReply || callResult),
+      // תזמון: התאריך שנקבע לשליחה/שיחה, ודגל לשורה שסומנה כמתוזמנת
+      // אבל נשארה בלי תאריך - כזו לא תצא לעולם, ולכן היא חייבת להיות
+      // גלויה לעין בדשבורד ולא להיתקע בשקט.
+      scheduledAt: scheduleAt
+        ? Utilities.formatDate(scheduleAt, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
+      scheduledAtMs: scheduleAt ? scheduleAt.getTime() : 0,
+      scheduleMissingDate: isScheduledStatus_(status) && !scheduleAt,
       updatedToday: updatedToday,
       recentlyUpdated: recentlyUpdated
     });

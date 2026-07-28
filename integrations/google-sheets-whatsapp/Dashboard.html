@@ -128,6 +128,71 @@
     top: 0;
   }
 
+  /* --- "המוקד של היום" + "לידים חמים": ניצול המקום הפנוי בסרגל הצד --- */
+  .focus-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 11px;
+    margin-top: 14px;
+  }
+  #focusPanels .focus-panel:first-child { margin-top: 0; }
+  .focus-panel h4 {
+    margin: 0 0 3px;
+    font-size: 13px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .focus-panel h4 .count {
+    margin-inline-start: auto;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+  .focus-panel .hint {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-bottom: 9px;
+  }
+  .focus-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px;
+    border-radius: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    margin-bottom: 6px;
+    width: 100%;
+    text-align: right;
+    font-family: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .focus-row:last-child { margin-bottom: 0; }
+  .focus-row:hover { box-shadow: var(--shadow); border-color: var(--accent); }
+  .focus-row.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+  }
+  .focus-row .bar { width: 4px; align-self: stretch; border-radius: 3px; flex-shrink: 0; }
+  .focus-row .txt { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+  .focus-row .t1 {
+    display: block;
+    font-size: 13.5px; font-weight: 800;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .focus-row .t2 {
+    display: block;
+    font-size: 11.5px; color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .focus-row .big { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .focus-empty { font-size: 11.5px; color: var(--text-muted); padding: 4px 2px; }
+
   .sidebar-brand {
     display: flex;
     align-items: center;
@@ -317,9 +382,16 @@
     gap: 2px;
     overflow-y: auto;
     overflow-x: hidden;
-    flex: 1;
+    /* flex:0 0 auto (ולא 1) כדי שרשימת הטאבים תתפוס רק את הגובה שהיא
+       צריכה, ובלוקי "המוקד של היום" יישבו מיד מתחתיה - ולא ייזרקו
+       לתחתית הסרגל. */
+    flex: 0 0 auto;
+    max-height: 40vh;
     min-height: 0;
   }
+
+  /* דוחף את מה שאחריו לתחתית רק אם באמת נשאר מקום פנוי. */
+  #focusPanels { flex: 1 1 auto; min-height: 0; }
 
   .tab {
     flex: 0 0 auto;
@@ -383,16 +455,53 @@
     .stats { grid-template-columns: 1fr; }
   }
 
+  /* קוביית מדד בסגנון "כרטיסייה צבעונית": מסגרת מלאה בצבע הקטגוריה,
+     פס עליון עבה, אייקון בריבוע צבוע, ומתחת גרף עמודות של 7 הימים
+     האחרונים. --sc = צבע הקטגוריה, --sb = אותו צבע רך לרקעים. */
   .stat {
     position: relative;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 2px solid var(--sc, var(--border));
     border-radius: var(--radius);
-    padding: 18px 18px 22px;
+    padding: 15px 15px 12px;
     box-shadow: var(--shadow);
     overflow: hidden;
+    min-width: 0;
     transition: transform 0.25s ease, box-shadow 0.25s ease;
   }
+
+  .stat::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; left: 0;
+    height: 5px;
+    background: var(--sc, var(--accent));
+  }
+
+  .stat-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  /* גרף עמודות זעיר - שתי העמודות האחרונות (הימים האחרונים) מודגשות. */
+  .stat-spark {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 28px;
+    margin-top: 10px;
+  }
+  .stat-spark i {
+    flex: 1;
+    display: block;
+    border-radius: 3px 3px 0 0;
+    background: var(--sb, var(--accent-soft));
+    opacity: .75;
+    min-height: 3px;
+  }
+  .stat-spark i.hi { background: var(--sc, var(--accent)); opacity: 1; }
 
   .stat:hover {
     transform: translateY(-4px);
@@ -400,16 +509,16 @@
   }
 
   .stat-icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 13px;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 14px;
+    flex-shrink: 0;
   }
 
-  .stat-icon svg { width: 22px; height: 22px; }
+  .stat-icon svg { width: 19px; height: 19px; }
 
   .stat-body {
     display: flex;
@@ -419,14 +528,18 @@
   }
 
   .stat .label {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-weight: 700;
+    font-size: 13px;
+    color: var(--text-strong, var(--text));
+    font-weight: 800;
+    line-height: 1.3;
+    min-width: 0;
   }
 
   .stat .value {
-    font-size: 27px;
+    font-size: 32px;
     font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
@@ -440,16 +553,8 @@
   }
 
   .stat .delta {
-    font-size: 11.5px;
-    font-weight: 700;
-  }
-
-  .stat-bar {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    height: 5px;
+    font-size: 12.5px;
+    font-weight: 800;
   }
 
   .card {
@@ -597,14 +702,28 @@
     box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
-  .table-scroll { overflow-x: auto; max-height: 560px; overflow-y: auto; }
+  .table-scroll { overflow-x: hidden; max-height: 560px; overflow-y: auto; }
 
+  /* table-layout:fixed + רוחב באחוזים = 9 העמודות מתחלקות **תמיד** בדיוק
+     ברוחב שקיים, בכל גודל מסך, ולעולם לא גולשות. הגרסה הקודמת נתנה לכל
+     תא max-width בפיקסלים - וכשהסכום לא נכנס, הטבלה פשוט גלשה והעמודה
+     האחרונה (+ ו-✨) נדחפה מחוץ למסך. עמודת הפעולות מקבלת רוחב קבוע
+     ולכן היא נלקחת ראשונה ולא נחתכת אף פעם. */
   table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
-    font-size: 13.5px;
-    min-width: 640px;
+    font-size: 14.5px;
   }
+
+  thead th.col-date    { width: 8%;   }
+  thead th.col-company { width: 13.5%;}
+  thead th.col-name    { width: 11%;  }
+  thead th.col-title   { width: 11%;  }
+  thead th.col-phone   { width: 9.5%; }
+  thead th.col-email   { width: 11%;  }
+  thead th.col-status  { width: 10.5%;}
+  thead th.col-actions { width: 78px; }
 
   thead th {
     position: sticky;
@@ -854,21 +973,38 @@
   }
 
   /* עמודות טקסט קצרות - חיתוך לשורה אחת כדי שהכל ייכנס למסך בלי גלילה
-     אופקית. הטקסט המלא זמין בטולטיפ במעבר עכבר (ר' setupCellTooltips_). */
-  .company-cell { max-width: 155px; }
-  .title-cell   { max-width: 135px; }
-  .email-cell   { max-width: 150px; }
+     אופקית. הרוחב עצמו נקבע ב-thead (אחוזים), כאן רק החיתוך.
+     הטקסט המלא זמין בטולטיפ במעבר עכבר (ר' setupCellTooltips_). */
   .company-cell, .title-cell, .email-cell {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .title-cell, .email-cell { color: var(--text-muted); }
-  .date-cell { white-space: nowrap; }
+  /* טלפון ואימייל בכיוון LTR כדי שהחיתוך יהיה **בסוף** המחרוזת ולא
+     בהתחלה - אחרת רואים "‎...@gmail.com" בלי לדעת של מי הכתובת. */
+  .email-cell, .phone-cell { direction: ltr; text-align: right; }
+  .date-cell { white-space: nowrap; line-height: 1.45; }
+  .date-time { color: var(--text-muted); font-size: 12.5px; }
 
   /* קוביית ההערות המאוחדת - עד 3 שורות, כל אחת עם סימון מי כתב.
      הטקסט המלא נפתח בטולטיפ המותאם (.cell-tooltip) במעבר עכבר. */
-  .notes-cell { max-width: 340px; }
+  /* תזמון: הזמן שנקבע מתחת לתגית הסטטוס, ואזהרה לשורה שתוזמנה בלי תאריך. */
+  .schedule-at {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .schedule-warn {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--bad);
+    margin-top: 4px;
+    white-space: nowrap;
+    cursor: help;
+  }
   .notes-box {
     display: flex;
     flex-direction: column;
@@ -1132,6 +1268,7 @@
     <nav class="tabs" id="tabs" aria-label="בחירת קמפיין">
       <span class="loading-state">טוען קמפיינים...</span>
     </nav>
+    <div id="focusPanels"></div>
   </aside>
 
   <div class="page">
@@ -1256,6 +1393,7 @@
   let columnFilters = {}; // { columnKey: Set(ערכים מותרים) } - סינון לפי עמודה (כמו Excel)
   let sortState = { key: null, dir: 1 }; // מיון א-ב בלחיצה על כותרת עמודה - ר' setupColumnSortClicks_
   let viewMode = 'responded'; // 'responded' = רק מי שהגיב (ברירת מחדל) | 'all' = הכל. ר' setupViewToggle_
+  let activeFocusFilter = null; // מפתח הקובייה שנלחצה ב"המוקד של היום" (ר' FOCUS_DEFS)
   const PAGE_SIZE = 10;
   const AUTO_REFRESH_MS = 30000;
 
@@ -1322,6 +1460,143 @@
       .getCampaignData(name);
   }
 
+  // ==================== "המוקד של היום" ====================
+  // הקטגוריות מוגדרות ככלל על טקסט הסטטוס ולא כרשימה קשיחה, לבקשת
+  // הלקוחה ("בכל הוריאציות") - כך שסטטוס חדש שהיא תוסיף לרשימה, או
+  // טקסט של כפתור וואטסאפ חדש שנרשם אוטומטית, ייכנס לקטגוריה לבד בלי
+  // שינוי קוד.
+
+  function statusHas_(status, word) {
+    return normalizeStatusKey_(status).indexOf(normalizeStatusKey_(word)) !== -1;
+  }
+
+  /** "חם" = כל סטטוס שיש בו "פגישה" או "ליד" - חוץ משניים שהם ההפך. */
+  function isHotStatus_(status) {
+    if (!status) return false;
+    if (statusHas_(status, 'פגישה בוטלה') || statusHas_(status, 'לא מאשר הגעה')) return false;
+    return statusHas_(status, 'פגישה') || statusHas_(status, 'ליד');
+  }
+
+  /** "ממתין לחזרה" = כל וריאציה של "בתהליך". */
+  function isWaitingStatus_(status) {
+    return !!status && statusHas_(status, 'בתהליך');
+  }
+
+  /** "חדש היום" = הפעילות האחרונה נרשמה מחצות של היום. */
+  function isNewToday_(r) {
+    const ms = Number(r && r.lastActivityMs) || 0;
+    if (!ms) return false;
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    return ms >= midnight.getTime();
+  }
+
+  const FOCUS_DEFS = [
+    { key: 'newToday', label: 'תגובות חדשות', hint: 'נכנסו היום מהבוקר',
+      color: 'var(--good)', test: isNewToday_ },
+    { key: 'hot', label: 'לידים חמים', hint: 'פגישות ולידים בכל הוריאציות',
+      color: 'var(--pending)', test: function (r) { return isHotStatus_(r.unifiedStatus); } },
+    { key: 'waiting', label: 'ממתינים לחזרה', hint: 'סטטוס בתהליך',
+      color: 'var(--accent-2)', test: function (r) { return isWaitingStatus_(r.unifiedStatus); } }
+  ];
+
+  function focusDef_(key) {
+    return FOCUS_DEFS.filter(function (f) { return f.key === key; })[0] || null;
+  }
+
+  function renderFocusPanels_(rows) {
+    const el = document.getElementById('focusPanels');
+    if (!el) return;
+    const all = rows || [];
+
+    const focusHtml = '<div class="focus-panel">' +
+      '<h4>⚡ המוקד של היום</h4>' +
+      '<div class="hint">מה דורש ממך פעולה עכשיו</div>' +
+      FOCUS_DEFS.map(function (f) {
+        const n = all.filter(f.test).length;
+        const on = activeFocusFilter === f.key ? ' active' : '';
+        return '<button type="button" class="focus-row' + on + '" data-focus="' + f.key + '">' +
+          '<span class="bar" style="background:' + f.color + '"></span>' +
+          '<span class="txt"><span class="t1">' + f.label + '</span>' +
+          '<span class="t2">' + f.hint + '</span></span>' +
+          '<span class="big" style="color:' + f.color + '">' + n + '</span></button>';
+      }).join('') + '</div>';
+
+    // רשימת הלידים החמים עצמם - עד 5, החדשים ביותר קודם.
+    const hot = all.filter(function (r) { return isHotStatus_(r.unifiedStatus); })
+      .slice()
+      .sort(function (a, b) { return (Number(b.lastActivityMs) || 0) - (Number(a.lastActivityMs) || 0); });
+
+    const hotHtml = '<div class="focus-panel">' +
+      '<h4>🔥 לידים חמים <span class="count">' + hot.length + '</span></h4>' +
+      (hot.length
+        ? hot.slice(0, 5).map(function (r) {
+            const c = colorForStatus_(r.unifiedStatus || '');
+            return '<button type="button" class="focus-row" data-phone="' + escapeHtml_(String(r.phone)) + '">' +
+              '<span class="bar" style="background:' + c + '"></span>' +
+              '<span class="txt"><span class="t1">' + escapeHtml_(r.name || '') + '</span>' +
+              '<span class="t2">' + escapeHtml_([r.company, r.unifiedStatus].filter(Boolean).join(' · ')) + '</span>' +
+              '</span></button>';
+          }).join('')
+        : '<div class="focus-empty">אין עדיין לידים חמים בקמפיין הזה</div>') +
+      '</div>';
+
+    el.innerHTML = focusHtml + hotHtml;
+
+    el.querySelectorAll('.focus-row[data-focus]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const key = btn.getAttribute('data-focus');
+        activeFocusFilter = activeFocusFilter === key ? null : key;
+        // כשמסננים לפי מוקד עוברים ל"הצג הכל", אחרת מתג "רק מי שהגיב"
+        // היה יכול להסתיר חלק מהשורות והמספר בקובייה לא היה מסתדר עם
+        // מה שרואים בטבלה.
+        if (activeFocusFilter) setViewMode_('all');
+        renderFocusPanels_(currentData ? currentData.rows : []);
+        applyFilters_(true);
+      });
+    });
+
+    // לחיצה על ליד ברשימה פותחת את חלון ה-CRM דרך אותו מאזין מרכזי
+    // שמטפל בכפתור ה-"+" בטבלה (ר' setupCrmModal_) - אין כאן מאזין נפרד.
+  }
+
+  // --- גרף העמודות הזעיר בקוביות המדד ---
+  // סופר כמה שורות (שעונות על התנאי) פעילותן האחרונה נפלה בכל אחד מ-7
+  // הימים האחרונים. מבוסס על lastActivityMs שכבר מגיע מהשרת - בלי שום
+  // קריאה נוספת. שורה בלי פעילות פשוט לא נספרת בשום יום.
+  const SPARK_DAYS = 7;
+
+  function dailySeries_(rows, predicate) {
+    const buckets = [];
+    for (let i = 0; i < SPARK_DAYS; i++) buckets.push(0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    (rows || []).forEach(function (r) {
+      if (!predicate(r)) return;
+      const ms = Number(r.lastActivityMs) || 0;
+      if (!ms) return;
+      const d = new Date(ms);
+      d.setHours(0, 0, 0, 0);
+      const daysAgo = Math.round((today.getTime() - d.getTime()) / dayMs);
+      if (daysAgo < 0 || daysAgo >= SPARK_DAYS) return;
+      buckets[SPARK_DAYS - 1 - daysAgo]++;
+    });
+    return buckets;
+  }
+
+  function sparkHtml_(series) {
+    const values = series || [];
+    const max = Math.max.apply(null, values.concat([1]));
+    return '<div class="stat-spark" aria-hidden="true">' + values.map(function (v, i) {
+      const pct = Math.round((v / max) * 100);
+      const hi = i >= values.length - 2 ? ' class="hi"' : '';
+      return '<i' + hi + ' style="height:' + Math.max(pct, 6) + '%"></i>';
+    }).join('') + '</div>';
+  }
+
   function renderCampaign(data, silent) {
     currentData = data;
     if (!data) return;
@@ -1335,18 +1610,27 @@
     const replyRate = data.sent ? Math.round((data.replies / data.sent) * 100) : 0;
 
     const stats = [
-      { label: 'סה"כ לידים בקמפיין', value: data.total, icon: 'leads', fg: 'var(--accent)', bg: 'var(--accent-soft)' },
-      { label: 'הודעות וואטסאפ נשלחו', value: data.sent, cls: 'good', icon: 'whatsapp', fg: '#25D366', bg: 'rgba(37,211,102,.14)', delta: sentPct + '% מהלידים' },
-      { label: 'תגובות התקבלו', value: data.replies, icon: 'reply', fg: 'var(--accent-2)', bg: 'var(--accent-2-soft)', delta: replyRate + '% מהשליחות' },
-      { label: 'שיחות פרלה', value: data.callsSent, icon: 'bot', fg: 'var(--pending)', bg: 'var(--pending-soft)', delta: callsPct + '% מהלידים' }
+      { label: 'סה"כ לידים בקמפיין', value: data.total, icon: 'leads', fg: 'var(--accent)', bg: 'var(--accent-soft)',
+        spark: dailySeries_(data.rows, function () { return true; }) },
+      { label: 'הודעות וואטסאפ נשלחו', value: data.sent, cls: 'good', icon: 'whatsapp', fg: '#25D366', bg: 'rgba(37,211,102,.14)', delta: sentPct + '% מהלידים',
+        spark: dailySeries_(data.rows, function (r) { return !!r.lastActivityMs; }) },
+      { label: 'תגובות התקבלו', value: data.replies, icon: 'reply', fg: 'var(--accent-2)', bg: 'var(--accent-2-soft)', delta: replyRate + '% מהשליחות',
+        spark: dailySeries_(data.rows, function (r) { return !!r.reply || !!r.firstReply; }) },
+      { label: 'שיחות פרלה', value: data.callsSent, icon: 'bot', fg: 'var(--pending)', bg: 'var(--pending-soft)', delta: callsPct + '% מהלידים',
+        spark: dailySeries_(data.rows, function (r) { return !!r.callResult; }) }
     ];
     const statsHtml = stats.map(function (s) {
-      const delta = s.delta ? '<div class="delta" style="color:' + s.fg + '">' + s.delta + '</div>' : '';
-      return '<div class="stat">' +
-        '<div class="stat-icon" style="background:' + s.bg + ';color:' + s.fg + '">' + ICONS[s.icon] + '</div>' +
-        '<div class="stat-body"><span class="label">' + s.label + '</span>' +
-        '<span class="value ' + (s.cls || '') + '">' + s.value + '</span>' + delta + '</div>' +
-        '<div class="stat-bar" style="background:' + s.fg + '"></div></div>';
+      const delta = s.delta ? '<div class="delta">' + s.delta + '</div>' : '';
+      return '<div class="stat" style="--sc:' + s.fg + ';--sb:' + s.bg + ';color:inherit">' +
+        '<div class="stat-head">' +
+          '<div class="stat-icon" style="background:' + s.bg + ';color:' + s.fg + '">' + ICONS[s.icon] + '</div>' +
+          '<span class="label">' + s.label + '</span>' +
+        '</div>' +
+        '<div class="stat-body">' +
+          '<span class="value ' + (s.cls || '') + '">' + s.value + '</span>' + delta +
+        '</div>' +
+        sparkHtml_(s.spark) +
+      '</div>';
     }).join('');
     // גרף הפילוח יושב בתוך שורת הסטטיסטיקה עצמה (תא רחב יותר בסוף השורה)
     // כדי שלא יתפוס עוד שורה נפרדת ולא יגרום לגלילה - במקום שתי הקוביות
@@ -1370,6 +1654,9 @@
     }).join('');
     setupLegendClicks_();
     drawBreakdown_(breakdown);
+    // המונים בסרגל הצד נספרים תמיד על **כל** שורות הקמפיין, לא על מה
+    // שמסונן במסך - אחרת המספר היה משתנה לפי החיפוש ומאבד משמעות.
+    renderFocusPanels_(data.rows);
 
     // ממיינים כך שתשובות חדשות תמיד למעלה, אחריהן מי שכבר ענה, ולבסוף
     // מי שעדיין לא ענה בתחתית - כדי שהעין תלך ישר למה שדורש תשומת לב.
@@ -1452,7 +1739,14 @@
       // תאריך הפעילות האחרונה (תגובת וואטסאפ או שיחת פרלה - המאוחר מביניהם).
       filterValue: function (r) { return r.lastActivity || ''; },
       sortValue: function (r) { return Number(r.lastActivityMs) || 0; },
-      cell: function (r) { return '<td class="date-cell">' + (r.lastActivity ? escapeHtml_(r.lastActivity) : '—') + '</td>'; } },
+      // התאריך בשתי שורות (תאריך למעלה, שעה מתחת) כדי שלא ידחוף את
+      // עמודת שם החברה כשהעמודה צרה.
+      cell: function (r) {
+        if (!r.lastActivity) return '<td class="date-cell">—</td>';
+        const parts = String(r.lastActivity).split(' ');
+        return '<td class="date-cell">' + escapeHtml_(parts[0]) +
+          (parts[1] ? '<br><span class="date-time">' + escapeHtml_(parts[1]) + '</span>' : '') + '</td>';
+      } },
     { key: 'company', label: 'שם חברה', always: true, sortable: true,
       filterValue: function (r) { return r.company || ''; },
       cell: function (r) { return '<td class="company-cell" data-tip="' + escapeHtml_(r.company || '') + '">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
@@ -1477,7 +1771,17 @@
       cell: function (r) {
         const statusText = r.unifiedStatus || 'ממתין';
         const c = colorForStatus_(statusText);
-        return '<td><span class="status-pill" style="background:' + softStatusColor_(c) + ';color:' + c + ';">' + escapeHtml_(statusText) + '</span></td>';
+        // שורה שתוזמנה: מציגים מתחת לתגית את הזמן שנקבע. אם סומנה
+        // כמתוזמנת אבל **אין** תאריך - היא לא תצא לעולם, ולכן מסמנים
+        // אותה באדום במקום להשאיר אותה תקועה בשקט.
+        let extra = '';
+        if (r.scheduleMissingDate) {
+          extra = '<div class="schedule-warn" data-tip="שורה מסומנת כמתוזמנת אבל אין לה תאריך ושעה - היא לא תישלח. יש למלא את עמודת ' +
+            escapeHtml_('"תאריך ושעת שליחה"') + ' בגיליון.">⚠ חסר תאריך</div>';
+        } else if (r.scheduledAt) {
+          extra = '<div class="schedule-at">🕒 ' + escapeHtml_(r.scheduledAt) + '</div>';
+        }
+        return '<td><span class="status-pill" style="background:' + softStatusColor_(c) + ';color:' + c + ';">' + escapeHtml_(statusText) + '</span>' + extra + '</td>';
       } },
     { key: 'notes', label: 'הערות', always: true,
       // יומן מאוחד: כל התיעוד יחד (ליד/פרלה/מיטוב), החדש למעלה. התא מציג
@@ -1520,7 +1824,8 @@
       const sortArrow = c.sortable
         ? '<span class="col-sort-icon">' + (sortState.key === c.key ? (sortState.dir === 1 ? '▲' : '▼') : '⇅') + '</span>'
         : '';
-      const sortCls = c.sortable ? ' class="sortable-th"' : '';
+      // class לפי מפתח העמודה - שם נשען עליו ה-CSS לקביעת רוחב יחסי קבוע.
+      const sortCls = ' class="col-' + c.key + (c.sortable ? ' sortable-th' : '') + '"';
       const activeCls = c.sortable && sortState.key === c.key ? ' sort-active' : '';
       return '<th' + sortCls + '><span class="th-inner' + activeCls + '" data-sort-key="' + (c.sortable ? c.key : '') + '">' +
         escapeHtml_(c.label) + sortArrow + filterBtn + '</span></th>';
@@ -1811,10 +2116,19 @@
     // אינטראקציה. משפיע על הטבלה בלבד; הייצוא לאקסל תמיד מוציא הכל
     // (ר' setupExport_, שעובד על currentData.rows במלואו).
     if (viewMode === 'responded' && !ignoreViewMode) {
-      rows = rows.filter(function (r) { return !!r.hasResponded; });
+      // שורה שתוזמנה נשארת גלויה גם ב"רק מי שהגיב" - היא עדיין לא הגיבה
+      // (עוד לא נשלח אליה כלום), אבל אם היא תיעלם מהמסך אי אפשר יהיה
+      // לוודא שהתזמון נקלט, ובוודאי לא לראות אזהרת "חסר תאריך".
+      rows = rows.filter(function (r) {
+        return !!r.hasResponded || !!r.scheduledAt || !!r.scheduleMissingDate;
+      });
     }
     if (activeCategoryFilter) {
       rows = rows.filter(function (r) { return rowMatchesCategory_(r, activeCategoryFilter); });
+    }
+    const focus = activeFocusFilter ? focusDef_(activeFocusFilter) : null;
+    if (focus) {
+      rows = rows.filter(focus.test);
     }
     Object.keys(columnFilters).forEach(function (key) {
       const allowed = columnFilters[key];
@@ -1894,16 +2208,20 @@
     if (!el || !currentData) return;
     const q = document.getElementById('searchInput').value.trim();
     const hasColumnFilters = Object.keys(columnFilters).some(function (k) { return !!columnFilters[k]; });
-    if (!q && !activeCategoryFilter && !hasColumnFilters) { el.innerHTML = ''; return; }
+    if (!q && !activeCategoryFilter && !hasColumnFilters && !activeFocusFilter) { el.innerHTML = ''; return; }
 
     const shown = getFilteredRows_().length;
     const total = currentData.rows.length;
-    el.innerHTML = '<span class="filter-chip">מציג ' + shown + ' מתוך ' + total + ' (יש סינון פעיל)' +
+    const focus = activeFocusFilter ? focusDef_(activeFocusFilter) : null;
+    const focusText = focus ? ' - ' + focus.label : '';
+    el.innerHTML = '<span class="filter-chip">מציג ' + shown + ' מתוך ' + total + ' (יש סינון פעיל' + focusText + ')' +
       ' <button type="button" id="clearAllFilters">נקה הכל ✕</button></span>';
     document.getElementById('clearAllFilters').addEventListener('click', function () {
       document.getElementById('searchInput').value = '';
       activeCategoryFilter = null;
+      activeFocusFilter = null;
       columnFilters = {};
+      renderFocusPanels_(currentData ? currentData.rows : []);
       renderTableHead_(visibleColumns);
       applyFilters_(true);
     });
@@ -2007,16 +2325,23 @@
    * מתג "רק מי שהגיב" / "הצג הכל" - משפיע רק על מה שמוצג בטבלה.
    * הייצוא לאקסל מתעלם ממנו במכוון ותמיד מוציא את כל אנשי הקשר.
    */
+  /** משנה את מצב התצוגה ומסנכרנת את מראה המתג - גם כשהשינוי לא בא מלחיצה עליו. */
+  function setViewMode_(mode) {
+    viewMode = mode;
+    const wrap = document.getElementById('viewToggle');
+    if (!wrap) return;
+    Array.prototype.forEach.call(wrap.querySelectorAll('button[data-mode]'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-mode') === mode);
+    });
+  }
+
   function setupViewToggle_() {
     const wrap = document.getElementById('viewToggle');
     if (!wrap) return;
     wrap.addEventListener('click', function (e) {
       const btn = e.target.closest('button[data-mode]');
       if (!btn) return;
-      viewMode = btn.getAttribute('data-mode');
-      Array.prototype.forEach.call(wrap.querySelectorAll('button'), function (b) {
-        b.classList.toggle('on', b === btn);
-      });
+      setViewMode_(btn.getAttribute('data-mode'));
       applyFilters_(true);
     });
   }
@@ -2365,6 +2690,19 @@
       const phone = trigger.getAttribute('data-phone');
       if (phone) openModal(phone, false);
     });
+
+    // לחיצה על ליד ברשימת "לידים חמים" בסרגל הצד פותחת את אותו חלון.
+    // מאזין נפרד כי הסרגל אינו בתוך #tableBody, ולכן ההאצלה שלמעלה
+    // לא מגיעה אליו.
+    const focusPanels = document.getElementById('focusPanels');
+    if (focusPanels) {
+      focusPanels.addEventListener('click', function (e) {
+        const lead = e.target.closest('.focus-row[data-phone]');
+        if (!lead) return;
+        const phone = lead.getAttribute('data-phone');
+        if (phone) openModal(phone, false);
+      });
+    }
     document.getElementById('crmCloseBtn').addEventListener('click', closeModal);
     saveBtn.addEventListener('click', saveAll_);
     aiBtn.addEventListener('click', function () { generateSummary_(); });
