@@ -406,8 +406,23 @@ function parseScheduleValue_(value) {
     return isNaN(value.getTime()) ? null : value;
   }
 
+  // תא שעוצב בטעות כ"משך זמן" ([h]:mm:ss) במקום כתאריך: הערך שמאחורי
+  // הקלעים תקין (מספר סידורי של שיטס - ימים מאז 30/12/1899) והתצוגה
+  // היא שמטעה - "1109654:30:00" הוא בדיוק 01/08/2026 09:30. קרה בפועל
+  // אצל הלקוחה, ולכן מקבלים גם מספר ולא רק תאריך/טקסט.
+  if (typeof value === 'number' && isFinite(value)) {
+    return serialToDate_(value);
+  }
+
   const text = String(value).trim();
   if (!text) return null;
+
+  // אותו מקרה, כשהתא חוזר כמחרוזת של משך זמן: "1109654:30:00".
+  const duration = text.match(/^(\d{3,})[:.](\d{1,2})(?:[:.](\d{1,2}))?/);
+  if (duration) {
+    const hours = Number(duration[1]) + Number(duration[2]) / 60 + Number(duration[3] || 0) / 3600;
+    return serialToDate_(hours / 24);
+  }
 
   const dmy = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})(?:[\s,]+(\d{1,2}):(\d{2}))?/);
   if (dmy) {
@@ -424,6 +439,26 @@ function parseScheduleValue_(value) {
   }
 
   return null;
+}
+
+/**
+ * ממירה מספר סידורי של Google Sheets (ימים מאז 30/12/1899) ל-Date.
+ * מוגבלת לטווח 1990-2100 כדי שמספר קטן שנכתב בטעות בעמודה (למשל "5")
+ * לא יתפרש כתאריך אמיתי ויגרום לשליחה לא צפויה - מחוץ לטווח מחזירה
+ * null, וזה בדיוק ההתנהגות הבטוחה (השורה פשוט לא תישלח ותסומן בדשבורד).
+ */
+function serialToDate_(serial) {
+  const SERIAL_1990 = 32874;   // 01/01/1990
+  const SERIAL_2100 = 73051;   // 01/01/2100
+  if (!(serial > SERIAL_1990 && serial < SERIAL_2100)) return null;
+
+  const days = Math.floor(serial);
+  const seconds = Math.round((serial - days) * 86400);
+  const d = new Date(1899, 11, 30);
+  d.setDate(d.getDate() + days);
+  d.setHours(0, 0, 0, 0);
+  d.setSeconds(seconds);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 /**
