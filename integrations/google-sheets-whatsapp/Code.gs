@@ -92,6 +92,26 @@ const CALL_SENT_STATUS = 'שיחה נשלחה';
 const USER_NOTES_HEADER = 'הערות משתמש';
 const TEAM_USERS_ = ['מזי', 'טליה'];
 
+// --- הקצאת לידים לנציגות ---
+// טליה ומזי הן אדמין ועובדות מול הדשבורד הראשי. הנציגות מקבלות דף נפרד
+// (?rep=<קוד>) שמציג **רק** את הלידים שהוקצו להן.
+const REPS_SHEET_NAME = 'נציגות';
+const ASSIGN_SHEET_NAME = 'הקצאות';
+const DEFAULT_REPS_ = ['חגית', 'שירלי', 'עדנה', 'פינצ\'י'];
+
+// הסטטוסים שנציגה יכולה לבחור כשהיא מסמנת "סיימתי לטפל". ארבעה בלבד -
+// כדי שזו תהיה לחיצה אחת בלי גלילה. "אחר..." פותח את הרשימה המלאה.
+const REP_QUICK_STATUSES_ = ['תואמה פגישה', 'בתהליך', 'בתהליך עתידי', 'לא מעוניין'];
+// הסטטוס שמפעיל קונפטי אצל הנציגה (השאר מקבלים אנימציית לבבות).
+const REP_CELEBRATE_STATUS_ = 'תואמה פגישה';
+
+// עמודות טאב "הקצאות" - הסדר קבוע, והקריאה תמיד לפי שם הכותרת.
+const ASSIGN_HEADERS_ = [
+  'מזהה הקצאה', 'תאריך הקצאה', 'נציגה', 'קמפיין', 'טלפון נייד',
+  'שם חברה', 'איש קשר', 'תפקיד', 'אימייל', 'תיעוד בעת ההעברה',
+  'טופל', 'סטטוס שסומן', 'הערת נציגה', 'תאריך טיפול'
+];
+
 // טאבים שהם עזר/לוג בלבד, לעולם לא נחשבים קמפיין גם אם במקרה יש בהם
 // עמודה שנראית כמו טלפון נייד.
 const STATUS_COLORS_SHEET_NAME = 'צבעי סטטוס';
@@ -100,7 +120,8 @@ const LEGEND_SHEET_NAME_ = 'מקרא';
 // כפתורי וואטסאפ) חייב להיות אחד מהערכים כאן; "סטטוס שיחה" (פרלה,
 // ישיר או מזוקק ב-AI) מתעגל לערך הכי קרוב מהרשימה הזו (ר' matchCallStatus_).
 const STATUS_LIST_SHEET_NAME = 'רשימת סטטוסים';
-const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns', STATUS_COLORS_SHEET_NAME, LEGEND_SHEET_NAME_, STATUS_LIST_SHEET_NAME];
+const NON_CAMPAIGN_SHEETS_ = ['WebhookLog', 'NLPearlCampaigns', STATUS_COLORS_SHEET_NAME,
+  LEGEND_SHEET_NAME_, STATUS_LIST_SHEET_NAME, REPS_SHEET_NAME, ASSIGN_SHEET_NAME];
 
 // רשימת הפתיחה (זרע) לטאב "רשימת סטטוסים" - לפי בקשת הלקוחה במפורש.
 // נכתבת לגיליון רק פעם אחת, ע"י setupStatusListSheet() (ר' למטה) - אחרי
@@ -1316,6 +1337,18 @@ function handleWixWebhook_(ss, payload) {
  * לשיתוף.
  */
 function doGet(e) {
+  // ?rep=<קוד אישי> מגיש לנציגה את הדף שלה בלבד. בלי הפרמטר - הדשבורד
+  // הראשי, בדיוק כמו עד היום (הלינק הקיים של הלקוחה ממשיך לעבוד).
+  const repKey = (e && e.parameter && e.parameter.rep) ? String(e.parameter.rep) : '';
+  if (repKey) {
+    const repTemplate = HtmlService.createTemplateFromFile('RepDashboard');
+    repTemplate.baseUrl = ScriptApp.getService().getUrl();
+    repTemplate.repKey = repKey;
+    return repTemplate.evaluate()
+      .setTitle('הלידים שלי')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   const template = HtmlService.createTemplateFromFile('Dashboard');
   template.baseUrl = ScriptApp.getService().getUrl();
   return template.evaluate()
@@ -1885,6 +1918,417 @@ function setUserStatus(sheetName, phone, username, statusText) {
   return { success: true };
 }
 
+// ============================================================================
+//                        הקצאת לידים לנציגות
+// ============================================================================
+
+/**
+ * יוצרת (פעם אחת) את טאב "נציגות" עם קוד אישי אקראי לכל נציגה.
+ * הקוד הוא מה שמופיע בלינק שלה (?rep=<קוד>) - לא השם, כדי שלא יהיה
+ * אפשר לנחש לינק של נציגה אחרת פשוט ע"י שינוי הכתובת.
+ * מריצים ידנית פעם אחת מהעורך. לא דורסת טאב קיים.
+ */
+function setupRepsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(REPS_SHEET_NAME);
+  if (sheet && sheet.getLastRow() > 1) {
+    Logger.log('הטאב "' + REPS_SHEET_NAME + '" כבר קיים ומכיל נתונים - לא נגעתי בו.');
+    logRepLinks();
+    return;
+  }
+  if (!sheet) sheet = ss.insertSheet(REPS_SHEET_NAME);
+
+  const rows = DEFAULT_REPS_.map(function (name) {
+    return [name, '', randomRepKey_(), 'כן'];
+  });
+  sheet.getRange(1, 1, 1, 4).setValues([['שם נציגה', 'אימייל', 'קוד אישי', 'פעילה']])
+    .setFontWeight('bold').setBackground('#F3F4F6');
+  sheet.getRange(2, 1, rows.length, 4).setValues(rows);
+  sheet.setColumnWidth(1, 140);
+  sheet.setColumnWidth(2, 230);
+  sheet.setColumnWidth(3, 130);
+  Logger.log('נוצר הטאב "' + REPS_SHEET_NAME + '" עם ' + rows.length + ' נציגות.');
+  logRepLinks();
+}
+
+function randomRepKey_() {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  let out = '';
+  for (let i = 0; i < 10; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
+  return out;
+}
+
+/**
+ * מדפיסה ללוג את הלינק האישי של כל נציגה - זה מה ששולחים לה פעם אחת
+ * והיא נועצת בדפדפן. מריצים ידנית מהעורך בכל פעם שרוצים לראות אותם שוב.
+ */
+function logRepLinks() {
+  const base = ScriptApp.getService().getUrl();
+  activeReps_().forEach(function (rep) {
+    Logger.log(rep.name + ': ' + base + '?rep=' + rep.key);
+  });
+}
+
+/** כל הנציגות הפעילות: [{ name, email, key }]. ריק אם הטאב לא נוצר עדיין. */
+function activeReps_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(REPS_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+  return values
+    .filter(function (r) {
+      const active = String(r[3] || '').trim();
+      // ברירת המחדל היא "פעילה" - רק "לא" מסתיר נציגה, כדי ששורה שנוספה
+      // ידנית בלי למלא את העמודה תעבוד ולא תיעלם בשקט.
+      return String(r[0] || '').trim() && normalizeLabel_(active) !== normalizeLabel_('לא');
+    })
+    .map(function (r) {
+      return { name: String(r[0]).trim(), email: String(r[1] || '').trim(), key: String(r[2] || '').trim() };
+    });
+}
+
+/** שמות הנציגות בלבד - לתפריט "העבר ליד ל..." בדשבורד הראשי. */
+function getRepNames() {
+  return activeReps_().map(function (r) { return r.name; });
+}
+
+function repByKey_(key) {
+  const wanted = String(key || '').trim();
+  if (!wanted) return null;
+  const matches = activeReps_().filter(function (r) { return r.key === wanted; });
+  return matches.length ? matches[0] : null;
+}
+
+function repByName_(name) {
+  const matches = activeReps_().filter(function (r) {
+    return normalizeLabel_(r.name) === normalizeLabel_(name);
+  });
+  return matches.length ? matches[0] : null;
+}
+
+/** טאב "הקצאות" - נוצר אוטומטית בהקצאה הראשונה, אין צורך להריץ כלום. */
+function assignSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(ASSIGN_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(ASSIGN_SHEET_NAME);
+    sheet.getRange(1, 1, 1, ASSIGN_HEADERS_.length).setValues([ASSIGN_HEADERS_])
+      .setFontWeight('bold').setBackground('#F3F4F6');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function assignRows_() {
+  const sheet = assignSheet_();
+  const lastRow = sheet.getLastRow();
+  const headers = headerRow_(sheet);
+  if (lastRow < 2) return { sheet: sheet, headers: headers, values: [] };
+  return {
+    sheet: sheet,
+    headers: headers,
+    values: sheet.getRange(2, 1, lastRow - 1, headers.length).getValues()
+  };
+}
+
+function assignCol_(headers, name) {
+  return findColumnNormalized_(headers, name);
+}
+
+function isDoneValue_(v) {
+  const s = normalizeLabel_(v);
+  return s === normalizeLabel_('כן') || s === 'true' || s === 'yes';
+}
+
+/**
+ * מקצה ליד לנציגה. הליד נשמר כ**צילום מצב** - כולל כל התיעוד עד הרגע
+ * הזה - כי לפי ההחלטה של הלקוחה הליד "סופי" ברגע ההעברה. עדיין שומרים
+ * את הקמפיין+הטלפון כמצביע, כדי שנדע לאן להחזיר את הסטטוס בסיום.
+ * ליד אחד = נציגה אחת: אם כבר יש לו הקצאה פתוחה, נזרקת שגיאה ברורה.
+ */
+function assignLead(sheetName, phone, repName) {
+  const rep = repByName_(repName);
+  if (!rep) throw new Error('נציגה לא מוכרת: ' + repName);
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error('הטאב "' + sheetName + '" לא נמצא');
+
+  const found = findRowByPhone_(sheet, phone);
+  if (!found) throw new Error('לא נמצא איש קשר עם הטלפון הזה בטאב');
+
+  const open = openAssignmentFor_(sheetName, phone);
+  if (open) {
+    throw new Error('הליד כבר מוקצה ל' + open.rep + ' וטרם טופל. יש לסיים את הטיפול לפני העברה מחדש.');
+  }
+
+  const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
+  const get_ = function (header, legacy) {
+    const col = legacy ? findHeaderIndex_(found.headers, header, legacy)
+                       : findColumnNormalized_(found.headers, header);
+    return col !== -1 ? String(rowValues[col] || '') : '';
+  };
+
+  // התיעוד עובר יחד עם הליד - בלעדיו הנציגה מתקשרת בלי לדעת מה כבר
+  // נאמר, וגם כפתור ה-AI לא יוכל לסכם כלום.
+  const snapshot = [
+    get_(USER_NOTES_HEADER),
+    get_(REPLY_HEADER, REPLY_HEADER_LEGACY),
+    get_(CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY)
+  ].filter(function (s) { return !!s.trim(); }).join('\n');
+
+  const assignSheet = assignSheet_();
+  const id = 'A' + Date.now();
+  assignSheet.appendRow([
+    id,
+    new Date(),
+    rep.name,
+    sheetName,
+    String(phone),
+    get_(COMPANY_HEADER),
+    get_(NAME_HEADER),
+    get_(TITLE_HEADER),
+    get_(EMAIL_HEADER),
+    snapshot,
+    'לא', '', '', ''
+  ]);
+
+  // מתעדים גם בשורת הליד עצמה, כדי שיהיה גלוי בדשבורד ובאקסל.
+  const notesCol = ensureColumn_(sheet, found.headers, USER_NOTES_HEADER);
+  appendNoteEntry_(sheet, found.headers, found.rowIndex, notesCol, 'מיטוב', 'הליד הועבר ל' + rep.name);
+
+  notifyRepOfNewLead_(rep, get_(NAME_HEADER), get_(COMPANY_HEADER));
+  return { success: true, rep: rep.name };
+}
+
+/** ההקצאה הפתוחה (לא טופלה) של ליד מסוים, או null. */
+function openAssignmentFor_(sheetName, phone) {
+  const data = assignRows_();
+  const campCol = assignCol_(data.headers, 'קמפיין');
+  const phoneCol = assignCol_(data.headers, 'טלפון נייד');
+  const repCol = assignCol_(data.headers, 'נציגה');
+  const doneCol = assignCol_(data.headers, 'טופל');
+  const suffix = phoneSuffix_(phone);
+
+  for (let i = 0; i < data.values.length; i++) {
+    const row = data.values[i];
+    if (isDoneValue_(row[doneCol])) continue;
+    if (normalizeLabel_(row[campCol]) !== normalizeLabel_(sheetName)) continue;
+    if (phoneSuffix_(row[phoneCol]) !== suffix) continue;
+    return { rowIndex: i + 2, rep: String(row[repCol] || '') };
+  }
+  return null;
+}
+
+/** מייל לנציגה ברגע ההקצאה. כישלון במייל לעולם לא מפיל את ההקצאה עצמה. */
+function notifyRepOfNewLead_(rep, leadName, company) {
+  if (!rep.email) return;
+  try {
+    const link = ScriptApp.getService().getUrl() + '?rep=' + rep.key;
+    MailApp.sendEmail({
+      to: rep.email,
+      subject: 'ליד חדש הועבר אלייך: ' + (leadName || ''),
+      htmlBody: '<div dir="rtl" style="font-family:Arial,sans-serif;font-size:15px">' +
+        '<p>היי ' + escapeHtmlServer_(rep.name) + ',</p>' +
+        '<p>הועבר אלייך ליד חדש: <b>' + escapeHtmlServer_(leadName || '') + '</b>' +
+        (company ? ' מ<b>' + escapeHtmlServer_(company) + '</b>' : '') + '</p>' +
+        '<p><a href="' + link + '" style="background:#116dff;color:#fff;padding:10px 18px;' +
+        'border-radius:8px;text-decoration:none;display:inline-block">פתיחת הלידים שלי</a></p>' +
+        '</div>'
+    });
+  } catch (err) {
+    Logger.log('שליחת מייל לנציגה נכשלה (ההקצאה עצמה בוצעה): ' + err.message);
+  }
+}
+
+function escapeHtmlServer_(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * מחזירה לדשבורד של הנציגה את הלידים שלה - הפתוחים והטופלו בנפרד.
+ * מזוהה **רק** לפי הקוד האישי שבלינק; קוד לא מוכר מחזיר שגיאה ולא רשימה ריקה,
+ * כדי שלא ייראה כאילו "אין לך לידים" כשבעצם הלינק שגוי.
+ */
+function getRepData(repKey) {
+  const rep = repByKey_(repKey);
+  if (!rep) throw new Error('לינק לא מזוהה. יש לפנות לטליה לקבלת לינק חדש.');
+
+  const data = assignRows_();
+  const H = data.headers;
+  const idx = {
+    id: assignCol_(H, 'מזהה הקצאה'), date: assignCol_(H, 'תאריך הקצאה'),
+    rep: assignCol_(H, 'נציגה'), camp: assignCol_(H, 'קמפיין'),
+    phone: assignCol_(H, 'טלפון נייד'), company: assignCol_(H, 'שם חברה'),
+    name: assignCol_(H, 'איש קשר'), title: assignCol_(H, 'תפקיד'),
+    email: assignCol_(H, 'אימייל'), snapshot: assignCol_(H, 'תיעוד בעת ההעברה'),
+    done: assignCol_(H, 'טופל'), status: assignCol_(H, 'סטטוס שסומן'),
+    note: assignCol_(H, 'הערת נציגה'), doneDate: assignCol_(H, 'תאריך טיפול')
+  };
+
+  const tz = Session.getScriptTimeZone();
+  const fmt = function (v) {
+    return (v instanceof Date && !isNaN(v.getTime())) ? Utilities.formatDate(v, tz, 'dd/MM/yyyy HH:mm') : '';
+  };
+  const ms = function (v) {
+    return (v instanceof Date && !isNaN(v.getTime())) ? v.getTime() : 0;
+  };
+
+  const open = [], done = [];
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+  let doneToday = 0;
+
+  data.values.forEach(function (row) {
+    if (normalizeLabel_(row[idx.rep]) !== normalizeLabel_(rep.name)) return;
+    const item = {
+      id: String(row[idx.id] || ''),
+      assignedAt: fmt(row[idx.date]),
+      assignedAtMs: ms(row[idx.date]),
+      campaign: String(row[idx.camp] || ''),
+      phone: String(row[idx.phone] || ''),
+      company: String(row[idx.company] || ''),
+      name: String(row[idx.name] || ''),
+      title: String(row[idx.title] || ''),
+      email: String(row[idx.email] || ''),
+      history: String(row[idx.snapshot] || ''),
+      status: String(row[idx.status] || ''),
+      note: String(row[idx.note] || ''),
+      doneAt: fmt(row[idx.doneDate])
+    };
+    if (isDoneValue_(row[idx.done])) {
+      done.push(item);
+      const d = row[idx.doneDate];
+      if (d instanceof Date && !isNaN(d.getTime()) && d.getTime() >= todayMidnight.getTime()) doneToday++;
+    } else {
+      open.push(item);
+    }
+  });
+
+  open.sort(function (a, b) { return b.assignedAtMs - a.assignedAtMs; });
+  done.sort(function (a, b) { return b.assignedAtMs - a.assignedAtMs; });
+
+  return {
+    repName: rep.name,
+    open: open,
+    done: done,
+    doneToday: doneToday,
+    doneTotal: done.length,
+    quickStatuses: REP_QUICK_STATUSES_,
+    celebrateStatus: REP_CELEBRATE_STATUS_,
+    statusList: getStatusList_()
+  };
+}
+
+/**
+ * הנציגה סימנה "סיימתי לטפל" ובחרה סטטוס.
+ * שני דברים קורים: ההקצאה נסגרת אצלה, **והסטטוס נכתב חזרה** לשורת הליד
+ * בטאב הקמפיין ("סטטוס איש קשר") + נרשם ביומן ההערות - כך שאצל הלקוחה
+ * זה מופיע בדשבורד ובאקסל בלי שתצטרך לעשות כלום.
+ */
+function completeAssignment(repKey, assignmentId, statusText, noteText) {
+  const rep = repByKey_(repKey);
+  if (!rep) throw new Error('לינק לא מזוהה');
+  if (!statusText) throw new Error('יש לבחור סטטוס');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const data = assignRows_();
+    const H = data.headers;
+    const idCol = assignCol_(H, 'מזהה הקצאה');
+    const repCol = assignCol_(H, 'נציגה');
+    const doneCol = assignCol_(H, 'טופל');
+    const statusCol = assignCol_(H, 'סטטוס שסומן');
+    const noteCol = assignCol_(H, 'הערת נציגה');
+    const dateCol = assignCol_(H, 'תאריך טיפול');
+    const campCol = assignCol_(H, 'קמפיין');
+    const phoneCol = assignCol_(H, 'טלפון נייד');
+
+    for (let i = 0; i < data.values.length; i++) {
+      const row = data.values[i];
+      if (String(row[idCol]) !== String(assignmentId)) continue;
+      if (normalizeLabel_(row[repCol]) !== normalizeLabel_(rep.name)) {
+        throw new Error('ההקצאה הזו שייכת לנציגה אחרת');
+      }
+      if (isDoneValue_(row[doneCol])) return { success: true, alreadyDone: true };
+
+      const rowIndex = i + 2;
+      data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
+      data.sheet.getRange(rowIndex, statusCol + 1).setValue(statusText);
+      data.sheet.getRange(rowIndex, noteCol + 1).setValue(noteText || '');
+      data.sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
+
+      writeBackRepStatus_(String(row[campCol]), String(row[phoneCol]), rep.name, statusText, noteText);
+      return {
+        success: true,
+        celebrate: normalizeLabel_(statusText) === normalizeLabel_(REP_CELEBRATE_STATUS_)
+      };
+    }
+    throw new Error('ההקצאה לא נמצאה');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * כותבת את הסטטוס שהנציגה בחרה חזרה לשורת הליד בטאב הקמפיין.
+ * נכשלת בשקט (עם לוג) ולא מפילה את סגירת ההקצאה - אם הטאב נמחק או השורה
+ * הוסרה, עדיף שהנציגה תסיים את הטיפול מאשר שתיתקע מול שגיאה.
+ */
+function writeBackRepStatus_(sheetName, phone, repName, statusText, noteText) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return;
+    const found = findRowByPhone_(sheet, phone);
+    if (!found) return;
+
+    const statusCol = ensureColumn_(sheet, found.headers, FIRST_REPLY_HEADER);
+    sheet.getRange(found.rowIndex, statusCol + 1).setValue(statusText);
+
+    const notesCol = ensureColumn_(sheet, found.headers, USER_NOTES_HEADER);
+    const text = 'סיימה לטפל · סטטוס: ' + statusText + (noteText ? ' · ' + noteText : '');
+    appendNoteEntry_(sheet, found.headers, found.rowIndex, notesCol, repName, text);
+  } catch (err) {
+    Logger.log('כתיבת הסטטוס חזרה לטאב הקמפיין נכשלה: ' + err.message);
+  }
+}
+
+/** מפה של טלפון -> שם הנציגה שהליד מוקצה לה כרגע (פתוח בלבד). */
+function openAssignmentsByPhone_() {
+  const data = assignRows_();
+  const map = {};
+  if (!data.values.length) return map;
+  const phoneCol = assignCol_(data.headers, 'טלפון נייד');
+  const repCol = assignCol_(data.headers, 'נציגה');
+  const doneCol = assignCol_(data.headers, 'טופל');
+  data.values.forEach(function (row) {
+    if (isDoneValue_(row[doneCol])) return;
+    map[phoneSuffix_(row[phoneCol])] = String(row[repCol] || '');
+  });
+  return map;
+}
+
+/** ספירת לידים פתוחים/סה"כ לכל נציגה - לסרגל הצד של הדשבורד הראשי. */
+function repWorkload_() {
+  const data = assignRows_();
+  const repCol = assignCol_(data.headers, 'נציגה');
+  const doneCol = assignCol_(data.headers, 'טופל');
+  const counts = {};
+  activeReps_().forEach(function (r) { counts[r.name] = { name: r.name, open: 0, total: 0 }; });
+  data.values.forEach(function (row) {
+    const name = String(row[repCol] || '').trim();
+    if (!name) return;
+    if (!counts[name]) counts[name] = { name: name, open: 0, total: 0 };
+    counts[name].total++;
+    if (!isDoneValue_(row[doneCol])) counts[name].open++;
+  });
+  return Object.keys(counts).map(function (k) { return counts[k]; });
+}
+
 /**
  * מועד ההורדה הקודמת של קובץ האקסל לקמפיין הזה (ISO string), או null אם
  * מעולם לא הורד. משמש את getCampaignData כדי לסמן שורות שהתעדכנו מאז.
@@ -2052,6 +2496,19 @@ function summarizeContact(sheetName, phone) {
     throw new Error('אין עדיין שיחה עם הליד הזה לסכם');
   }
 
+  return geminiSummarize_(name, whatsappHistory, callHistory);
+}
+
+/**
+ * הקריאה בפועל ל-Gemini - משותפת לדשבורד הראשי (summarizeContact) ולדשבורד
+ * הנציגה (getRepAiSummary), כדי שהסיכום והטיפ יהיו זהים בשני המקומות.
+ */
+function geminiSummarize_(name, whatsappHistory, callHistory) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  if (!apiKey) {
+    throw new Error('חסר מפתח GEMINI_API_KEY ב-Script Properties (Project Settings)');
+  }
+
   const prompt = `
 You are an expert sales strategist and psychologist. Analyze the following lead details, WhatsApp history, and call history.
 
@@ -2109,6 +2566,46 @@ ${callHistory ? 'Call History:\n' + callHistory + '\n' : ''}
     summary: (parsed.summary || '').trim(),
     salesTip: (parsed.sales_tip || '').trim()
   };
+}
+
+/**
+ * אותו סיכום AI, לנציגה - אבל על **צילום המצב** שנשמר בהקצאה ולא על
+ * שורת הקמפיין החיה, כי אצל הנציגה הליד קפוא מרגע ההעברה.
+ * התוצאה נשמרת בשורת ההקצאה: לחיצה חוזרת מחזירה את מה שכבר נוצר, בלי
+ * קריאה נוספת ל-Gemini (מהיר יותר לנציגה, וזול יותר ככל שיש יותר נציגות).
+ */
+function getRepAiSummary(repKey, assignmentId) {
+  const rep = repByKey_(repKey);
+  if (!rep) throw new Error('לינק לא מזוהה');
+
+  const data = assignRows_();
+  const H = data.headers;
+  const idCol = assignCol_(H, 'מזהה הקצאה');
+  const repCol = assignCol_(H, 'נציגה');
+  const snapCol = assignCol_(H, 'תיעוד בעת ההעברה');
+  const nameCol = assignCol_(H, 'איש קשר');
+
+  for (let i = 0; i < data.values.length; i++) {
+    const row = data.values[i];
+    if (String(row[idCol]) !== String(assignmentId)) continue;
+    if (normalizeLabel_(row[repCol]) !== normalizeLabel_(rep.name)) {
+      throw new Error('ההקצאה הזו שייכת לנציגה אחרת');
+    }
+
+    const cacheCol = ensureColumn_(data.sheet, H, 'סיכום AI');
+    const cached = data.sheet.getRange(i + 2, cacheCol + 1).getValue();
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) { /* מטמון פגום - ניצור מחדש */ }
+    }
+
+    const history = String(row[snapCol] || '').trim();
+    if (!history) throw new Error('אין תיעוד שיחה לסכם עבור הליד הזה');
+
+    const result = geminiSummarize_(String(row[nameCol] || ''), history, '');
+    data.sheet.getRange(i + 2, cacheCol + 1).setValue(JSON.stringify(result));
+    return result;
+  }
+  throw new Error('ההקצאה לא נמצאה');
 }
 
 function classifyStatus_(value) {
@@ -2412,6 +2909,8 @@ function getCampaignData(sheetName) {
   const lastExportIso = lastExportTime_(sheetName);
   const lastExportMs = lastExportIso ? new Date(lastExportIso).getTime() : null;
   const statusList = getStatusList_();
+  // מי מוקצה למי - נקרא פעם אחת לכל הקמפיין, לא פר שורה.
+  const assignedMap = openAssignmentsByPhone_();
 
   let sent = 0, errors = 0, replies = 0, callsSent = 0, activityToday = 0;
   const rows = [];
@@ -2487,6 +2986,8 @@ function getCampaignData(sheetName) {
         ? Utilities.formatDate(scheduleAt, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
       scheduledAtMs: scheduleAt ? scheduleAt.getTime() : 0,
       scheduleMissingDate: isScheduledStatus_(status) && !scheduleAt,
+      // שם הנציגה שהליד מוקצה לה כרגע (ריק אם פנוי או שכבר טופל).
+      assignedTo: assignedMap[phoneSuffix_(phone)] || '',
       updatedToday: updatedToday,
       recentlyUpdated: recentlyUpdated
     });
@@ -2509,7 +3010,9 @@ function getCampaignData(sheetName) {
     trend: dailyActivityTrend_(sheetName),
     teamUsers: TEAM_USERS_,
     statusColors: getStatusColors_(),
-    statusList: getStatusList_()
+    statusList: getStatusList_(),
+    repNames: getRepNames(),
+    repWorkload: repWorkload_()
   };
 }
 
