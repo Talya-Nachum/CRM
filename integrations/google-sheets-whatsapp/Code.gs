@@ -3014,6 +3014,11 @@ function getCampaignData(sheetName) {
       scheduleMissingDate: isScheduledStatus_(status) && !scheduleAt,
       // שם הנציגה שהליד מוקצה לה כרגע (ריק אם פנוי או שכבר טופל).
       assignedTo: assignedMap[phoneSuffix_(phone)] || '',
+      // דרך איזה ערוץ פנינו לליד בפועל - כדי שיהיה אפשר לדעת במבט אחד
+      // אם הוא קיבל וואטסאפ, שיחת פרלה, או את שניהם. נגזר מנתונים
+      // שכבר קיימים בשורה, בלי עמודה חדשה בגיליון.
+      viaWhatsapp: normalizeLabel_(status) === normalizeLabel_(SENT_STATUS) || !!reply || !!firstReply,
+      viaPearl: callWasSent || !!callResult || !!callStatus,
       updatedToday: updatedToday,
       recentlyUpdated: recentlyUpdated
     });

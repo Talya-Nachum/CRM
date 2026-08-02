@@ -1170,6 +1170,20 @@
   }
   .modal-hint { font-size: 12.5px; color: var(--text-muted); margin: 8px 0 0; line-height: 1.55; }
 
+  /* אייקוני הערוץ (וואטסאפ / פרלה) לפני שם איש הקשר. */
+  .channels {
+    display: inline-flex;
+    gap: 2px;
+    margin-inline-end: 5px;
+    vertical-align: middle;
+  }
+  .ch {
+    font-size: 12px;
+    line-height: 1;
+    cursor: help;
+  }
+  .ch-none { color: var(--border); font-weight: 800; }
+
   .assigned-to {
     font-size: 11.5px;
     font-weight: 700;
@@ -1700,6 +1714,22 @@
   // טקסט של כפתור וואטסאפ חדש שנרשם אוטומטית, ייכנס לקטגוריה לבד בלי
   // שינוי קוד.
 
+  /** אייקוני הערוץ שדרכו פנינו לליד. שורה בלי אף ערוץ מקבלת מציין
+   *  ניטרלי, כדי שהעמודה תישאר מיושרת ולא "תקפוץ" בין שורות. */
+  function channelIcons_(r) {
+    const icons = [];
+    if (r.viaWhatsapp) {
+      icons.push('<span class="ch ch-wa" data-tip="נשלחה הודעת וואטסאפ">💬</span>');
+    }
+    if (r.viaPearl) {
+      icons.push('<span class="ch ch-pearl" data-tip="בוצעה שיחת פרלה">🤖</span>');
+    }
+    if (!icons.length) {
+      icons.push('<span class="ch ch-none" data-tip="טרם פנינו לליד הזה">·</span>');
+    }
+    return '<span class="channels">' + icons.join('') + '</span>';
+  }
+
   function statusHas_(status, word) {
     return normalizeStatusKey_(status).indexOf(normalizeStatusKey_(word)) !== -1;
   }
@@ -2031,7 +2061,11 @@
       cell: function (r) { return '<td class="company-cell" data-tip="' + escapeHtml_(r.company || '') + '">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
     { key: 'name', label: 'איש קשר', always: true, sortable: true,
       filterValue: function (r) { return r.name || ''; },
-      cell: function (r) { return '<td class="name-cell">' + escapeHtml_(r.name) + '</td>'; } },
+      // אייקון הערוץ לפני השם: 💬 וואטסאפ, 🤖 פרלה, או שניהם - כדי לדעת
+      // במבט אחד דרך מה פנינו לליד הזה בפועל.
+      cell: function (r) {
+        return '<td class="name-cell">' + channelIcons_(r) + escapeHtml_(r.name) + '</td>';
+      } },
     { key: 'title', label: 'תפקיד', always: true,
       filterValue: function (r) { return r.title || ''; },
       cell: function (r) { return '<td class="title-cell" data-tip="' + escapeHtml_(r.title || '') + '">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>'; } },
