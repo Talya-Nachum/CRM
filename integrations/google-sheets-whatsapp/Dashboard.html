@@ -489,7 +489,10 @@
   }
   .task:hover { box-shadow: var(--shadow-hover); }
   /* "תגובות חדשות" - הקובייה שהלקוחה ביקשה שתהיה הכי בולטת. */
-  .task.hero { border: 2px solid var(--bad); background: linear-gradient(180deg,#FFF5F4 0%,var(--surface) 100%); }
+  /* רק "תגובות חדשות" בולטת - היא הדבר היחיד שדורש תשומת לב מיידית.
+     כשהמונה 0 היא נרגעת לגמרי (ר' renderTasksRow_). */
+  /* הקובייה היחידה שבולטת: "תגובות חדשות" - וגם היא רק כשיש באמת חדש. */
+  .stat.hero { border-color: var(--bad); background: #FFFBFA; }
   .task.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
   .task .ti {
     width: 28px; height: 28px; border-radius: 9px; flex-shrink: 0;
@@ -523,7 +526,9 @@
   .stat {
     position: relative;
     background: var(--surface);
-    border: 1.5px solid var(--sc, var(--border));
+    /* מסגרת ניטרלית ופס עליון דק בצבע הקטגוריה - ארבע מסגרות צבעוניות
+       מלאות זו לצד זו התנגשו בעין. הצבע נשאר לזיהוי, בלי לצעוק. */
+    border: 1px solid var(--border);
     border-radius: 11px;
     padding: 8px 10px 8px;
     box-shadow: var(--shadow);
@@ -536,8 +541,10 @@
     content: '';
     position: absolute;
     top: 0; right: 0; left: 0;
-    height: 3px;
+    height: 2.5px;
+    border-radius: 11px 11px 0 0;
     background: var(--sc, var(--accent));
+    opacity: .85;
   }
 
   .stat-head {
@@ -560,10 +567,10 @@
     display: block;
     border-radius: 3px 3px 0 0;
     background: var(--sb, var(--accent-soft));
-    opacity: .75;
+    opacity: .5;
     min-height: 3px;
   }
-  .stat-spark i.hi { background: var(--sc, var(--accent)); opacity: 1; }
+  .stat-spark i.hi { background: var(--sc, var(--accent)); opacity: .8; }
 
   .stat:hover {
     transform: none;
@@ -1697,11 +1704,26 @@
     return normalizeStatusKey_(status).indexOf(normalizeStatusKey_(word)) !== -1;
   }
 
-  /** "חם" = כל סטטוס שיש בו "פגישה" או "ליד" - חוץ משניים שהם ההפך. */
-  function isHotStatus_(status) {
+  /** "פגישה" בכל וריאציה - חוץ משתיים שהן ההפך. */
+  function isMeetingStatus_(status) {
     if (!status) return false;
     if (statusHas_(status, 'פגישה בוטלה') || statusHas_(status, 'לא מאשר הגעה')) return false;
-    return statusHas_(status, 'פגישה') || statusHas_(status, 'ליד');
+    return statusHas_(status, 'פגישה');
+  }
+
+  /** כל סטטוס שמכיל "ליד" (ליד לא לחיוב, ליד הועבר ללקוח, וכו'). */
+  function isLeadStatus_(status) {
+    return !!status && statusHas_(status, 'ליד');
+  }
+
+  /** "לא מעוניין" - נסגר לרעה. */
+  function isDeclinedStatus_(status) {
+    return !!status && statusHas_(status, 'לא מעוניין');
+  }
+
+  /** "חם" = פגישה או ליד. נשאר בשימוש לרשימת הלידים החמים. */
+  function isHotStatus_(status) {
+    return isMeetingStatus_(status) || isLeadStatus_(status);
   }
 
   /** "ממתין לחזרה" = כל וריאציה של "בתהליך". */
@@ -1718,18 +1740,22 @@
     return ms >= midnight.getTime();
   }
 
+  // ארבע הקוביות הקטנות הן **מיפוי הסטטוסים העיקריים** ולא חזרה על מה
+  // שכבר מופיע למעלה. "תגובות חדשות" יושבת בקובייה הגדולה בראש המסך,
+  // ו"הועברו לנציגות" נספר בסרגל הצד ("לידים לפי נציגה").
   const FOCUS_DEFS = [
-    { key: 'newToday', label: 'תגובות חדשות', hint: 'שלא ראית עדיין', icon: '🔔', hero: true,
-      color: 'var(--bad)', soft: 'rgba(225,68,47,.13)', test: isNewToday_ },
-    { key: 'hot', label: 'לידים חמים', hint: 'פגישות ולידים', icon: '🔥',
-      color: 'var(--pending)', soft: 'var(--pending-soft)',
-      test: function (r) { return isHotStatus_(r.unifiedStatus); } },
-    { key: 'waiting', label: 'ממתינים לחזרה', hint: 'סטטוס בתהליך', icon: '⏳',
+    { key: 'meetings', label: 'פגישות', hint: 'בכל הוריאציות', icon: '📅',
       color: 'var(--accent-2)', soft: 'var(--accent-2-soft)',
+      test: function (r) { return isMeetingStatus_(r.unifiedStatus); } },
+    { key: 'leads', label: 'לידים', hint: 'סטטוס ליד', icon: '🔥',
+      color: 'var(--pending)', soft: 'var(--pending-soft)',
+      test: function (r) { return isLeadStatus_(r.unifiedStatus); } },
+    { key: 'waiting', label: 'בתהליך', hint: 'ממתינים לחזרה', icon: '⏳',
+      color: 'var(--accent)', soft: 'var(--accent-soft)',
       test: function (r) { return isWaitingStatus_(r.unifiedStatus); } },
-    { key: 'assigned', label: 'הועברו לנציגות', hint: 'ממתינים לטיפול אצלן', icon: '👥',
-      color: 'var(--good)', soft: 'var(--good-soft)',
-      test: function (r) { return !!r.assignedTo; } }
+    { key: 'declined', label: 'לא מעוניין', hint: 'נסגרו לרעה', icon: '🚫',
+      color: 'var(--bad)', soft: 'var(--bad-soft)',
+      test: function (r) { return isDeclinedStatus_(r.unifiedStatus); } }
   ];
 
   function focusDef_(key) {
@@ -1749,7 +1775,7 @@
 
     el.innerHTML = FOCUS_DEFS.map(function (f) {
       const n = all.filter(f.test).length;
-      const cls = 'task' + (f.hero ? ' hero' : '') + (activeFocusFilter === f.key ? ' on' : '');
+      const cls = 'task' + (activeFocusFilter === f.key ? ' on' : '');
       return '<button type="button" class="' + cls + '" data-focus="' + f.key + '">' +
         '<span class="ti" style="background:' + f.soft + ';color:' + f.color + '">' + f.icon + '</span>' +
         '<span class="tx"><span class="t1">' + f.label + '</span>' +
@@ -1853,11 +1879,13 @@
         spark: dailySeries_(data.rows, function (r) { return !!r.reply || !!r.firstReply; }) },
       { label: 'תגובות חדשות היום', value: newToday, icon: 'bot', fg: 'var(--bad)', bg: 'rgba(225,68,47,.13)',
         delta: newToday ? 'דורשות התייחסות' : 'אין חדש מהבוקר',
+        hero: !!newToday,
         spark: dailySeries_(data.rows, function (r) { return !!r.lastActivityMs; }) }
     ];
     const statsHtml = stats.map(function (s) {
       const delta = s.delta ? '<div class="delta">' + s.delta + '</div>' : '';
-      return '<div class="stat" style="--sc:' + s.fg + ';--sb:' + s.bg + ';color:inherit">' +
+      return '<div class="stat' + (s.hero ? ' hero' : '') +
+        '" style="--sc:' + s.fg + ';--sb:' + s.bg + ';color:inherit">' +
         '<div class="stat-head">' +
           '<div class="stat-icon" style="background:' + s.bg + ';color:' + s.fg + '">' + ICONS[s.icon] + '</div>' +
           '<span class="label">' + s.label + '</span>' +
