@@ -1988,6 +1988,32 @@ function activeReps_() {
     });
 }
 
+/**
+ * הלינק האישי המלא של כל נציגה - מוצג בדשבורד עצמו (כפתור "לינקים
+ * לנציגות") כדי שהלקוחה לא תצטרך להרכיב כתובות ידנית או לחפש ביומן
+ * הביצוע של העורך. מחזירה גם נציגות שהושבתו, מסומנות ככאלה, כדי שלא
+ * ייראה כאילו הלינק "נעלם".
+ */
+function getRepLinks() {
+  const base = ScriptApp.getService().getUrl();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(REPS_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues()
+    .filter(function (r) { return String(r[0] || '').trim(); })
+    .map(function (r) {
+      const key = String(r[2] || '').trim();
+      return {
+        name: String(r[0]).trim(),
+        email: String(r[1] || '').trim(),
+        key: key,
+        link: key ? base + '?rep=' + encodeURIComponent(key) : '',
+        active: normalizeLabel_(String(r[3] || '')) !== normalizeLabel_('לא')
+      };
+    });
+}
+
 /** שמות הנציגות בלבד - לתפריט "העבר ליד ל..." בדשבורד הראשי. */
 function getRepNames() {
   return activeReps_().map(function (r) { return r.name; });
