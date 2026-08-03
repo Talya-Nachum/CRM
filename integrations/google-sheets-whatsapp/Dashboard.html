@@ -1361,7 +1361,10 @@
     align-items: center;
     justify-content: center;
     padding: 16px;
-    z-index: 10;
+    /* חייב להיות מעל .detail-overlay (z-index: 20) - כפתורי הפעולה
+       במסך פרטי איש הקשר פותחים את החלונות האלה, וזה חייב להופיע
+       מעליו ולא "מאחוריו" (בלתי נראה בפועל). */
+    z-index: 30;
   }
 
   .modal-overlay.show { display: flex; }
@@ -1411,7 +1414,13 @@
   .detail-id { flex: 1; min-width: 0; }
   .detail-nm { font-size: 18px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .detail-co { font-size: 13px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .detail-status-block { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+  .detail-status-block { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+  .detail-status-block .status-label {
+    font-size: 10.5px; color: var(--text-muted); font-weight: 700; letter-spacing: .02em;
+  }
+  /* בעמוד המלא הסטטוס הוא הדבר הכי חשוב לזהות במבט אחד - הרבה יותר
+     בולט מהתגית הקטנה שבטבלה (12.5px). */
+  .detail-status-block .status-pill { font-size: 15px; padding: 5px 16px; font-weight: 800; }
   .detail-lastact { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 
   .detail-grid { display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start; }
@@ -1697,6 +1706,7 @@
         <div class="detail-co" id="detailCoTitle"></div>
       </div>
       <div class="detail-status-block">
+        <span class="status-label">סטטוס</span>
         <span class="status-pill" id="detailStatusPill"></span>
         <span class="detail-lastact" id="detailLastActivity"></span>
       </div>
