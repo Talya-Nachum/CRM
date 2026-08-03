@@ -2047,7 +2047,14 @@ function debugYaakov() {
 
 function debugStatusFor_(sheetName, phone) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(sheetName);
+  // getSheetByName דורש התאמה מדויקת - כולל רווח נסתר בסוף שם הטאב (בדיוק
+  // התקלה החוזרת המתועדת ב-CLAUDE.md). לכלי אבחון עדיף להיות סובלני לזה.
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.getSheets().filter(function (s) {
+      return normalizeLabel_(s.getName()) === normalizeLabel_(sheetName);
+    })[0] || null;
+  }
   if (!sheet) { Logger.log('הטאב "' + sheetName + '" לא נמצא'); return; }
 
   const found = findRowByPhone_(sheet, phone);
