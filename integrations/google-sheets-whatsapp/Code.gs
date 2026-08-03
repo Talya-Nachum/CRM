@@ -838,6 +838,21 @@ function doPost(e) {
  * "ButtonPayload" רק כשזו הייתה לחיצת כפתור אמיתית; בטקסט חופשי השדה
  * הזה קיים אבל בלי ButtonPayload בכלל.
  */
+/**
+ * רושמת ביומן (WebhookLog) שהגיעה תגובה שאין לה קמפיין ודאי - במקום
+ * לנחש ולעדכן קמפיין אקראי. נקראת מכל אחד מהערוצים (וואטסאפ/פרלה) כשאין
+ * זיכרון "לאן שלחנו לאחרונה" למספר הזה. לעולם לא זורקת.
+ */
+function logSheetAppendOrphan_(ss, incomingPhone, channel) {
+  try {
+    const logSheet = ss.getSheetByName('WebhookLog') || ss.insertSheet('WebhookLog');
+    logSheet.appendRow([new Date(), 'תגובה יתומה (' + channel + ') מטלפון שמסתיים ב-' +
+      incomingPhone + ' - לא נמצא קמפיין מקור ודאי, לא בוצע עדכון.']);
+  } catch (err) {
+    Logger.log('רישום תגובה יתומה נכשל: ' + err.message);
+  }
+}
+
 function extractButtonPayload_(entry) {
   try {
     const info = JSON.parse(entry.AdditionalInfo || '{}');
@@ -859,8 +874,19 @@ function handleInforuWebhook_(ss, payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
+    // כלל מוחלט: תשובה חוזרת **רק** לקמפיין שממנו נשלחה ההודעה
+    // (recordLastContact_ ב-sendMessagesInSheet_). לעולם לא סורקים את כל
+    // שאר טאבי הקמפיינים בחיפוש עיוור אחר מספר הטלפון - מספר בדיקה
+    // חוזר שקיים בכמה טאבים בו-זמנית היה גורם לתשובה "לקפוץ" לקמפיין
+    // לא-קשור. אם אין זיכרון (למשל הודעה שנשלחה בעקיפין, לא דרך כפתור
+    // "שלח הודעות") - עדיף תגובה "יתומה" ביומן מאשר עדכון שקט של קמפיין
+    // אקראי.
     const tracked = lastContactSheet_(ss, incomingPhone);
-    const sheets = tracked ? [tracked] : getCampaignSheets_(ss);
+    if (!tracked) {
+      logSheetAppendOrphan_(ss, incomingPhone, 'וואטסאפ');
+      return;
+    }
+    const sheets = [tracked];
     for (const sheet of sheets) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
@@ -1138,7 +1164,6 @@ function isPearlSystemStatus_(value) {
  */
 function orderedPearlSheets_(ss, incomingPhone, eventPearlId) {
   const allSheets = getCampaignSheets_(ss);
-  const tracked = lastContactSheet_(ss, incomingPhone);
 
   const sheetMatchesPearl_ = function (sheet) {
     if (!eventPearlId) return false;
@@ -1149,13 +1174,21 @@ function orderedPearlSheets_(ss, incomingPhone, eventPearlId) {
     return normalizeLabel_(row2Value) === normalizeLabel_(eventPearlId);
   };
 
+  // כלל מוחלט: תשובה חוזרת **רק** לקמפיין שממנו היא יצאה, ולעולם לא
+  // "מנחשים" קמפיין אחר רק כי גם בו קיימת שורה עם אותו טלפון (זה בדיוק
+  // מה שגרם לתשובה של ליד אחד לעדכן קמפיין לא-קשור בטעות, כי מספר בדיקה
+  // חוזר קיים בכמה טאבים בו-זמנית).
+  // עדיפות ראשונה: מזהה ה-Outbound המדויק של פרלה שרשום בשורה 2 של
+  // הטאב - ודאי לחלוטין, לא תלוי בזיכרון פנימי.
   const pearlMatched = allSheets.filter(sheetMatchesPearl_);
-  const rest = allSheets.filter(function (s) { return pearlMatched.indexOf(s) === -1; });
-  if (tracked && pearlMatched.indexOf(tracked) === -1) {
-    rest.splice(rest.indexOf(tracked), 1);
-    rest.unshift(tracked);
-  }
-  return pearlMatched.concat(rest);
+  if (pearlMatched.length) return pearlMatched;
+
+  // אחרת - רק הטאב שאליו התקשרנו לאחרונה למספר הזה בפועל דרך המערכת
+  // (recordLastContact_ ב-startCallsInSheet_). אם גם זה לא ידוע - שום
+  // טאב אחר, בכוונה: עדיף תגובה "יתומה" שרשומה ביומן (ר' doPost) מאשר
+  // עדכון שקט של הקמפיין הלא נכון.
+  const tracked = lastContactSheet_(ss, incomingPhone);
+  return tracked ? [tracked] : [];
 }
 
 /**
@@ -1177,6 +1210,10 @@ function handlePearlLeadStatusEvent_(ss, payload, eventPearlId) {
   lock.waitLock(10000);
   try {
     const sheets = orderedPearlSheets_(ss, incomingPhone, eventPearlId);
+    if (!sheets.length) {
+      logSheetAppendOrphan_(ss, incomingPhone, 'פרלה (סטטוס)');
+      return;
+    }
     for (const sheet of sheets) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
@@ -1244,6 +1281,10 @@ function handleNlpearlWebhook_(ss, payload) {
   lock.waitLock(10000);
   try {
     const sheets = orderedPearlSheets_(ss, incomingPhone, eventPearlId);
+    if (!sheets.length) {
+      logSheetAppendOrphan_(ss, incomingPhone, 'פרלה');
+      return;
+    }
 
     for (const sheet of sheets) {
       const data = sheet.getDataRange().getValues();
