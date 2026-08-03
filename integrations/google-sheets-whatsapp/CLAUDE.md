@@ -90,3 +90,29 @@ Apps Script **מסתיר** מרשימת "בחר פונקציה להרצה" בע�
 - **תמיד** לצרף את הוראת ה-`view-source:` + הכתובת של הקובץ כשמעבירים Dashboard.html מעודכן - בלי שתצטרך לבקש.
 - לפני כל מסירת קובץ: `node -c` על הסקריפט המחולץ (Dashboard.html) ועל Code.gs, ובדיקת איזון תגיות HTML (regex פשוט סופר open/close).
 - אחרי כל שינוי משמעותי: לוודא עם המשתמשת שהיא **גם** פרסה מחדש (Deploy → New version) **וגם** רעננה (F5 אמיתי, לא רק מעבר טאב) - אחרת נראה כאילו "התיקון לא עבד" כשבפועל זה קוד ישן שרץ.
+
+## מסך פרלה (`?pearl=<קוד>`) - עבודה מול ה-API של NLPearl
+
+הדף השלישי (`PearlDashboard.html`) לא נוגע בגיליון בכלל - הוא חלון חי ל-NLPearl.
+נקודות שחשוב לזכור:
+
+- **אתר התיעוד `developers.nlpearl.ai` חסום מהסביבה הזו (403)**. הדרך שעבדה לגלות
+  את נקודות הקצה האמיתיות: `pip download nlpearl` (ה-SDK הרשמי ב-PyPI) וקריאת
+  `nlpearl/outbound.py` + `nlpearl/pearl.py`. שם מופיעים כל ה-URL-ים והפרמטרים.
+- **טבלת הסטטוסים** (`PEARL_STATUS_NAMES_`): 1 New · 10 NeedRetry · 20 InCallQueue ·
+  30 WrongCountryCode · 40 OnCall · 70 VoiceMailLeft · 100 Success · 110 NotSuccessful ·
+  130 Completed · **150 Unreachable** · 220 Blacklisted · 300 QueueAbandon · 500 Error.
+  "פרלה ניסתה שלוש פעמים והפסיקה" = **150**.
+- **החזרה לחיוג** = `PUT /v2/Outbound/{pearlId}/Lead/{leadId}` עם `{"status": 1}`.
+  לא מוחקים ולא מוסיפים מחדש - כדי לא לאבד את היסטוריית השיחות של הליד בפרלה.
+  אם פרלה תסרב לחזור אחורה מ-150, המסלול החלופי הוודאי הוא `DELETE Leads` +
+  `POST Lead` (ומאבד את ההיסטוריה).
+- **התגית (TAG) יושבת על השיחה, לא על הליד**. לכן היא נשלפת בנפרד דרך
+  `POST /v2/Pearl/{pearlId}/Calls/Bulk` עם `fields: ['Tags','Name','Summary','LeadId']`
+  ומוצמדת לפי `leadId` (`pearlCallMetaByLead_`). כישלון בשליפה הזו **לא** מפיל את
+  המסך - פשוט אין תגיות.
+- **שמות השדות בתשובות של פרלה לא יציבים בין גרסאות** (id/leadId/_id,
+  phoneNumber/phone/to). כל קריאה עוברת דרך `pearlFirst_(obj, [names])`. אם שדה
+  מופיע ריק במסך - להריץ `debugPearlLead()` ולראות את ה-JSON הגולמי.
+- **תקרות בטיחות**: 300 החזרות בלחיצה (מגבלת 6 דקות של Apps Script), 2000 לידים
+  ו-600 שיחות בטעינה. כולן מדווחות למשתמשת ולא נבלעות בשקט.

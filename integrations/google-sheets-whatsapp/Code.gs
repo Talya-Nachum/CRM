@@ -1340,6 +1340,17 @@ function handleWixWebhook_(ss, payload) {
  * לשיתוף.
  */
 function doGet(e) {
+  // ?pearl=<קוד> מגיש את "מסך פרלה" - חלון חי ל-NLPearl, בלי קשר לגיליון.
+  const pearlKey = (e && e.parameter && e.parameter.pearl) ? String(e.parameter.pearl) : '';
+  if (pearlKey) {
+    const pearlTemplate = HtmlService.createTemplateFromFile('PearlDashboard');
+    pearlTemplate.baseUrl = ScriptApp.getService().getUrl();
+    pearlTemplate.pearlKey = pearlKey;
+    return pearlTemplate.evaluate()
+      .setTitle('מסך פרלה')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // ?rep=<קוד אישי> מגיש לנציגה את הדף שלה בלבד. בלי הפרמטר - הדשבורד
   // הראשי, בדיוק כמו עד היום (הלינק הקיים של הלקוחה ממשיך לעבוד).
   const repKey = (e && e.parameter && e.parameter.rep) ? String(e.parameter.rep) : '';
@@ -3153,4 +3164,355 @@ function replyBreakdown_(rows) {
   }
 
   return entries;
+}
+
+/* ==========================================================================
+ * מסך פרלה - חלון חי ל-NLPearl (?pearl=<קוד>)
+ * --------------------------------------------------------------------------
+ * זהו דף **נפרד לגמרי** מהדשבורד הראשי: הוא לא קורא ולא כותב לגיליון,
+ * אלא מדבר ישירות מול ה-API של NLPearl ומציג את הסטטוסים והתגיות של
+ * פרלה עצמה (New / NeedRetry / Unreachable וכו') - בשונה מהסטטוסים
+ * העסקיים שלנו בגיליון. המטרה המרכזית: לזהות את מי שפרלה ניסתה עד
+ * שנגמרו לה הניסיונות ולא השיגה, ולהחזיר אותו לחיוג.
+ *
+ * ההחזרה לחיוג היא PUT /v2/Outbound/{pearlId}/Lead/{leadId} עם
+ * {"status": 1} - כלומר הליד חוזר להיות "חדש" והקמפיין מרים אותו שוב
+ * לתור. שום דבר לא נמחק בדרך.
+ * ========================================================================== */
+
+const PEARL_API_V2_ = 'https://api.nlpearl.ai/v2';
+const PEARL_VIEW_KEY_PROP_ = 'PEARL_VIEW_KEY';
+
+// טבלת "Lead Statuses" הרשמית של NLPearl, בעברית. אלה הסטטוסים של
+// פרלה עצמה - לא רשימת הסטטוסים של הלקוחה - ולכן הם מוצגים כאן כמו
+// שהם, בלי העיגול שנעשה בגיליון (matchCallStatus_).
+const PEARL_STATUS_NAMES_ = {
+  1: 'חדש',
+  10: 'ממתין לניסיון נוסף',
+  20: 'בתור לחיוג',
+  30: 'מספר שגוי',
+  40: 'בשיחה כרגע',
+  70: 'הושארה הודעה בתא קולי',
+  100: 'הסתיים בהצלחה',
+  110: 'הסתיים ללא הצלחה',
+  130: 'הסתיים',
+  150: 'לא הצליחה להשיג',
+  220: 'ברשימה השחורה',
+  300: 'ננטש בתור',
+  500: 'שגיאה'
+};
+
+// מה נחשב "לא ענו" ומסומן אוטומטית להחזרה לחיוג - לפי בחירת הלקוחה:
+// 150 = פרלה ניסתה עד הסוף ולא השיגה, 70 = הגיעה רק לתא קולי.
+const PEARL_RETRY_STATUSES_ = [150, 70];
+const PEARL_NEW_STATUS_ = 1;
+
+// תקרות בטיחות: Apps Script עוצר אחרי 6 דקות, וכל החזרה לחיוג היא
+// קריאת רשת נפרדת. עדיף להחזיר "הוחזרו 300, נשארו עוד" מאשר ליפול באמצע.
+const PEARL_MAX_RESET_ = 300;
+const PEARL_LEADS_PAGE_ = 200;
+const PEARL_LEADS_MAX_ = 2000;
+const PEARL_CALLS_PAGE_ = 200;
+const PEARL_CALLS_MAX_ = 600;
+const PEARL_CALLS_DAYS_BACK_ = 90;
+
+/** קריאה גנרית ל-API של פרלה. לעולם לא זורקת - מחזירה תמיד אובייקט. */
+function pearlFetch_(method, path, payload) {
+  const options = {
+    method: method,
+    headers: { Authorization: getNlpearlAuthHeader_() },
+    muteHttpExceptions: true
+  };
+  if (payload) {
+    options.contentType = 'application/json';
+    options.payload = JSON.stringify(payload);
+  }
+
+  let response;
+  try {
+    response = UrlFetchApp.fetch(PEARL_API_V2_ + path, options);
+  } catch (err) {
+    return { ok: false, code: 0, data: null, text: String(err) };
+  }
+
+  const code = response.getResponseCode();
+  const text = response.getContentText();
+  let data = null;
+  try { data = JSON.parse(text); } catch (err) { data = null; }
+  return { ok: code < 300, code: code, data: data, text: text };
+}
+
+/**
+ * הקוד שמופיע בכתובת של מסך פרלה. נוצר פעם אחת ונשמר ב-Script
+ * Properties - בדיוק כמו הקוד האישי של נציגה, כדי שמי שאין לו את
+ * הלינק לא יוכל להחזיר לידים לחיוג.
+ */
+function pearlViewKey_() {
+  const props = PropertiesService.getScriptProperties();
+  let key = props.getProperty(PEARL_VIEW_KEY_PROP_);
+  if (!key) {
+    key = randomRepKey_() + randomRepKey_();
+    props.setProperty(PEARL_VIEW_KEY_PROP_, key);
+  }
+  return key;
+}
+
+/**
+ * מדפיסה ללוג את הלינק המלא למסך פרלה - זה מה שנועצים בדפדפן.
+ * להרצה ידנית מהעורך (מופיעה ברשימת הפונקציות כי אין קו תחתון בסוף).
+ */
+function getPearlViewLink() {
+  const link = ScriptApp.getService().getUrl() + '?pearl=' + pearlViewKey_();
+  Logger.log('מסך פרלה: ' + link);
+  return link;
+}
+
+function assertPearlKey_(key) {
+  if (String(key || '').trim() !== pearlViewKey_()) {
+    throw new Error('אין הרשאה למסך פרלה. יש להיכנס דרך הלינק המלא.');
+  }
+}
+
+/** שם הסטטוס בעברית, גם לקוד שלא מוכר לנו (כדי שלא ייראה ריק). */
+function pearlStatusName_(status) {
+  const code = Number(status);
+  return PEARL_STATUS_NAMES_[code] || ('סטטוס ' + (isNaN(code) ? '?' : code));
+}
+
+/**
+ * שמות השדות שפרלה מחזירה עשויים להשתנות בין גרסאות ה-API, ולכן כל
+ * שדה נקרא מכמה מועמדים אפשריים. אם משהו יופיע ריק - debugPearlLead()
+ * מדפיס את האובייקט הגולמי ואפשר להוסיף כאן את השם החסר.
+ */
+function pearlFirst_(obj, names) {
+  for (let i = 0; i < names.length; i++) {
+    const value = obj[names[i]];
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return '';
+}
+
+/** מוציא מערך תוצאות מתשובה של פרלה, בלי להניח מבנה אחד קבוע. */
+function pearlResults_(data) {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  const candidates = ['results', 'items', 'data', 'leads', 'calls'];
+  for (let i = 0; i < candidates.length; i++) {
+    if (Array.isArray(data[candidates[i]])) return data[candidates[i]];
+  }
+  return [];
+}
+
+function pearlNormalizeLead_(lead) {
+  const callData = lead.callData || lead.CallData || {};
+  const name = pearlFirst_(lead, ['name', 'fullName', 'leadName']) ||
+    pearlFirst_(callData, ['name', 'fullName', 'firstName', 'שם']);
+  const status = Number(pearlFirst_(lead, ['status', 'leadStatus', 'statusCode']) || 0);
+  return {
+    id: String(pearlFirst_(lead, ['id', 'leadId', '_id'])),
+    phone: String(pearlFirst_(lead, ['phoneNumber', 'phone', 'to'])),
+    externalId: String(pearlFirst_(lead, ['externalId', 'external_id'])),
+    name: String(name || ''),
+    status: status,
+    statusName: pearlStatusName_(status),
+    attempts: Number(pearlFirst_(lead, ['callCount', 'attempts', 'retryCount', 'numberOfCalls', 'callsCount']) || 0),
+    lastCallAt: pearlIsoToMs_(pearlFirst_(lead, ['lastCallDate', 'lastCallTime', 'updatedAt', 'modifiedAt'])),
+    createdAt: pearlIsoToMs_(pearlFirst_(lead, ['createdAt', 'creationDate', 'createdOn'])),
+    tags: [],
+    summary: ''
+  };
+}
+
+/** תאריך ISO של פרלה -> מילישניות. מחזיר 0 אם אין/לא ניתן לפענוח. */
+function pearlIsoToMs_(value) {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  const parsed = new Date(String(value));
+  const ms = parsed.getTime();
+  return isNaN(ms) ? 0 : ms;
+}
+
+/** רשימת הקמפיינים (Pearls) מהחשבון עצמו - לא רשימה קשיחה בקוד. */
+function getPearlCampaigns(key) {
+  assertPearlKey_(key);
+  const res = pearlFetch_('get', '/Pearl');
+  if (!res.ok) throw new Error('פרלה החזירה שגיאה (' + res.code + '): ' + res.text);
+
+  return pearlResults_(res.data).map(function (p) {
+    return {
+      id: String(pearlFirst_(p, ['id', 'pearlId', '_id'])),
+      name: String(pearlFirst_(p, ['name', 'title']) || 'ללא שם'),
+      active: p.isActive !== false
+    };
+  }).filter(function (p) { return p.id; });
+}
+
+/**
+ * כל הלידים של קמפיין אחד, עם התגית והסיכום של השיחה האחרונה שלהם.
+ * התגית יושבת על ה**שיחה** ולא על הליד, ולכן היא נשלפת בנפרד
+ * (Calls/Bulk עם fields) ומוצמדת לפי leadId.
+ */
+function getPearlBoard(key, pearlId) {
+  assertPearlKey_(key);
+  const id = String(pearlId || '').trim();
+  if (!id) throw new Error('לא נבחר קמפיין.');
+
+  const leads = [];
+  let skip = 0;
+  while (leads.length < PEARL_LEADS_MAX_) {
+    const res = pearlFetch_('post', '/Outbound/' + encodeURIComponent(id) + '/Leads', {
+      skip: skip, limit: PEARL_LEADS_PAGE_, isAscending: false
+    });
+    if (!res.ok) throw new Error('פרלה החזירה שגיאה (' + res.code + '): ' + res.text);
+
+    const page = pearlResults_(res.data);
+    page.forEach(function (lead) { leads.push(pearlNormalizeLead_(lead)); });
+    if (page.length < PEARL_LEADS_PAGE_) break;
+    skip += PEARL_LEADS_PAGE_;
+  }
+
+  const meta = pearlCallMetaByLead_(id);
+  leads.forEach(function (lead) {
+    const info = meta[lead.id];
+    if (!info) return;
+    lead.tags = info.tags;
+    lead.summary = info.summary;
+    if (!lead.lastCallAt && info.startedAt) lead.lastCallAt = info.startedAt;
+    if (!lead.name && info.name) lead.name = info.name;
+  });
+
+  const counts = {};
+  const tagCounts = {};
+  leads.forEach(function (lead) {
+    counts[lead.status] = (counts[lead.status] || 0) + 1;
+    lead.tags.forEach(function (tag) { tagCounts[tag] = (tagCounts[tag] || 0) + 1; });
+  });
+
+  return {
+    pearlId: id,
+    leads: leads,
+    counts: counts,
+    statusNames: PEARL_STATUS_NAMES_,
+    retryStatuses: PEARL_RETRY_STATUSES_,
+    tags: Object.keys(tagCounts).sort(function (a, b) { return tagCounts[b] - tagCounts[a]; }),
+    tagCounts: tagCounts,
+    maxReset: PEARL_MAX_RESET_,
+    truncated: leads.length >= PEARL_LEADS_MAX_,
+    updatedAt: new Date().getTime()
+  };
+}
+
+/**
+ * מיפוי leadId -> { tags, summary, name, startedAt } מתוך השיחות של
+ * 90 הימים האחרונים. אם הקריאה נכשלת פשוט אין תגיות - זה לא מפיל את
+ * המסך, כי הסטטוסים (העיקר) מגיעים מהלידים עצמם.
+ */
+function pearlCallMetaByLead_(pearlId) {
+  const map = {};
+  const to = new Date();
+  const from = new Date(to.getTime() - PEARL_CALLS_DAYS_BACK_ * 24 * 60 * 60 * 1000);
+
+  let skip = 0;
+  while (skip < PEARL_CALLS_MAX_) {
+    const res = pearlFetch_('post', '/Pearl/' + encodeURIComponent(pearlId) + '/Calls/Bulk', {
+      skip: skip,
+      limit: PEARL_CALLS_PAGE_,
+      isAscending: false,
+      fromDate: pearlIsoDate_(from),
+      toDate: pearlIsoDate_(to),
+      fields: ['Tags', 'Name', 'Summary', 'LeadId']
+    });
+    if (!res.ok) {
+      Logger.log('שליפת תגיות נכשלה (' + res.code + '): ' + res.text);
+      return map;
+    }
+
+    const page = pearlResults_(res.data);
+    page.forEach(function (call) {
+      const leadId = String(pearlFirst_(call, ['leadId', 'lead_id', 'leadID']));
+      if (!leadId || map[leadId]) return;   // השיחה הראשונה = האחרונה בזמן
+      const tags = pearlFirst_(call, ['tags', 'Tags']);
+      map[leadId] = {
+        tags: Array.isArray(tags) ? tags.map(String) : (tags ? [String(tags)] : []),
+        summary: String(pearlFirst_(call, ['summary', 'Summary']) || ''),
+        name: String(pearlFirst_(call, ['name', 'Name']) || ''),
+        startedAt: pearlIsoToMs_(pearlFirst_(call, ['startTime', 'startedAt', 'date', 'createdAt']))
+      };
+    });
+    if (page.length < PEARL_CALLS_PAGE_) break;
+    skip += PEARL_CALLS_PAGE_;
+  }
+  return map;
+}
+
+/** התאריך בפורמט שפרלה דורשת: 2026-08-03T00:00:00.000Z */
+function pearlIsoDate_(date) {
+  return Utilities.formatDate(date, 'UTC', "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+}
+
+/**
+ * מחזירה לידים לחיוג: מעדכנת את הסטטוס שלהם בפרלה חזרה ל"חדש" (1).
+ * לא מוחקת כלום, לא נוגעת בגיליון. מחזירה דיווח מדויק - כמה הצליחו,
+ * ומי נכשל ולמה - כדי שלא ייראה כאילו הכל עבר כשחלק לא.
+ */
+function resetPearlLeads(key, pearlId, leadIds) {
+  assertPearlKey_(key);
+  const id = String(pearlId || '').trim();
+  if (!id) throw new Error('לא נבחר קמפיין.');
+  if (!leadIds || !leadIds.length) throw new Error('לא נבחרו לידים.');
+
+  const wanted = leadIds.map(String).filter(function (v) { return v; });
+  const batch = wanted.slice(0, PEARL_MAX_RESET_);
+  const done = [];
+  const failed = [];
+
+  batch.forEach(function (leadId) {
+    const res = pearlFetch_('put', '/Outbound/' + encodeURIComponent(id) + '/Lead/' + encodeURIComponent(leadId), {
+      status: PEARL_NEW_STATUS_
+    });
+    if (res.ok) done.push(leadId);
+    else failed.push({ id: leadId, error: '(' + res.code + ') ' + String(res.text || '').slice(0, 160) });
+  });
+
+  Logger.log('החזרה לחיוג בקמפיין ' + id + ': הצליחו ' + done.length + ', נכשלו ' + failed.length);
+  return {
+    done: done,
+    failed: failed,
+    remaining: wanted.length - batch.length,
+    maxReset: PEARL_MAX_RESET_
+  };
+}
+
+/**
+ * כלי אבחון: מדפיס ללוג את האובייקט הגולמי של הליד הראשון בקמפיין -
+ * כדי לראות בדיוק אילו שמות שדות פרלה מחזירה בפועל. להריץ אם משהו
+ * במסך מופיע ריק (שם/מספר ניסיונות/תאריך).
+ */
+function debugPearlLead() {
+  const pearlId = DEFAULT_OUTBOUND_ID;
+  const res = pearlFetch_('post', '/Outbound/' + pearlId + '/Leads', {
+    skip: 0, limit: 3, isAscending: false
+  });
+  Logger.log('קוד תשובה: ' + res.code);
+  Logger.log(res.text.slice(0, 4000));
+}
+
+/**
+ * כל הלינקים שמוצגים בחלון "לינקים" בדשבורד הראשי: מסך פרלה בשורה
+ * הראשונה, ואחריו הלינק האישי של כל נציגה. מרוכז בפונקציה אחת כדי
+ * שהלקוחה לא תצטרך להריץ שום דבר בעורך כדי למצוא כתובת.
+ */
+function getDashboardLinks() {
+  const pearlRow = {
+    name: '🤖 מסך פרלה',
+    email: '',
+    key: '',
+    link: ScriptApp.getService().getUrl() + '?pearl=' + pearlViewKey_(),
+    active: true,
+    kind: 'pearl'
+  };
+  return [pearlRow].concat(getRepLinks().map(function (rep) {
+    rep.kind = 'rep';
+    return rep;
+  }));
 }
