@@ -538,7 +538,6 @@ function sendMessages() {
 function sendMessagesInSheet_(sheet, mode) {
   const runMode = mode || 'manual';
   const now = new Date();
-  const ss = sheet.getParent();
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
@@ -598,21 +597,9 @@ function sendMessagesInSheet_(sheet, mode) {
       muteHttpExceptions: true
     });
 
-    const rawResponseText = response.getContentText();
-    const result = JSON.parse(rawResponseText);
+    const result = JSON.parse(response.getContentText());
     const newStatus = result.StatusId === 1 ? SENT_STATUS : 'שגיאה: ' + result.StatusDescription;
     sheet.getRange(rowIndex, statusCol + 1).setValue(newStatus);
-    storeOutboundMessageId_(rawResponseText, result, sheet.getName());
-    // DEBUG זמני: לוודא את שם השדה האמיתי שאינפוריו מחזירה למזהה ההודעה,
-    // כדי לאשר/לתקן את הניחושים ב-storeOutboundMessageId_. אפשר להסיר
-    // אחרי שמאושר שהמיפוי עובד (התגובה חוזרת נכון גם כשאותו טלפון פעיל
-    // בכמה קמפיינים בו-זמנית).
-    if (sent === 0) {
-      try {
-        (ss.getSheetByName('WebhookLog') || ss.insertSheet('WebhookLog'))
-          .appendRow([new Date(), 'DEBUG-OUTBOUND (' + sheet.getName() + '): ' + rawResponseText]);
-      } catch (logErr) { /* לא מפיל את השליחה */ }
-    }
     sent++;
     Logger.log('טאב "' + sheet.getName() + '", ' + name + ' (' + phone + '): ' + newStatus);
   }
@@ -897,50 +884,6 @@ function extractButtonPayload_(entry) {
   }
 }
 
-/**
- * מזהה ההודעה היוצאת שהתגובה הזו "עונה" לה - וואטסאפ עצמה מצרפת את זה
- * (ContextMessageId בתוך AdditionalInfo) כשהלקוח לוחץ על כפתור תשובה
- * מהיר בתבנית. זו הדרך הוודאית ביותר לדעת מאיזה קמפיין תגובה הגיעה,
- * גם אם אותו טלפון פעיל במקביל בכמה קמפיינים - כי היא לא תלויה כלל
- * במספר הטלפון, רק בהודעה הספציפית ששלחנו (ר' storeOutboundMessageId_).
- * לא קיים בהודעות טקסט חופשי שלא נשלחו כתגובה-לכפתור - במקרה הזה חוזרת
- * מחרוזת ריקה, וניתוב חוזר לשכבות הבאות.
- */
-function extractContextMessageId_(entry) {
-  try {
-    const info = JSON.parse(entry.AdditionalInfo || '{}');
-    return info.ContextMessageId || '';
-  } catch (e) {
-    return '';
-  }
-}
-
-/**
- * שומרת את מזהה ההודעה היוצאת (אם אינפוריו מחזירה כזה בתגובת השליחה)
- * מול שם הטאב ששלח אותה, כדי שתגובה עתידית עם ContextMessageId תדע
- * בוודאות מוחלטת לאיזה קמפיין היא שייכת. שם השדה המדויק לא מתועד -
- * מנסה כמה מועמדים סבירים; אם אף אחד לא קיים, פשוט לא נשמר מתאם (התגובה
- * עדיין תנותב נכון בשכבה הבאה - trackedCampaignSheets_ - רק לא בוודאות
- * מוחלטת אם אותו טלפון פעיל במקביל בכמה קמפיינים). CacheService ולא
- * Script Properties בכוונה - נמחק לבד אחרי 6 שעות, בלי לצבור מפתחות
- * שלא מתנקים לעולם. לעולם לא זורקת - כישלון כאן לא מבטל את השליחה עצמה.
- */
-function storeOutboundMessageId_(rawResponseText, result, sheetName) {
-  try {
-    const candidates = [
-      result && result.MessageId,
-      result && result.Data && result.Data.MessageId,
-      result && result.Data && result.Data[0] && result.Data[0].MessageId,
-      result && result.Data && result.Data.Results && result.Data.Results[0] && result.Data.Results[0].MessageId,
-      result && result.Data && result.Data.Results && result.Data.Results[0] && result.Data.Results[0].Id
-    ];
-    const id = candidates.filter(function (v) { return !!v; })[0];
-    if (id) CacheService.getScriptCache().put('OUT_MSG_' + id, sheetName, 21600);
-  } catch (err) {
-    Logger.log('שמירת מזהה הודעה יוצאת נכשלה: ' + err.message);
-  }
-}
-
 function handleInforuWebhook_(ss, payload) {
   const entry = payload.Data && payload.Data[0];
   if (!entry) return;
@@ -948,38 +891,22 @@ function handleInforuWebhook_(ss, payload) {
   const incomingPhone = phoneSuffix_(entry.Value);
   const incomingText = entry.Message;
   const buttonPayload = extractButtonPayload_(entry);
-  const contextMessageId = extractContextMessageId_(entry);
   if (!incomingPhone) return;
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    // שלוש שכבות, מהוודאית ביותר לפחות ודאית - כלל הברזל הוא שתשובה
-    // חוזרת **רק** לקמפיין שממנו יצאה, גם כשאותו ליד פעיל במקביל בכמה
-    // קמפיינים (וואטסאפ + פרלה יחד).
-    let sheets = [];
+    // כלל הברזל: תשובה חוזרת **רק** לקמפיין שממנו יצאה. אינפוריו לא
+    // מחזירה מזהה הודעה בתגובת השליחה (נבדק בפועל) - אז אין דרך לזהות
+    // "זו תגובה בדיוק להודעה הזו" ברמת ההודעה הבודדת, רק ברמת "לאיזה
+    // קמפיין שלחנו בפועל למספר הזה" (recordLastContact_), מהחדש לישן.
+    // אם ליד פעיל במקביל בכמה קמפיינים - התגובה תשויך לקמפיין האחרון
+    // שנשלח אליו מהמערכת בפועל.
+    const sheets = trackedCampaignSheets_(ss, incomingPhone);
 
-    // שכבה 1 - ודאות מוחלטת שלא תלויה בטלפון בכלל: וואטסאפ עצמה מקשרת
-    // תגובת-כפתור להודעה המקורית (ContextMessageId), ואנחנו שמרנו מאיזה
-    // קמפיין היא נשלחה (storeOutboundMessageId_). אם יש התאמה - אין
-    // שום ניחוש, גם אם הטלפון קיים בעשרות טאבים.
-    if (contextMessageId) {
-      const matchedSheetName = CacheService.getScriptCache().get('OUT_MSG_' + contextMessageId);
-      if (matchedSheetName) {
-        const matchedSheet = ss.getSheetByName(matchedSheetName);
-        if (matchedSheet && isCampaignSheet_(matchedSheet)) sheets = [matchedSheet];
-      }
-    }
-
-    // שכבה 2 - כל הקמפיינים ששלחנו אליהם בפועל הודעה למספר הזה
-    // (recordLastContact_), מהחדש לישן. עדיין וודאי שאנחנו שלחנו משם.
-    if (!sheets.length) sheets = trackedCampaignSheets_(ss, incomingPhone);
-
-    // אין שכבה שלישית בכוונה: הודעה שיצאה בעקיפין (לא דרך המערכת, למשל
-    // הקלדה ידנית בוואטסאפ) - אין שום דרך לדעת בוודאות לאיזה קמפיין
-    // שייכת התגובה שלה, ולכן היא לא מתעדכנת בשום מקום. "לא התעדכן"
-    // הוא בעצמו סימן שהמערכת לא זיהתה שליחה משלה - זו בקשה מפורשת של
-    // הלקוחה, בניגוד לגרסה קודמת שניחשה קמפיין ולעיתים טעתה.
+    // אם אין שום זיכרון (הודעה שיצאה בעקיפין, לא דרך המערכת) - שום
+    // עדכון בגיליון, רק רישום ביומן. "לא התעדכן" הוא בעצמו הסימן
+    // שהמערכת לא זיהתה שליחה משלה - בקשה מפורשת של הלקוחה.
     if (!sheets.length) {
       logSheetAppendOrphan_(ss, incomingPhone, 'וואטסאפ');
       return;
