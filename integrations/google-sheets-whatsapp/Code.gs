@@ -108,7 +108,7 @@ const REP_CELEBRATE_STATUS_ = 'תואמה פגישה';
 // עמודות טאב "הקצאות" - הסדר קבוע, והקריאה תמיד לפי שם הכותרת.
 const ASSIGN_HEADERS_ = [
   'מזהה הקצאה', 'תאריך הקצאה', 'נציגה', 'קמפיין', 'טלפון נייד',
-  'שם חברה', 'איש קשר', 'תפקיד', 'אימייל', 'תיעוד בעת ההעברה',
+  'שם חברה', 'איש קשר', 'תפקיד', 'אימייל', 'ערוץ', 'תיעוד בעת ההעברה',
   'טופל', 'סטטוס שסומן', 'הערת נציגה', 'תאריך טיפול'
 ];
 
@@ -2104,6 +2104,18 @@ function assignLead(sheetName, phone, repName) {
     get_(CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY)
   ].filter(function (s) { return !!s.trim(); }).join('\n');
 
+  // דרך איזה ערוץ פנינו לליד - כדי שהנציגה תדע אם הוא כבר דיבר עם
+  // פרלה או רק קיבל וואטסאפ, לפני שהיא מרימה טלפון.
+  const channels = [];
+  if (normalizeLabel_(get_(STATUS_HEADER, STATUS_HEADER_LEGACY)) === normalizeLabel_(SENT_STATUS) ||
+      get_(REPLY_HEADER, REPLY_HEADER_LEGACY) || get_(FIRST_REPLY_HEADER)) {
+    channels.push('וואטסאפ');
+  }
+  if (get_(CALL_LEAD_ID_HEADER) || get_(CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY) ||
+      get_(CALL_STATUS_HEADER)) {
+    channels.push('פרלה');
+  }
+
   const assignSheet = assignSheet_();
   const id = 'A' + Date.now();
   assignSheet.appendRow([
@@ -2116,6 +2128,7 @@ function assignLead(sheetName, phone, repName) {
     get_(NAME_HEADER),
     get_(TITLE_HEADER),
     get_(EMAIL_HEADER),
+    channels.join(' + '),
     snapshot,
     'לא', '', '', ''
   ]);
@@ -2189,7 +2202,8 @@ function getRepData(repKey) {
     rep: assignCol_(H, 'נציגה'), camp: assignCol_(H, 'קמפיין'),
     phone: assignCol_(H, 'טלפון נייד'), company: assignCol_(H, 'שם חברה'),
     name: assignCol_(H, 'איש קשר'), title: assignCol_(H, 'תפקיד'),
-    email: assignCol_(H, 'אימייל'), snapshot: assignCol_(H, 'תיעוד בעת ההעברה'),
+    email: assignCol_(H, 'אימייל'), channel: assignCol_(H, 'ערוץ'),
+    snapshot: assignCol_(H, 'תיעוד בעת ההעברה'),
     done: assignCol_(H, 'טופל'), status: assignCol_(H, 'סטטוס שסומן'),
     note: assignCol_(H, 'הערת נציגה'), doneDate: assignCol_(H, 'תאריך טיפול')
   };
@@ -2219,6 +2233,9 @@ function getRepData(repKey) {
       name: String(row[idx.name] || ''),
       title: String(row[idx.title] || ''),
       email: String(row[idx.email] || ''),
+      // idx.channel === -1 בטאב "הקצאות" שנוצר לפני שהעמודה נוספה -
+      // מוחזר ריק ופשוט לא מוצג אייקון, בלי לשבור כלום.
+      channel: idx.channel !== -1 ? String(row[idx.channel] || '') : '',
       history: String(row[idx.snapshot] || ''),
       status: String(row[idx.status] || ''),
       note: String(row[idx.note] || ''),

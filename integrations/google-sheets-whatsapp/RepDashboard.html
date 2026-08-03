@@ -90,6 +90,8 @@
         padding:1px 8px;font-size:11.5px;font-weight:800;max-width:100%;overflow:hidden;
         text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
   .when{font-size:11.5px;color:var(--muted);margin-top:5px}
+  .channels{display:inline-flex;gap:3px;margin-inline-start:5px;vertical-align:middle}
+  .ch{font-size:12.5px;line-height:1;cursor:help}
   .hist{margin-top:8px;padding:7px 9px;border-radius:9px;background:#F8FAFC;border:1px solid var(--border);
         font-size:12.5px;line-height:1.5;color:#475467;max-height:52px;overflow:hidden}
   .hist.empty{color:#98A2B3;font-style:italic}
@@ -295,6 +297,20 @@
     return d || '';
   }
 
+  /** אייקון הערוץ שדרכו כבר פנינו לליד - כדי שהנציגה תדע אם הוא כבר
+   *  דיבר עם פרלה או רק קיבל וואטסאפ, לפני שהיא מרימה טלפון. */
+  function channelIcons_(channel) {
+    const c = String(channel || '');
+    const icons = [];
+    if (c.indexOf('וואטסאפ') !== -1) {
+      icons.push('<span class="ch" title="קיבל הודעת וואטסאפ">💬</span>');
+    }
+    if (c.indexOf('פרלה') !== -1) {
+      icons.push('<span class="ch" title="שוחח עם פרלה">🤖</span>');
+    }
+    return icons.length ? '<span class="channels">' + icons.join('') + '</span>' : '';
+  }
+
   function isFresh(lead) {
     if (!lead.assignedAtMs) return false;
     return (Date.now() - lead.assignedAtMs) < NEW_LEAD_MINUTES * 60 * 1000;
@@ -453,6 +469,7 @@
         '<div class="co">' + esc(l.company) + '</div>' +
         '<div class="nm">' + esc(l.name) + '</div>' +
         (l.campaign ? '<span class="camp">' + esc(l.campaign) + '</span>' : '') +
+        channelIcons_(l.channel) +
         '<div class="when">הועבר אלייך ב-' + esc(l.assignedAt) + '</div>' +
         '<div class="hist' + (lastLine ? '' : ' empty') + '">' +
           (lastLine ? esc(lastLine) : 'אין תיעוד קודם') + '</div>' +

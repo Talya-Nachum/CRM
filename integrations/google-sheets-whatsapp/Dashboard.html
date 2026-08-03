@@ -1174,9 +1174,11 @@
   .channels {
     display: inline-flex;
     gap: 2px;
-    margin-inline-end: 5px;
     vertical-align: middle;
   }
+  .tab { display: flex; align-items: center; gap: 6px; }
+  .tab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab-ch { flex-shrink: 0; line-height: 1; }
   .ch {
     font-size: 12px;
     line-height: 1;
@@ -1686,7 +1688,11 @@
     names.forEach(function (name) {
       const btn = document.createElement('button');
       btn.className = 'tab' + (name === startTab ? ' active' : '');
-      btn.textContent = name;
+      // האייקון נוסף רק אחרי שהקמפיין נטען (אז יודעים דרך איזה ערוץ
+      // פנינו בו) - ר' renderTabChannel_.
+      btn.innerHTML = '<span class="tab-name">' + escapeHtml_(name) + '</span>' +
+        '<span class="tab-ch" data-tab="' + escapeHtml_(name) + '"></span>';
+      btn.setAttribute('data-tab', name);
       btn.addEventListener('click', function () {
         document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
         btn.classList.add('active');
@@ -1695,6 +1701,12 @@
       tabsEl.appendChild(btn);
     });
     loadCampaign(startTab);
+  }
+
+  /** מצייר את אייקון הערוץ ליד שם הקמפיין בסרגל הצד - פעם אחת לקמפיין. */
+  function renderTabChannel_(name, rows) {
+    const el = document.querySelector('.tab-ch[data-tab="' + (name || '').replace(/"/g, '\\"') + '"]');
+    if (el) el.innerHTML = channelIconsHtml_(campaignChannel_(rows));
   }
 
   function loadCampaign(name, silent) {
@@ -1714,20 +1726,24 @@
   // טקסט של כפתור וואטסאפ חדש שנרשם אוטומטית, ייכנס לקטגוריה לבד בלי
   // שינוי קוד.
 
-  /** אייקוני הערוץ שדרכו פנינו לליד. שורה בלי אף ערוץ מקבלת מציין
-   *  ניטרלי, כדי שהעמודה תישאר מיושרת ולא "תקפוץ" בין שורות. */
-  function channelIcons_(r) {
+  /**
+   * הערוץ של **הקמפיין כולו** (לא של כל שורה): קמפיין הוא בדרך כלל או
+   * וואטסאפ או פרלה, ואייקון בכל שורה רק הצליף בעין. מוצג פעם אחת ליד
+   * שם הקמפיין בסרגל הצד. אם בפועל יש מכל ערוץ - מוצגים שניהם.
+   */
+  function campaignChannel_(rows) {
+    const all = rows || [];
+    return {
+      whatsapp: all.some(function (r) { return !!r.viaWhatsapp; }),
+      pearl: all.some(function (r) { return !!r.viaPearl; })
+    };
+  }
+
+  function channelIconsHtml_(ch) {
     const icons = [];
-    if (r.viaWhatsapp) {
-      icons.push('<span class="ch ch-wa" data-tip="נשלחה הודעת וואטסאפ">💬</span>');
-    }
-    if (r.viaPearl) {
-      icons.push('<span class="ch ch-pearl" data-tip="בוצעה שיחת פרלה">🤖</span>');
-    }
-    if (!icons.length) {
-      icons.push('<span class="ch ch-none" data-tip="טרם פנינו לליד הזה">·</span>');
-    }
-    return '<span class="channels">' + icons.join('') + '</span>';
+    if (ch.whatsapp) icons.push('<span class="ch ch-wa" data-tip="קמפיין וואטסאפ">💬</span>');
+    if (ch.pearl) icons.push('<span class="ch ch-pearl" data-tip="קמפיין שיחות פרלה">🤖</span>');
+    return icons.length ? '<span class="channels">' + icons.join('') + '</span>' : '';
   }
 
   function statusHas_(status, word) {
@@ -1962,6 +1978,7 @@
     // המונים בסרגל הצד נספרים תמיד על **כל** שורות הקמפיין, לא על מה
     // שמסונן במסך - אחרת המספר היה משתנה לפי החיפוש ומאבד משמעות.
     renderFocusPanels_(data.rows);
+    renderTabChannel_(currentTabName, data.rows);
 
     // ממיינים כך שתשובות חדשות תמיד למעלה, אחריהן מי שכבר ענה, ולבסוף
     // מי שעדיין לא ענה בתחתית - כדי שהעין תלך ישר למה שדורש תשומת לב.
@@ -2061,11 +2078,7 @@
       cell: function (r) { return '<td class="company-cell" data-tip="' + escapeHtml_(r.company || '') + '">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
     { key: 'name', label: 'איש קשר', always: true, sortable: true,
       filterValue: function (r) { return r.name || ''; },
-      // אייקון הערוץ לפני השם: 💬 וואטסאפ, 🤖 פרלה, או שניהם - כדי לדעת
-      // במבט אחד דרך מה פנינו לליד הזה בפועל.
-      cell: function (r) {
-        return '<td class="name-cell">' + channelIcons_(r) + escapeHtml_(r.name) + '</td>';
-      } },
+      cell: function (r) { return '<td class="name-cell">' + escapeHtml_(r.name) + '</td>'; } },
     { key: 'title', label: 'תפקיד', always: true,
       filterValue: function (r) { return r.title || ''; },
       cell: function (r) { return '<td class="title-cell" data-tip="' + escapeHtml_(r.title || '') + '">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>'; } },
