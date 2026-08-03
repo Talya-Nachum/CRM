@@ -261,7 +261,7 @@
 (function () {
   'use strict';
 
-  const REP_KEY = '<?!= repKey ?>';
+  const REP_KEY = '<?!= (typeof repKey !== "undefined" ? repKey : "") ?>';
   const NEW_LEAD_MINUTES = 120;      // ליד שהוקצה בשעתיים האחרונות מסומן "חדש"
   const REFRESH_MS = 60000;          // בדיקה אחת לדקה אם הגיע ליד חדש
 
