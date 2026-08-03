@@ -1168,11 +1168,17 @@
   .rep-assign-row .txt { min-width: 0; flex: 1; }
   .rep-assign-row .txt b { font-size: 14px; }
   .rep-assign-row .txt .sub { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
-  .rep-assign-row.done .txt { opacity: 0.7; }
+  .rep-assign-row.done .txt { opacity: 0.85; }
   .rep-assign-row button {
     flex-shrink: 0; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--bad);
     background: var(--bad-soft); color: var(--bad); font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
   }
+  .rep-assign-mark {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 13px; font-weight: 900;
+  }
+  .rep-assign-mark.good { background: var(--good-soft); color: var(--good); }
+  .rep-assign-mark.pending { background: var(--bad-soft); color: var(--bad); }
 
   .rep-picker {
     display: grid;
@@ -3629,52 +3635,57 @@
 
     function close() { modal.classList.remove('show'); openRepName = null; }
 
+    // שורה אחת לכל הקצאה - פתוחה או טופלה - עם סימון ✓/✗ ברור ("טופל?")
+    // וכפתור מחיקה שעובד על שתיהן (לפי מזהה ההקצאה הייחודי, לא לפי
+    // טלפון - כך שמחיקה תמיד פוגעת בדיוק ברשומה הנכונה).
+    function rowHtml_(it, isDone) {
+      const mark = isDone
+        ? '<span class="rep-assign-mark good" title="טופל">✓</span>'
+        : '<span class="rep-assign-mark pending" title="טרם טופל">✗</span>';
+      const subParts = [it.campaign];
+      subParts.push(isDone ? ('סטטוס: ' + (it.status || '—')) : ('הועבר ' + it.assignedAt));
+      return '<div class="rep-assign-row' + (isDone ? ' done' : '') + '">' +
+        mark +
+        '<div class="txt"><b>' + escapeHtml_(it.name || it.phone) + '</b>' +
+        (it.company ? ' · ' + escapeHtml_(it.company) : '') +
+        '<div class="sub">' + escapeHtml_(subParts.filter(Boolean).join(' · ')) + '</div></div>' +
+        '<button type="button" data-id="' + escapeHtml_(it.id) + '">✕ מחיקה</button>' +
+        '</div>';
+    }
+
     function renderList_(data) {
       const parts = [];
       if (data.open.length) {
         parts.push('<div class="rep-assign-section">פתוחים (' + data.open.length + ')</div>');
-        parts.push(data.open.map(function (it) {
-          return '<div class="rep-assign-row">' +
-            '<div class="txt"><b>' + escapeHtml_(it.name || it.phone) + '</b>' +
-            (it.company ? ' · ' + escapeHtml_(it.company) : '') +
-            '<div class="sub">' + escapeHtml_(it.campaign) + ' · הועבר ' + escapeHtml_(it.assignedAt) + '</div></div>' +
-            '<button type="button" data-campaign="' + escapeHtml_(it.campaign) + '" data-phone="' + escapeHtml_(it.phone) + '">✕ ביטול</button>' +
-            '</div>';
-        }).join(''));
-      } else {
-        parts.push('<div class="focus-empty">אין כרגע לידים פתוחים אצלה.</div>');
+        parts.push(data.open.map(function (it) { return rowHtml_(it, false); }).join(''));
       }
       if (data.done.length) {
         parts.push('<div class="rep-assign-section">טופלו (' + data.done.length + ')</div>');
-        parts.push(data.done.map(function (it) {
-          return '<div class="rep-assign-row done">' +
-            '<div class="txt"><b>' + escapeHtml_(it.name || it.phone) + '</b>' +
-            (it.company ? ' · ' + escapeHtml_(it.company) : '') +
-            '<div class="sub">' + escapeHtml_(it.campaign) + (it.status ? ' · ' + escapeHtml_(it.status) : '') + '</div></div>' +
-            '</div>';
-        }).join(''));
+        parts.push(data.done.map(function (it) { return rowHtml_(it, true); }).join(''));
+      }
+      if (!data.open.length && !data.done.length) {
+        parts.push('<div class="focus-empty">אין לנציגה הזו שום הקצאות.</div>');
       }
       listEl.innerHTML = parts.join('');
 
-      listEl.querySelectorAll('button[data-phone]').forEach(function (b) {
+      listEl.querySelectorAll('button[data-id]').forEach(function (b) {
         b.addEventListener('click', function () {
-          const campaign = b.getAttribute('data-campaign');
-          const phone = b.getAttribute('data-phone');
-          if (!confirm('לבטל את ההקצאה הזו? הליד ייעלם מהדשבורד של הנציגה ויחזור להיות פנוי.')) return;
+          const id = b.getAttribute('data-id');
+          if (!confirm('למחוק את ההקצאה הזו לצמיתות? אם היא פתוחה - הליד יחזור להיות פנוי להעברה.')) return;
           b.disabled = true;
-          b.textContent = 'מבטל...';
+          b.textContent = 'מוחק...';
           google.script.run
             .withSuccessHandler(function () {
-              showSavedToast_('✓ ההקצאה בוטלה');
+              showSavedToast_('✓ ההקצאה נמחקה');
               if (currentTabName) loadCampaign(currentTabName, true);
               if (openRepName) load_(openRepName);
             })
             .withFailureHandler(function (err) {
               b.disabled = false;
-              b.textContent = '✕ ביטול';
+              b.textContent = '✕ מחיקה';
               alert((err && err.message) ? err.message : err);
             })
-            .cancelAssignment(campaign, phone);
+            .deleteAssignmentById(id);
         });
       });
     }

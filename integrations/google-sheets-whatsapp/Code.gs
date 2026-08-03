@@ -2460,6 +2460,52 @@ function cancelAssignment(sheetName, phone) {
   }
 }
 
+/**
+ * מחיקת שורת הקצאה **ספציפית** מטאב "הקצאות" לפי "מזהה הקצאה" הייחודי -
+ * בין אם היא עדיין פתוחה ובין אם כבר טופלה. בשונה מ-cancelAssignment
+ * (שמוגבלת בכוונה להקצאות פתוחות בלבד, לפי קמפיין+טלפון): כאן מיטוב
+ * מנקה רשומת היסטוריה (למשל הקצאת בדיקה שכבר "טופלה") מרשימת "הלידים
+ * של <נציגה>", ולכן חייבים לזהות לפי המזהה הייחודי - לאותו טלפון יכולות
+ * להיות כמה שורות הקצאה היסטוריות, וזיהוי לפי טלפון בלבד היה עלול
+ * למחוק את השורה הלא נכונה. לא נוגעת בסטטוס של שורת הליד עצמה - רק
+ * מתעדת בהערות שהרשומה נמחקה, לשקיפות.
+ */
+function deleteAssignmentById(assignmentId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const data = assignRows_();
+    const idCol = assignCol_(data.headers, 'מזהה הקצאה');
+    const campCol = assignCol_(data.headers, 'קמפיין');
+    const phoneCol = assignCol_(data.headers, 'טלפון נייד');
+    const repCol = assignCol_(data.headers, 'נציגה');
+
+    for (let i = 0; i < data.values.length; i++) {
+      if (String(data.values[i][idCol]) !== String(assignmentId)) continue;
+
+      const sheetName = String(data.values[i][campCol] || '');
+      const phone = String(data.values[i][phoneCol] || '');
+      const repName = String(data.values[i][repCol] || '');
+      data.sheet.deleteRow(i + 2);
+
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const sheet = sheetName ? ss.getSheetByName(sheetName) : null;
+      if (sheet && phone) {
+        const row = findRowByPhone_(sheet, phone);
+        if (row) {
+          const notesCol = ensureColumn_(sheet, row.headers, USER_NOTES_HEADER);
+          appendNoteEntry_(sheet, row.headers, row.rowIndex, notesCol, 'מיטוב',
+            'רשומת ההקצאה ל' + repName + ' נמחקה');
+        }
+      }
+      return { success: true };
+    }
+    return { success: true, alreadyGone: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /** ההקצאה הפתוחה (לא טופלה) של ליד מסוים, או null. */
 function openAssignmentFor_(sheetName, phone) {
   const data = assignRows_();
