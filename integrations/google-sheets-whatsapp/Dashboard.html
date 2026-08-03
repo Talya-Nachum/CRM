@@ -1731,6 +1731,11 @@
       </div>
 
       <div>
+        <div class="card" id="detailCallInfoCard" style="display:none">
+          <h3>☎️ פרטי שיחה</h3>
+          <div class="detail-facts" id="detailCallInfo"></div>
+        </div>
+
         <div class="card">
           <h3>👤 פרטי איש קשר</h3>
           <div class="detail-facts" id="detailFacts"></div>
@@ -1741,6 +1746,7 @@
           <button class="detail-actbtn detail-actbtn-transfer" type="button" id="detailTransferBtn">↗ העברה לנציגה</button>
           <button class="detail-actbtn" type="button" id="detailAiBtn">✨ סיכום AI + טיפ מכירה</button>
           <button class="detail-actbtn detail-actbtn-primary" type="button" id="detailStatusBtn">✎ עדכון סטטוס / הערה</button>
+          <button class="detail-actbtn" type="button" id="detailCancelAssignBtn" style="display:none">✕ ביטול הקצאה לנציגה</button>
         </div>
       </div>
     </div>
@@ -3417,6 +3423,31 @@
         feedEl.innerHTML = '<div class="detail-summary-text" style="color:var(--text-muted)">אין עדיין שום תיעוד.</div>';
       }
 
+      // פרטי שיחה - משך/רגש/תאריך אמיתי מפרלה. מוצג רק אם יש לפחות נתון
+      // אחד (שיחות ישנות מלפני התיקון לא שמרו את זה בכלל - לא מציגים כרטיס ריק).
+      const callInfoCard = document.getElementById('detailCallInfoCard');
+      const callInfoEl = document.getElementById('detailCallInfo');
+      const SENTIMENT_LABELS = { positive: '🙂 חיובי', negative: '🙁 שלילי', neutral: '😐 ניטרלי' };
+      const sentimentLabel = r.callSentiment
+        ? (SENTIMENT_LABELS[String(r.callSentiment).toLowerCase()] || r.callSentiment)
+        : '';
+      const durationLabel = r.callDuration
+        ? Math.floor(r.callDuration / 60) + ':' + String(r.callDuration % 60).padStart(2, '0') + ' דקות'
+        : '';
+      const callInfoRows = [
+        ['תאריך שיחה', r.callDate],
+        ['משך שיחה', durationLabel],
+        ['רגש השיחה', sentimentLabel]
+      ].filter(function (f) { return f[1]; });
+      if (callInfoRows.length) {
+        callInfoCard.style.display = '';
+        callInfoEl.innerHTML = callInfoRows.map(function (f) {
+          return '<div><b>' + escapeHtml_(f[0]) + '</b>' + escapeHtml_(String(f[1])) + '</div>';
+        }).join('');
+      } else {
+        callInfoCard.style.display = 'none';
+      }
+
       const factsEl = document.getElementById('detailFacts');
       const factRows = [
         ['טלפון', r.phone],
@@ -3433,6 +3464,11 @@
       transferBtn.disabled = assigned;
       transferBtn.textContent = assigned ? '✓ מוקצה ל' + r.assignedTo : '↗ העברה לנציגה';
 
+      // ביטול הקצאה - מוצג רק כשהליד באמת מוקצה. זמין רק כאן (הדשבורד
+      // הראשי, שרק מיטוב נכנסת אליו) - הנציגות לא רואות כפתור כזה אצלן.
+      const cancelBtn = document.getElementById('detailCancelAssignBtn');
+      cancelBtn.style.display = assigned ? '' : 'none';
+
       overlay.classList.add('show');
       overlay.scrollTop = 0;
 
@@ -3444,6 +3480,25 @@
       };
       document.getElementById('detailStatusBtn').onclick = function () {
         if (openCrmModalFor_) openCrmModalFor_(phone, false);
+      };
+      cancelBtn.onclick = function () {
+        if (!assigned || !currentTabName) return;
+        const proceed = confirm('לבטל את ההקצאה ל' + r.assignedTo + '? הליד ייעלם מהדשבורד שלה ויחזור להיות פנוי להעברה.');
+        if (!proceed) return;
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'מבטל...';
+        google.script.run
+          .withSuccessHandler(function () {
+            close();
+            showSavedToast_('✓ ההקצאה בוטלה');
+            if (currentTabName) loadCampaign(currentTabName, true);
+          })
+          .withFailureHandler(function (err) {
+            cancelBtn.disabled = false;
+            cancelBtn.textContent = '✕ ביטול הקצאה לנציגה';
+            alert((err && err.message) ? err.message : err);
+          })
+          .cancelAssignment(currentTabName, phone);
       };
     }
 

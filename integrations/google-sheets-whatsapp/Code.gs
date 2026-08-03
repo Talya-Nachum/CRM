@@ -90,6 +90,8 @@ const CALL_SENT_STATUS = 'שיחה נשלחה';
 const CALL_TRANSCRIPT_HEADER = 'תמלול שיחה';
 const CALL_RECORDING_HEADER = 'הקלטת שיחה';
 const CALL_TAG_HEADER = 'תגית פרלה';
+const CALL_DURATION_HEADER = 'משך שיחה (שניות)';
+const CALL_SENTIMENT_HEADER = 'רגש שיחה';
 
 // --- CRM פנימי (הערות הצוות; הסטטוס הידני משותף עם FIRST_REPLY_HEADER) ---
 // יומן הערות ידניות של הצוות בלבד - נפרד מ"תשובת איש קשר" (שיחת
@@ -1329,11 +1331,13 @@ function handleNlpearlWebhook_(ss, payload) {
             const combined = existingResult ? (existingResult + '\n' + resultText) : resultText;
             sheet.getRange(rowIndex, resultCol + 1).setValue(combined);
           }
+          // תאריך השיחה: מעדיפים את זמן ההתחלה האמיתי מפרלה (startTime),
+          // ורק אם הוא לא הגיע - זמן קבלת ה-Webhook כגיבוי.
           const dateCol = ensureColumn_(sheet, headers, CALL_DATE_HEADER);
-          sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
+          sheet.getRange(rowIndex, dateCol + 1).setValue(details.startTime || new Date());
 
-          // התמלול/ההקלטה/התגית - כל אחד בעמודה משלו. שומרים את השיחה
-          // האחרונה (לא מצטבר) כי תמלול מלא ארוך, ותא בגיליון מוגבל.
+          // התמלול/ההקלטה/התגית/המשך/הרגש - כל אחד בעמודה משלו. שומרים
+          // את השיחה האחרונה (לא מצטבר) כי תמלול מלא ארוך, ותא בגיליון מוגבל.
           if (transcript) {
             const transcriptCol = ensureColumn_(sheet, headers, CALL_TRANSCRIPT_HEADER);
             sheet.getRange(rowIndex, transcriptCol + 1).setValue(transcript);
@@ -1345,6 +1349,14 @@ function handleNlpearlWebhook_(ss, payload) {
           if (tagText) {
             const tagCol = ensureColumn_(sheet, headers, CALL_TAG_HEADER);
             sheet.getRange(rowIndex, tagCol + 1).setValue(tagText);
+          }
+          if (details.duration) {
+            const durationCol = ensureColumn_(sheet, headers, CALL_DURATION_HEADER);
+            sheet.getRange(rowIndex, durationCol + 1).setValue(details.duration);
+          }
+          if (details.sentiment) {
+            const sentimentCol = ensureColumn_(sheet, headers, CALL_SENTIMENT_HEADER);
+            sheet.getRange(rowIndex, sentimentCol + 1).setValue(details.sentiment);
           }
 
           const statusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
@@ -1391,10 +1403,13 @@ function callTextForStatus_(transcript, summary, tagText) {
  * השיחה ולכן מעולם לא הביא תוצאה.
  */
 function pearlCallDetails_(payload) {
+  const startTime = payload && payload.startTime ? new Date(payload.startTime) : null;
   return {
     transcript: pearlTranscriptText_(payload && payload.transcript),
     recording: String((payload && payload.recording) || ''),
-    duration: Number((payload && payload.duration) || 0)
+    duration: Number((payload && payload.duration) || 0),
+    sentiment: String((payload && payload.overallSentiment) || ''),
+    startTime: (startTime && !isNaN(startTime.getTime())) ? startTime : null
   };
 }
 
@@ -2411,6 +2426,40 @@ function assignLead(sheetName, phone, repName, noteToRep) {
   return { success: true, rep: rep.name };
 }
 
+/**
+ * ביטול הקצאה פתוחה (למשל: הקצאת בדיקה שהועברה בטעות). מוחקת את השורה
+ * בטאב "הקצאות" לגמרי - כך הליד נעלם מהדשבורד של הנציגה (getRepData
+ * קורא מהטאב הזה) וחוזר להיות פנוי להעברה מחדש. בכוונה **לא** כמו
+ * completeAssignment: אין כתיבת סטטוס/הערה חזרה לשורת הליד ואין הודעה
+ * לנציגה - זה לא "סיום טיפול" אלא ביטול שלא אמור להשפיע על הסטטוס
+ * האמיתי של הליד. זמינה רק מהדשבורד הראשי (בלעדי למיטוב) - אין לה שום
+ * חשיפה בדשבורד של הנציגה.
+ */
+function cancelAssignment(sheetName, phone) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const found = openAssignmentFor_(sheetName, phone);
+    if (!found) return { success: true, alreadyGone: true };
+
+    assignSheet_().deleteRow(found.rowIndex);
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(sheetName);
+    if (sheet) {
+      const row = findRowByPhone_(sheet, phone);
+      if (row) {
+        const notesCol = ensureColumn_(sheet, row.headers, USER_NOTES_HEADER);
+        appendNoteEntry_(sheet, row.headers, row.rowIndex, notesCol, 'מיטוב',
+          'ההקצאה ל' + found.rep + ' בוטלה');
+      }
+    }
+    return { success: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /** ההקצאה הפתוחה (לא טופלה) של ליד מסוים, או null. */
 function openAssignmentFor_(sheetName, phone) {
   const data = assignRows_();
@@ -3330,6 +3379,8 @@ function getCampaignData(sheetName) {
   const transcriptCol = findColumnNormalized_(headers, CALL_TRANSCRIPT_HEADER);
   const recordingCol = findColumnNormalized_(headers, CALL_RECORDING_HEADER);
   const pearlTagCol = findColumnNormalized_(headers, CALL_TAG_HEADER);
+  const durationCol = findColumnNormalized_(headers, CALL_DURATION_HEADER);
+  const sentimentCol = findColumnNormalized_(headers, CALL_SENTIMENT_HEADER);
   const callDateCol = findColumnNormalized_(headers, CALL_DATE_HEADER);
   const callLeadIdCol = findColumnNormalized_(headers, CALL_LEAD_ID_HEADER);
   const userNotesCol = findColumnNormalized_(headers, USER_NOTES_HEADER);
@@ -3359,6 +3410,8 @@ function getCampaignData(sheetName) {
     const transcript = transcriptCol !== -1 ? String(row[transcriptCol] || '') : '';
     const recording = recordingCol !== -1 ? String(row[recordingCol] || '') : '';
     const pearlTag = pearlTagCol !== -1 ? String(row[pearlTagCol] || '') : '';
+    const callDuration = durationCol !== -1 ? Number(row[durationCol] || 0) : 0;
+    const callSentiment = sentimentCol !== -1 ? String(row[sentimentCol] || '') : '';
     const callDate = callDateCol !== -1 ? row[callDateCol] : null;
     const userNotes = userNotesCol !== -1 ? row[userNotesCol] : '';
     const scheduleAt = scheduleCol !== -1 ? parseScheduleValue_(row[scheduleCol]) : null;
@@ -3418,6 +3471,8 @@ function getCampaignData(sheetName) {
       transcript: transcript,
       recording: recording,
       pearlTag: pearlTag,
+      callDuration: callDuration,
+      callSentiment: callSentiment,
       // תזמון: התאריך שנקבע לשליחה/שיחה, ודגל לשורה שסומנה כמתוזמנת
       // אבל נשארה בלי תאריך - כזו לא תצא לעולם, ולכן היא חייבת להיות
       // גלויה לעין בדשבורד ולא להיתקע בשקט.
