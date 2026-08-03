@@ -200,6 +200,15 @@
       <div class="statrow"><span class="l">טופלו בסך הכל</span>
         <span class="v" id="statTotal">–</span></div>
     </div>
+    <div class="panel">
+      <h4>🔔 התראות</h4>
+      <button type="button" id="soundTestBtn"
+        style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:#fff;
+               font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--text)">
+        🔊 בדיקת צליל
+      </button>
+      <div id="soundStatus" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5"></div>
+    </div>
     <div>
       <div class="sec-label">לפי קמפיין</div>
       <div class="tabs" id="campFilters"></div>
@@ -364,6 +373,21 @@
   const BEEP_DATA_URI = 'data:audio/wav;base64,UklGRuQNAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YcANAAAAAIMAkgEaAi4BxP7z+3L6nvuM/7QEhgiwCG4EN/1L9jrzFvYy/iUINw+fD3sIjfw18QDs+e/0+8oKkhXTFkoNy/zB7NvkWenX+JoMghs4Hs8S8f0A6d/dSOLg9IwN8yC4JfwYAAD+5SPX2doZ8JkN0yU9LcMf9wLK47zQH9OL6rwMESqyNBIn0QZs4r7KMctA5PEKnS0APNkuiwvx4T3FIsO13QUIpy7fP8cz6g/A5BjGA8Ji2gUEzyt+Pwk2xxNx6OvHI8E11wAAyyjdPhU4jxc57PfJgsAx1Pv7niX9Peg5QBsW8DnMIcBZ0fv3SyLePIE71R4C9LDOAcCwzgL01R6BO948SyL791nRIcA5zBbwQBvoOf09niX7+zHUgsD3yTnsjxcVON0+yygAADXXI8Hrx3HoxxMJNn4/zysFBGLaA8IYxsDk6g/HM98/py4FCLXdIsN/xCvh/gtQMQBAUDH+Cyvhf8Qiw7XdBQinLt8/xzPqD8DkGMYDwmLaBQTPK34/CTbHE3Ho68cjwTXXAADLKN0+FTiPFzns98mCwDHU+/ueJf096DlAGxbwOcwhwFnR+/dLIt48gTvVHgL0sM4BwLDOAvTVHoE73jxLIvv3WdEhwDnMFvBAG+g5/T2eJfv7MdSCwPfJOeyPFxU43T7LKAAANdcjwevHcejHEwk2fj/PKwUEYtoDwhjGwOTqD8cz3z+nLgUItd0iw3/EK+H+C1AxAEBQMf4LK+F/xCLDtd0FCKcu3z/HM+oPwOQYxgPCYtoFBM8rfj8JNscTcejrxyPBNdcAAMso3T4VOI8XOez3yYLAMdT7+54l/T3oOUAbFvA5zCHAWdH790si3jyBO9UeAvSwzgHAsM4C9NUegTvePEsi+/dZ0SHAOcwW8EAb6Dn9PZ4l+/sx1ILA98k57I8XFTjdPssoAAA11yPB68dx6McTCTZ+P88rBQRi2gPCGMbA5OoPxzPfP6cuBQi13SLDf8Qr4f4LUDEAQFAx/gsr4X/EIsO13QUIpy7fP8cz6g/A5BjGA8Ji2gUEzyt+Pwk2xxNx6OvHI8E11wAAyyjdPhU4jxc57PfJgsAx1Pv7niX9Peg5QBsW8DnMIcBZ0fv3SyLePIE71R4C9LDOAcCwzgL01R6BO948SyL791nRIcA5zBbwQBvoOf09niX7+zHUgsD3yTnsjxcVON0+yygAADXXI8Hrx3HoxxMJNn4/zysFBGLaA8IYxsDk6g/HM98/py4FCLXdIsN/xCvh/gtQMQBAUDH+Cyvhf8Qiw7XdBQinLt8/xzPqD8DkGMYDwmLaBQTPK34/CTbHE3Ho68cjwTXXAADLKN0+FTiPFzns98mCwDHU+/ueJf096DlAGxbwOcwhwFnR+/dLIt48gTvVHgL0sM4BwLDOAvTVHoE73jxLIvv3WdEhwDnMFvBAG+g5/T2eJfv7MdSCwPfJOeyPFxU43T7LKAAANdcjwevHcejHEwk2fj/PKwUEYtoDwhjGwOTqD8cz3z+nLgUItd0iw3/EK+H+C1AxAEBQMf4LK+F/xCLDtd0FCKcu3z/HM+oPwOQYxgPCYtoFBM8rfj8JNscTcejrxyPBNdcAAMso3T4VOI8XOez3yYLAMdT7+54l/T3oOUAbFvA5zCHAWdH790si3jyBO9UeAvSwzgHAsM4C9NUegTvePEsi+/dZ0SHAOcwW8EAb6Dn9PZ4l+/sx1ILA98k57I8XFTjdPssoAAA11yPB68dx6McTCTZ+P88rBQRi2gPCGMbA5OoPxzPfP6cuBQi13SLDf8Qr4f4LUDEAQFAx/gsr4X/EIsO13QUIpy7fP8cz6g/A5BjGA8Ji2gUEzyt+Pwk2xxNx6OvHI8E11wAAyyjdPhU4jxc57PfJgsAx1Pv7niX9Peg5QBsW8DnMIcBZ0fv3SyLePIE71R4C9LDOAcCwzgL01R6BO948SyL791nRIcA5zBbwQBvoOf09niX7+zHUgsD3yTnsjxcVON0+yygAADXXI8Hrx3HoxxMJNn4/zysFBGLaA8IYxsDk6g/HM98/py4FCLXdIsN/xCvh/gtQMQBAUDH+Cyvhf8Qiw7XdBQinLt8/xzPqD8DkGMYDwmLaBQTPK34/CTbHE3Ho68cjwTXXAADLKN0+FTiPFzns98mCwDHU+/ueJf096DlAGxbwOcwhwFnR+/dLIt48gTvVHgL0sM4BwLDOAvTVHoE73jxLIvv3WdEhwDnMFvBAG+g5/T2eJfv7MdSCwPfJOeyPFxU43T7LKAAANdcjwevHcejHEwk2fj/PKwUEYtoDwhjGwOTqD8cz3z+nLgUItd0iw3/EK+H+C1AxAEBQMf4LK+F/xCLDtd0FCKcu3z/HM+oPwOQYxgPCYtoFBM8rfj8JNscTcejrxyPBNdcAAMso3T4VOI8XOez3yYLAMdT7+54l/T3oOUAbFvA5zCHAWdH790si3jyBO9UeAvSwzgHAsM4C9NUegTvePEsi+/dZ0SHAOcwW8EAb6Dn9PZ4l+/sx1ILA98k57I8XFTjdPssoAAA11yPB68dx6McTCTZ+P88rBQRi2gPCGMbA5OoPxzPfP6cuBQi13SLDf8Qr4f4LUDEAQFAx/gsr4X/EIsO13QUIpy7fP8cz6g/A5BjGA8Ji2gUEzyt+Pwk2xxNx6OvHI8E11wAAyyjdPhU4jxc57PfJgsAx1Pv7niX9Peg5QBsW8DnMIcBZ0fv3SyLePIE71R4C9LDOAcCwzgL01R6BO948SyL791nRIcA5zBbwQBvoOf09niX7+zHUgsD3yTnsjxcVON0+yygAADXXI8Hrx3HoxxMJNn4/zysFBGLaA8IYxsDk6g/HM98/py4FCLXdIsN/xCvh/gtQMQBAUDH+Cyvhf8Qiw7XdBQinLt8/xzPqD8DkGMYDwmLaBQTPK34/CTbHE3Ho68cjwTXXAADLKN0+FTiPFzns98mCwDHU+/ueJf096DlAGxbwOcwhwFnR+/dLIt48gTvVHgL0sM4BwLDOAvTVHoE73jxLIvv3WdEhwDnMFvBAG+g5/T2eJfv7MdSCwPfJOeyPFxU43T7LKAAANdcjwevHcejHEwk2fj/PKwUEYtoDwhjGwOTqD8cz3z+nLgUItd0iw3/EK+H+C1AxAEBQMf4LK+F/xCLDtd0FCKcu3z/HM+oPwOQYxgPCYtoFBM8rfj8JNscTcejrxyPBNdcAAMso3T4VOI8XOez3yYLAMdT7+54l/T3oOUAbFvA5zCHAWdH790si3jyBO9UeAvSwzgHAsM4C9NUegTvePEsi+/dZ0SHAOcwW8EAb6Dn9PZ4l+/sx1ILA98k57I8XFTjdPssoAAA11yPB68dx6McTCTZ+P88rBQRi2gPCGMbA5OoPxzPfP6cuBQi13SLDf8Qr4f4LUDEAQFAx/gsr4X/EIsMj3tIH5yyuPIowuQ4j5+LL/MgW33cDPSUtNZQsEhAn7dbTSM/l4AAAFh6ULfUnfhBn8ofb8NWG43D9gxf4Jb8iAhDZ9uDi39zt5sr7kxFvHgIdpQ50+s/pAOQL6w77VQwPF9MWbgwx/UHwPuvS7zr71gftD0YQZwkM/yX2gvIx9Uv8HwQdCW4JnAUAAGn7t/kY+zz+PAG0AmICGAENAA==';
   let audioEl_ = null;
 
+  // כתובת סטטוס גלויה בסרגל הצד ("🔔 התראות") - כדי שאפשר יהיה לדעת
+  // בדיוק מה קרה בלי לפתוח כלים למפתחים (הנציגות לא טכניות). מציגה גם
+  // את מצב הרשאת ההתראות של הדפדפן.
+  function reportSoundStatus_(msg) {
+    const el = document.getElementById('soundStatus');
+    if (el) el.textContent = msg;
+  }
+
+  function notifPermissionText_() {
+    if (typeof Notification === 'undefined') return 'לא נתמך בדפדפן זה';
+    if (Notification.permission === 'granted') return 'התראת מערכת: מאושרת ✓';
+    if (Notification.permission === 'denied') return 'התראת מערכת: נחסמה ע"י הדפדפן ✗';
+    return 'התראת מערכת: טרם אושרה';
+  }
+
   function warmAudio_() {
     if (audioEl_) return;
     try {
@@ -373,9 +397,17 @@
       // לחיצה נוספת, בלי שהנציגה תשמע צליל מיותר עכשיו.
       const p = audioEl_.play();
       if (p && p.then) {
-        p.then(function () { audioEl_.pause(); audioEl_.currentTime = 0; }).catch(function () {});
+        p.then(function () {
+          audioEl_.pause();
+          audioEl_.currentTime = 0;
+          reportSoundStatus_('צליל: מוכן ✓ · ' + notifPermissionText_());
+        }).catch(function (err) {
+          reportSoundStatus_('צליל: נחסם ע"י הדפדפן (' + (err && err.name || err) + ') · ' + notifPermissionText_());
+        });
       }
-    } catch (e) { /* מתעלמים */ }
+    } catch (e) {
+      reportSoundStatus_('צליל: שגיאה - ' + (e && e.message || e));
+    }
   }
 
   function playAlertSound_() {
@@ -383,7 +415,9 @@
       if (!audioEl_) warmAudio_();
       if (!audioEl_) return;
       audioEl_.currentTime = 0;
-      audioEl_.play().catch(function () {});
+      audioEl_.play().catch(function (err) {
+        reportSoundStatus_('צליל: ניסיון השמעה נכשל (' + (err && err.name || err) + ')');
+      });
       setTimeout(function () {
         try {
           const second = new Audio(BEEP_DATA_URI);
@@ -763,10 +797,15 @@
   });
 
   // "מחממים" את הצליל בלחיצה/הקשה **אמיתית** הראשונה של הנציגה על הדף -
-  // once כדי לא ליצור AudioContext חדש בכל לחיצה. זו הדרך שמבטיחה
-  // שהוא לא יישאר "suspended" כשמנסים להשמיע אותו מאוחר יותר מתוך ה-interval.
+  // once כדי לא ליצור אלמנט שמע חדש בכל לחיצה. זו הדרך שמבטיחה
+  // שההרשאה להשמעה תישאר פתוחה גם מאוחר יותר מתוך ה-interval, בלי
+  // לחיצה נוספת.
   document.addEventListener('click', warmAudio_, { once: true });
   document.addEventListener('keydown', warmAudio_, { once: true });
+
+  reportSoundStatus_('לחצי על "בדיקת צליל" כדי לוודא שהצליל עובד בדפדפן הזה.');
+  const testBtn = document.getElementById('soundTestBtn');
+  if (testBtn) testBtn.addEventListener('click', function () { playAlertSound_(); });
 
   askNotificationPermission();
   load(false);
