@@ -2020,22 +2020,15 @@
   }
 
   /**
-   * משווה את השורות הנוכחיות לתמונת המצב האחרונה של אותו טאב (מהסשן הזה
-   * בלבד) ומסמן ב-r._isNew שורות שקיבלו תשובה/תוצאת שיחה חדשה מאז.
+   * מסמנת ב-r._isNew שורות שהפעילות האחרונה שלהן (תשובה/תוצאת שיחה) היא
+   * **היום** - לפי התאריך בפועל (isNewToday_), לא לפי "השתנה מאז הטעינה
+   * הקודמת בדפדפן". הגרסה הקודמת השתמשה בהשוואה זמנית בין טעינות
+   * שיכלה לסמן "חדש" גם שורה ישנה לגמרי (למשל אם ערך בה השתנה ברקע
+   * בזמן שהדשבורד היה פתוח) - מבלבל ולא אמין. עכשיו זהה בדיוק להגדרה
+   * של "תגובות חדשות היום" בקובייה, כך שהתג בטבלה והקובייה תמיד מסכימים.
    */
   function markNewRows_(data) {
-    const prevSnap = rowSnapshots[currentTabName];
-    const newSnap = {};
-    data.rows.forEach(function (r) {
-      newSnap[r.phone] = { reply: r.reply, callResult: r.callResult };
-      if (prevSnap) {
-        const prev = prevSnap[r.phone];
-        const replyChanged = r.reply && (!prev || r.reply !== prev.reply);
-        const callChanged = r.callResult && (!prev || r.callResult !== prev.callResult);
-        r._isNew = !!(prev && (replyChanged || callChanged));
-      }
-    });
-    rowSnapshots[currentTabName] = newSnap;
+    data.rows.forEach(function (r) { r._isNew = isNewToday_(r); });
   }
 
   /**
