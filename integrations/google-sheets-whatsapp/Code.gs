@@ -84,6 +84,12 @@ const CALL_RESULT_HEADER_LEGACY = 'תוצאות שיחה'; // שם ישן - טא
 const CALL_FIRST_RESULT_HEADER = 'תוצאה ראשונית (שיחה)';
 const CALL_DATE_HEADER = 'תאריך שיחה';
 const CALL_SENT_STATUS = 'שיחה נשלחה';
+// התיעוד המלא של השיחה, כפי שהוא נמשך מפרלה אחרי כל שיחה. שלוש עמודות
+// **אופציונליות** - טאב ישן שאין בו אותן ממשיך לעבוד בדיוק כמו קודם,
+// והן נוצרות לבד בפעם הראשונה שיש מה לכתוב אליהן.
+const CALL_TRANSCRIPT_HEADER = 'תמלול שיחה';
+const CALL_RECORDING_HEADER = 'הקלטת שיחה';
+const CALL_TAG_HEADER = 'תגית פרלה';
 
 // --- CRM פנימי (הערות הצוות; הסטטוס הידני משותף עם FIRST_REPLY_HEADER) ---
 // יומן הערות ידניות של הצוות בלבד - נפרד מ"תשובת איש קשר" (שיחת
@@ -109,7 +115,7 @@ const REP_CELEBRATE_STATUS_ = 'תואמה פגישה';
 const ASSIGN_HEADERS_ = [
   'מזהה הקצאה', 'תאריך הקצאה', 'נציגה', 'קמפיין', 'טלפון נייד',
   'שם חברה', 'איש קשר', 'תפקיד', 'אימייל', 'ערוץ', 'תיעוד בעת ההעברה',
-  'טופל', 'סטטוס שסומן', 'הערת נציגה', 'תאריך טיפול'
+  'טופל', 'סטטוס שסומן', 'הערת נציגה', 'תאריך טיפול', 'הערה לנציגה'
 ];
 
 // טאבים שהם עזר/לוג בלבד, לעולם לא נחשבים קמפיין גם אם במקרה יש בהם
@@ -1214,14 +1220,25 @@ function handleNlpearlWebhook_(ss, payload) {
   const incomingPhone = phoneSuffix_(payload.to);
   if (!incomingPhone) return;
 
-  // מתעלמים מאירועי שיחה בלי טקסט קריא ממשי (רק קוד סטטוס פנימי מספרי
-  // של פרלה, בלי Indicator Tag/summary) - כדי שהלקוחה לעולם לא תראה
-  // "סטטוס: 5" לא מובן בעמודות. הסטטוסים השוטפים (לא ענה וכו') מגיעים
-  // דרך אירועי ה-Lead שמטופלים למעלה.
-  const summary = (Array.isArray(payload.tags) && payload.tags.length)
+  // התגית והסיכום הם שני דברים **נפרדים**, ושניהם נשמרים. עד היום, אם
+  // פרלה שלחה תגית - הסיכום נזרק, והלקוחה נשארה עם "כללי" בלי מילה על
+  // מה שנאמר בשיחה. עכשיו התגית הולכת לעמודה משלה, הסיכום לתיעוד,
+  // והסטטוס נגזר מהטקסט המלא (ר' למטה) - כך שההערות והסטטוס תמיד
+  // מספרים את אותו סיפור.
+  const tagText = (Array.isArray(payload.tags) && payload.tags.length)
     ? payload.tags.join(', ')
-    : payload.summary;
-  if (!summary) return;
+    : String(payload.tags || '');
+  const summary = String(payload.summary || '');
+
+  // התמלול המלא לא מגיע ב-Webhook - מושכים אותו מפרלה לפי מזהה השיחה.
+  // כישלון כאן לא מבטל כלום: פשוט נשארים עם הסיכום, כמו קודם.
+  const details = pearlCallDetails_(payload);
+  const transcript = details.transcript;
+
+  // מתעלמים מאירועי שיחה בלי טקסט קריא ממשי (רק קוד סטטוס פנימי מספרי
+  // של פרלה) - כדי שהלקוחה לעולם לא תראה "סטטוס: 5" לא מובן בעמודות.
+  // הסטטוסים השוטפים (לא ענה וכו') מגיעים דרך אירועי ה-Lead למעלה.
+  if (!summary && !tagText && !transcript) return;
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -1239,23 +1256,40 @@ function handleNlpearlWebhook_(ss, payload) {
         const sheetPhone = phoneSuffix_(data[i][phoneCol]);
         if (sheetPhone && sheetPhone === incomingPhone) {
           const rowIndex = i + 1;
-          const existingResult = data[i][resultCol];
-          const combined = existingResult ? (existingResult + '\n' + summary) : summary;
-          sheet.getRange(rowIndex, resultCol + 1).setValue(combined);
+          // "סיכום שיחה" מצטבר: הסיכום של פרלה, ואם אין - התגית, כדי
+          // שלעולם לא תישאר שורה בלי שום תיעוד.
+          const resultText = summary || tagText;
+          if (resultText) {
+            const existingResult = data[i][resultCol];
+            const combined = existingResult ? (existingResult + '\n' + resultText) : resultText;
+            sheet.getRange(rowIndex, resultCol + 1).setValue(combined);
+          }
           const dateCol = ensureColumn_(sheet, headers, CALL_DATE_HEADER);
           sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
-          // "סטטוס שיחה" מוצג כמצב הנוכחי (נדרס בכל שיחה, לא מצטבר כמו
-          // "סיכום שיחה" למעלה) - אותו ערך בדיוק (ה-Indicator Tags שהלקוחה
-          // מגדירה ומשנה בעצמה בפרלה), בלי מיפוי קבוע בקוד, כי הרשימה
-          // משתנה אצלה כל הזמן.
+
+          // התמלול/ההקלטה/התגית - כל אחד בעמודה משלו. שומרים את השיחה
+          // האחרונה (לא מצטבר) כי תמלול מלא ארוך, ותא בגיליון מוגבל.
+          if (transcript) {
+            const transcriptCol = ensureColumn_(sheet, headers, CALL_TRANSCRIPT_HEADER);
+            sheet.getRange(rowIndex, transcriptCol + 1).setValue(transcript);
+          }
+          if (details.recording) {
+            const recCol = ensureColumn_(sheet, headers, CALL_RECORDING_HEADER);
+            sheet.getRange(rowIndex, recCol + 1).setValue(details.recording);
+          }
+          if (tagText) {
+            const tagCol = ensureColumn_(sheet, headers, CALL_TAG_HEADER);
+            sheet.getRange(rowIndex, tagCol + 1).setValue(tagText);
+          }
+
           const statusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
-          // "סטטוס שיחה" תמיד מתעגל לערך היחיד הכי קרוב מתוך "רשימת
-          // סטטוסים" (matchCallStatus_) - בין אם המקור הוא תגית קצרה
-          // שפרלה כבר נתנה (כמו "לא מעוניין") ובין אם זה נרטיב ארוך -
-          // כך שהעמודה הזו תמיד מדברת באותה שפה סגורה כמו "סטטוס איש
-          // קשר" הידני. "סיכום שיחה" למעלה תמיד מקבל את הטקסט המלא, לא נגוע.
+          // הסטטוס נגזר מ**כל** מה שידוע על השיחה - התמלול המלא, הסיכום
+          // והתגית - ולא מהתגית לבדה. זו הבקשה המפורשת של הלקוחה: שתהיה
+          // הלימה בין ההערות שהיא קוראת לבין הסטטוס שהיא רואה. תגית
+          // גנרית כמו "כללי" כבר לא הופכת לסטטוס: אם היא לא ערך חוקי
+          // מ"רשימת סטטוסים", היא נשארת בעמודת התגית בלבד.
           const statusList = getStatusList_();
-          const statusValue = matchCallStatus_(summary, statusList);
+          const statusValue = matchCallStatus_(callTextForStatus_(transcript, summary, tagText), statusList);
           // אחידות מוחלטת: כותבים ל"סטטוס שיחה" **רק** ערך מאוצר המילים
           // הסגור. אם העיגול ב-AI נכשל והוחזר הנרטיב הגולמי - לא כותבים
           // כלום (הסטטוס הקודם נשאר), והטקסט המלא ממילא כבר נשמר
@@ -1271,6 +1305,71 @@ function handleNlpearlWebhook_(ss, payload) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * הטקסט שעליו מתבצע סיווג הסטטוס: התמלול המלא קודם (הכי אמין - זה מה
+ * שבאמת נאמר), אחריו הסיכום, ורק בסוף התגית. התגית נכנסת אחרונה בכוונה,
+ * כדי שתגית גנרית ("כללי") לא תשפיע כשיש תוכן אמיתי לסווג לפיו.
+ */
+function callTextForStatus_(transcript, summary, tagText) {
+  return [transcript, summary, tagText]
+    .filter(function (s) { return !!String(s || '').trim(); })
+    .join('\n');
+}
+
+/**
+ * מושכת מפרלה את הפרטים המלאים של השיחה: התמלול, קישור להקלטה ומשך.
+ * ה-Webhook עצמו לא כולל אותם - רק סיכום קצר - ולכן בלי הקריאה הזו
+ * הלקוחה נשארת בלי מה שבאמת נאמר בשיחה.
+ *
+ * לעולם לא זורקת: אם אין מזהה שיחה, אם פרלה מחזירה שגיאה או אם המבנה
+ * השתנה - מוחזר אובייקט ריק והזרימה ממשיכה בדיוק כמו קודם.
+ */
+function pearlCallDetails_(payload) {
+  const empty = { transcript: '', recording: '', duration: 0 };
+  const callId = String(pearlFirst_(payload || {}, ['id', 'callId', 'call_id', 'conversationId']) || '');
+  if (!callId) return empty;
+
+  try {
+    const res = pearlFetch_('get', '/Call/' + encodeURIComponent(callId));
+    if (!res.ok || !res.data) {
+      Logger.log('שליפת פרטי שיחה מפרלה נכשלה (' + res.code + '): ' + String(res.text || '').slice(0, 200));
+      return empty;
+    }
+    return {
+      transcript: pearlTranscriptText_(pearlFirst_(res.data, ['transcript', 'Transcript', 'conversation', 'messages'])),
+      recording: String(pearlFirst_(res.data, ['recording', 'recordingUrl', 'Recording', 'audioUrl']) || ''),
+      duration: Number(pearlFirst_(res.data, ['duration', 'callDuration']) || 0)
+    };
+  } catch (err) {
+    Logger.log('שליפת פרטי שיחה מפרלה נכשלה: ' + err.message);
+    return empty;
+  }
+}
+
+/**
+ * הופכת תמלול מפרלה לטקסט קריא בעברית: "פרלה: ..." / "הליד: ...".
+ * מקבלת מחרוזת מוכנה, מערך של אובייקטים (role/content, speaker/text)
+ * או מערך מחרוזות - כי המבנה משתנה בין גרסאות ה-API.
+ */
+function pearlTranscriptText_(raw) {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw.trim();
+  if (!Array.isArray(raw)) return '';
+
+  return raw.map(function (turn) {
+    if (typeof turn === 'string') return turn;
+    const who = String(pearlFirst_(turn, ['role', 'speaker', 'from', 'participant']) || '').toLowerCase();
+    const text = String(pearlFirst_(turn, ['content', 'text', 'message', 'transcript']) || '').trim();
+    if (!text) return '';
+    let label = 'הליד';
+    if (who.indexOf('agent') !== -1 || who.indexOf('assistant') !== -1 ||
+        who.indexOf('bot') !== -1 || who.indexOf('pearl') !== -1) {
+      label = 'פרלה';
+    }
+    return label + ': ' + text;
+  }).filter(function (line) { return !!line; }).join('\n').trim();
 }
 
 /**
@@ -2057,7 +2156,23 @@ function assignSheet_() {
       .setFontWeight('bold').setBackground('#F3F4F6');
     sheet.setFrozenRows(1);
   }
+  ensureAssignHeaders_(sheet);
   return sheet;
+}
+
+/**
+ * מוסיפה לטאב "הקצאות" כותרות חדשות שנוספו לקוד אחרי שהטאב כבר נוצר
+ * (למשל "הערה לנציגה"). תמיד בסוף, כדי שעמודות קיימות לא יזוזו ושורות
+ * ישנות יישארו תקינות. שורה ישנה פשוט תישאר ריקה בעמודה החדשה.
+ */
+function ensureAssignHeaders_(sheet) {
+  const headers = headerRow_(sheet);
+  const missing = ASSIGN_HEADERS_.filter(function (name) {
+    return findColumnNormalized_(headers, name) === -1;
+  });
+  if (!missing.length) return;
+  sheet.getRange(1, headers.length + 1, 1, missing.length).setValues([missing])
+    .setFontWeight('bold').setBackground('#F3F4F6');
 }
 
 function assignRows_() {
@@ -2087,7 +2202,8 @@ function isDoneValue_(v) {
  * את הקמפיין+הטלפון כמצביע, כדי שנדע לאן להחזיר את הסטטוס בסיום.
  * ליד אחד = נציגה אחת: אם כבר יש לו הקצאה פתוחה, נזרקת שגיאה ברורה.
  */
-function assignLead(sheetName, phone, repName) {
+function assignLead(sheetName, phone, repName, noteToRep) {
+  const noteForRep = String(noteToRep || '').trim();
   const rep = repByName_(repName);
   if (!rep) throw new Error('נציגה לא מוכרת: ' + repName);
 
@@ -2112,10 +2228,13 @@ function assignLead(sheetName, phone, repName) {
 
   // התיעוד עובר יחד עם הליד - בלעדיו הנציגה מתקשרת בלי לדעת מה כבר
   // נאמר, וגם כפתור ה-AI לא יוכל לסכם כלום.
+  // התמלול המלא נכנס גם הוא - בלעדיו הנציגה (וגם ה-AI שלה) רואה רק
+  // סיכום של שתי שורות במקום מה שבאמת נאמר בשיחה.
   const snapshot = [
     get_(USER_NOTES_HEADER),
     get_(REPLY_HEADER, REPLY_HEADER_LEGACY),
-    get_(CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY)
+    get_(CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY),
+    get_(CALL_TRANSCRIPT_HEADER)
   ].filter(function (s) { return !!s.trim(); }).join('\n');
 
   // דרך איזה ערוץ פנינו לליד - כדי שהנציגה תדע אם הוא כבר דיבר עם
@@ -2132,26 +2251,36 @@ function assignLead(sheetName, phone, repName) {
 
   const assignSheet = assignSheet_();
   const id = 'A' + Date.now();
-  assignSheet.appendRow([
-    id,
-    new Date(),
-    rep.name,
-    sheetName,
-    String(phone),
-    get_(COMPANY_HEADER),
-    get_(NAME_HEADER),
-    get_(TITLE_HEADER),
-    get_(EMAIL_HEADER),
-    channels.join(' + '),
-    snapshot,
-    'לא', '', '', ''
-  ]);
+  // בונים את השורה **לפי שמות הכותרות** ולא לפי מיקום קבוע - כך הוספת
+  // עמודה בעתיד לא מזיזה נתונים לעמודה הלא נכונה בטאב קיים.
+  const assignHeaders = headerRow_(assignSheet);
+  const assignValues = [];
+  for (let c = 0; c < assignHeaders.length; c++) assignValues.push('');
+  const put_ = function (header, value) {
+    const col = findColumnNormalized_(assignHeaders, header);
+    if (col !== -1) assignValues[col] = value;
+  };
+  put_('מזהה הקצאה', id);
+  put_('תאריך הקצאה', new Date());
+  put_('נציגה', rep.name);
+  put_('קמפיין', sheetName);
+  put_('טלפון נייד', String(phone));
+  put_('שם חברה', get_(COMPANY_HEADER));
+  put_('איש קשר', get_(NAME_HEADER));
+  put_('תפקיד', get_(TITLE_HEADER));
+  put_('אימייל', get_(EMAIL_HEADER));
+  put_('ערוץ', channels.join(' + '));
+  put_('תיעוד בעת ההעברה', snapshot);
+  put_('טופל', 'לא');
+  put_('הערה לנציגה', noteForRep);
+  assignSheet.appendRow(assignValues);
 
   // מתעדים גם בשורת הליד עצמה, כדי שיהיה גלוי בדשבורד ובאקסל.
   const notesCol = ensureColumn_(sheet, found.headers, USER_NOTES_HEADER);
-  appendNoteEntry_(sheet, found.headers, found.rowIndex, notesCol, 'מיטוב', 'הליד הועבר ל' + rep.name);
+  appendNoteEntry_(sheet, found.headers, found.rowIndex, notesCol, 'מיטוב',
+    'הליד הועבר ל' + rep.name + (noteForRep ? ' - "' + noteForRep + '"' : ''));
 
-  notifyRepOfNewLead_(rep, get_(NAME_HEADER), get_(COMPANY_HEADER));
+  notifyRepOfNewLead_(rep, get_(NAME_HEADER), get_(COMPANY_HEADER), noteForRep);
   return { success: true, rep: rep.name };
 }
 
@@ -2175,7 +2304,7 @@ function openAssignmentFor_(sheetName, phone) {
 }
 
 /** מייל לנציגה ברגע ההקצאה. כישלון במייל לעולם לא מפיל את ההקצאה עצמה. */
-function notifyRepOfNewLead_(rep, leadName, company) {
+function notifyRepOfNewLead_(rep, leadName, company, noteToRep) {
   if (!rep.email) return;
   try {
     const link = ScriptApp.getService().getUrl() + '?rep=' + rep.key;
@@ -2186,6 +2315,9 @@ function notifyRepOfNewLead_(rep, leadName, company) {
         '<p>היי ' + escapeHtmlServer_(rep.name) + ',</p>' +
         '<p>הועבר אלייך ליד חדש: <b>' + escapeHtmlServer_(leadName || '') + '</b>' +
         (company ? ' מ<b>' + escapeHtmlServer_(company) + '</b>' : '') + '</p>' +
+        (noteToRep ? '<p style="background:#FFF7E6;border-right:4px solid #F0A202;' +
+          'padding:10px 14px;border-radius:8px"><b>הערה מטליה:</b><br>' +
+          escapeHtmlServer_(noteToRep).replace(/\n/g, '<br>') + '</p>' : '') +
         '<p><a href="' + link + '" style="background:#116dff;color:#fff;padding:10px 18px;' +
         'border-radius:8px;text-decoration:none;display:inline-block">פתיחת הלידים שלי</a></p>' +
         '</div>'
@@ -2219,7 +2351,8 @@ function getRepData(repKey) {
     email: assignCol_(H, 'אימייל'), channel: assignCol_(H, 'ערוץ'),
     snapshot: assignCol_(H, 'תיעוד בעת ההעברה'),
     done: assignCol_(H, 'טופל'), status: assignCol_(H, 'סטטוס שסומן'),
-    note: assignCol_(H, 'הערת נציגה'), doneDate: assignCol_(H, 'תאריך טיפול')
+    note: assignCol_(H, 'הערת נציגה'), doneDate: assignCol_(H, 'תאריך טיפול'),
+    noteToRep: assignCol_(H, 'הערה לנציגה')
   };
 
   const tz = Session.getScriptTimeZone();
@@ -2253,6 +2386,9 @@ function getRepData(repKey) {
       history: String(row[idx.snapshot] || ''),
       status: String(row[idx.status] || ''),
       note: String(row[idx.note] || ''),
+      // -1 בטאב "הקצאות" שנוצר לפני שהעמודה נוספה - פשוט אין הערה,
+      // בלי לשבור כלום (ההקצאות הישנות באמת נוצרו בלי הערה).
+      noteToRep: idx.noteToRep !== -1 ? String(row[idx.noteToRep] || '') : '',
       doneAt: fmt(row[idx.doneDate])
     };
     if (isDoneValue_(row[idx.done])) {
@@ -2547,7 +2683,13 @@ function summarizeContact(sheetName, phone) {
 
   const name = get_(NAME_HEADER);
   const whatsappHistory = get_(REPLY_HEADER) || get_(REPLY_HEADER_LEGACY);
-  const callHistory = get_(CALL_RESULT_HEADER) || get_(CALL_RESULT_HEADER_LEGACY);
+  // התמלול המלא נכנס לסיכום לפני התקציר של פרלה - שני משפטים לא מספיקים
+  // ל-AI כדי להבין מה באמת קרה בשיחה, והתמלול הוא מה שבאמת נאמר.
+  const callHistory = callTextForStatus_(
+    get_(CALL_TRANSCRIPT_HEADER),
+    get_(CALL_RESULT_HEADER) || get_(CALL_RESULT_HEADER_LEGACY),
+    ''
+  );
 
   if (!whatsappHistory && !callHistory) {
     throw new Error('אין עדיין שיחה עם הליד הזה לסכם');
@@ -2809,10 +2951,17 @@ function addStatusIfMissing_(text) {
  * ו"מועד מאוחר יותר" לפני "ליד", אחרת ביטוי מוכל היה גובר.
  */
 const CALL_OUTCOME_RULES_ = [
-  { status: 'לא מעוניין', words: ['לא מעוניין', 'לא מעונין', 'לא רלוונטי', 'לא רוצה', 'ניתק',
+  { status: 'לא מעוניין', words: ['לא מעוניין', 'לא מעונין', 'לא רוצה', 'ניתק',
       'סגר את הטלפון', 'להסיר', 'אל תתקשר', 'לא לפנות', 'מרוצה מהספק', 'יש לנו ספק'] },
   { status: 'תואמה פגישה', words: ['פגישה', 'ניפגש', 'נפגש', 'זימון', 'תואמה', 'קבע תאריך',
       'נקבע ל', 'ביומן'] },
+  // פסילה בגלל גודל/אי-התאמה: הליד לא סירב - הוא פשוט לא בקהל היעד.
+  // נבדק **אחרי** פגישה (פגישה שנקבעה גוברת) ולפני "בתהליך"/"ליד", אחרת
+  // "ביקש שנחזור אליו" היה גובר על "הם קטנים מדי בשבילנו".
+  { status: 'לא רלוונטי', words: ['לא רלוונטי', 'מתחת ל-50', 'מתחת ל50', 'פחות מ-50', 'פחות מ50',
+      'מתחת ל 50', 'פחות מ 50', 'קטן מדי', 'קטנים מדי', 'לא בקהל היעד', 'לא קהל היעד',
+      'לא מתאים לקריטריון', 'לא עומד בקריטריון', 'לא עומדים בקריטריון', 'מעט מדי משתמשים',
+      'מעט משתמשים', 'אין להם צורך', 'לא רלוונטי עבורם', 'לא רלוונטים', 'עסק קטן'] },
   { status: 'בתהליך', words: ['מאוחר יותר', 'בהמשך', 'בשבוע הבא', 'בחודש הבא', 'רבעון',
       'לחזור בעוד', 'נחזור בעוד', 'עסוק כרגע', 'בפגישה כרגע', 'בנהיגה', 'תתקשרו ב'] },
   { status: 'ליד הועבר ללקוח', words: ['שנחזור אליו', 'לחזור אליו', 'שיחזרו אליו', 'נציגה',
@@ -2922,7 +3071,7 @@ function isAllowedStatusValue_(value, statusList) {
  * ערך שאינו באוצר המילים הסגור מדולג (כדי לשמור על אחידות מוחלטת) -
  * חוץ משגיאות שליחה, שחשוב שיוצגו כמו שהן.
  */
-function unifiedStatus_(contactStatus, callStatus, sendStatus, statusList) {
+function unifiedStatus_(contactStatus, callStatus, sendStatus, statusList, callText) {
   const candidates = [contactStatus, callStatus, sendStatus];
   for (let i = 0; i < candidates.length; i++) {
     const value = String(candidates[i] || '').trim();
@@ -2930,6 +3079,14 @@ function unifiedStatus_(contactStatus, callStatus, sendStatus, statusList) {
     if (value.indexOf('שגיאה') === 0) return value;
     if (isAllowedStatusValue_(value, statusList)) return value;
   }
+
+  // אף ערך אינו סטטוס חוקי (למשל תגית חופשית של פרלה כמו "כללי", או
+  // נרטיב שנתקע בעמודה) - מסווגים מחדש מתוך **התיעוד עצמו**, אותו טקסט
+  // שהלקוחה קוראת בהערות. ככה הסטטוס וההערות אף פעם לא סותרים.
+  // בזמן קריאה בלבד, לפי מילות מפתח ובלי AI: מיידי, בחינם, וחל מיד גם
+  // על שיחות שכבר התקיימו - בלי שום כלי ניקוי.
+  const fromNotes = classifyCallOutcome_(callTextForStatus_(callText, callStatus, ''));
+  if (fromNotes && isAllowedStatusValue_(fromNotes, statusList)) return fromNotes;
   // אף אחד מהערכים אינו תווית מוכרת - אבל אם בפועל התנהלה שיחה (נשאר
   // בעמודה נרטיב ארוך מלפני כלל האחידות, או תגית שפרלה לא סיווגה),
   // המשמעות היא "השיחה עוד לא הסתיימה בתוצאה ברורה". מציגים את תווית
@@ -3006,6 +3163,10 @@ function getCampaignData(sheetName) {
   const callStatusCol = findColumnNormalized_(headers, CALL_STATUS_HEADER);
   const callResultCol = findHeaderIndex_(headers, CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
   const callFirstResultCol = findColumnNormalized_(headers, CALL_FIRST_RESULT_HEADER);
+  // שלוש העמודות של התיעוד המלא מפרלה - אופציונליות לגמרי (-1 בטאב ישן)
+  const transcriptCol = findColumnNormalized_(headers, CALL_TRANSCRIPT_HEADER);
+  const recordingCol = findColumnNormalized_(headers, CALL_RECORDING_HEADER);
+  const pearlTagCol = findColumnNormalized_(headers, CALL_TAG_HEADER);
   const callDateCol = findColumnNormalized_(headers, CALL_DATE_HEADER);
   const callLeadIdCol = findColumnNormalized_(headers, CALL_LEAD_ID_HEADER);
   const userNotesCol = findColumnNormalized_(headers, USER_NOTES_HEADER);
@@ -3032,6 +3193,9 @@ function getCampaignData(sheetName) {
     const callStatus = callStatusCol !== -1 ? String(row[callStatusCol] || '') : '';
     const callResult = callResultCol !== -1 ? row[callResultCol] : '';
     const callFirstResult = callFirstResultCol !== -1 ? row[callFirstResultCol] : '';
+    const transcript = transcriptCol !== -1 ? String(row[transcriptCol] || '') : '';
+    const recording = recordingCol !== -1 ? String(row[recordingCol] || '') : '';
+    const pearlTag = pearlTagCol !== -1 ? String(row[pearlTagCol] || '') : '';
     const callDate = callDateCol !== -1 ? row[callDateCol] : null;
     const userNotes = userNotesCol !== -1 ? row[userNotesCol] : '';
     const scheduleAt = scheduleCol !== -1 ? parseScheduleValue_(row[scheduleCol]) : null;
@@ -3043,7 +3207,10 @@ function getCampaignData(sheetName) {
 
     if (status === SENT_STATUS) sent++;
     if (status.indexOf('שגיאה') === 0) errors++;
-    if (reply) replies++;
+    // "תגובות" = מי שבאמת הגיב באיזשהו ערוץ: תשובת וואטסאפ, סטטוס איש
+    // קשר שנקבע, או שיחה עם תוצאה. עד היום נספרו רק תשובות וואטסאפ,
+    // ולכן בקמפיין של פרלה בלבד הקובייה הראתה 0 (וגם "שיעור תגובה" 0).
+    if (reply || firstReply || callResult || transcript) replies++;
     if (callWasSent) callsSent++;
     if (isToday_(replyDate) || isToday_(callDate)) activityToday++;
 
@@ -3076,14 +3243,18 @@ function getCampaignData(sheetName) {
         ? Utilities.formatDate(callDate, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
       userNotes: userNotes,
       // --- השדות המאוחדים שהדשבורד מציג בפועל (עמודת סטטוס אחת + הערות אחת) ---
-      unifiedStatus: unifiedStatus_(firstReply, callStatus, status, statusList),
+      unifiedStatus: unifiedStatus_(firstReply, callStatus, status, statusList,
+        callTextForStatus_(transcript, callResult, pearlTag)),
       notesEntries: buildNotesEntries_(reply, callResult, userNotes),
       lastActivity: lastActivityMs > 0
         ? Utilities.formatDate(new Date(lastActivityMs), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
       lastActivityMs: lastActivityMs,
       // "הגיב" = יצר איתנו אינטראקציה אמיתית: כתב/לחץ כפתור בוואטסאפ, או
       // שפרלה החזירה תוצאה. סטטוס-מערכת ("לא ענה") לבדו אינו תגובה.
-      hasResponded: !!(reply || firstReply || callResult),
+      hasResponded: !!(reply || firstReply || callResult || transcript),
+      transcript: transcript,
+      recording: recording,
+      pearlTag: pearlTag,
       // תזמון: התאריך שנקבע לשליחה/שיחה, ודגל לשורה שסומנה כמתוזמנת
       // אבל נשארה בלי תאריך - כזו לא תצא לעולם, ולכן היא חייבת להיות
       // גלויה לעין בדשבורד ולא להיתקע בשקט.

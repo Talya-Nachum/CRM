@@ -493,6 +493,12 @@
      כשהמונה 0 היא נרגעת לגמרי (ר' renderTasksRow_). */
   /* הקובייה היחידה שבולטת: "תגובות חדשות" - וגם היא רק כשיש באמת חדש. */
   .stat.hero { border-color: var(--bad); background: #FFFBFA; }
+  /* קוביות עליונות שניתנות ללחיצה לסינון ("תגובות" / "תגובות חדשות היום") -
+     סמן עכבר + הדגשת מסגרת כשפעילות, כמו .task.on למטה. */
+  .stat.clickable { cursor: pointer; }
+  .stat.clickable:hover { box-shadow: var(--shadow-hover); }
+  .stat.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .stat[data-kpi].on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
   .task.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
   .task .ti {
     width: 28px; height: 28px; border-radius: 9px; flex-shrink: 0;
@@ -1600,6 +1606,9 @@
     <p class="modal-hint">הליד יועבר עם כל התיעוד שנצבר עד עכשיו. כשהנציגה תסמן שסיימה
       לטפל, הסטטוס שהיא תבחר יתעדכן כאן אוטומטית.</p>
     <div class="rep-picker" id="repPicker"></div>
+    <label class="modal-label" for="moveNote">הערה לנציגה (אופציונלי)</label>
+    <textarea class="modal-input" id="moveNote" rows="3"
+      placeholder="מה חשוב שהיא תדע לפני שהיא מרימה טלפון? ההערה תוצג לה על הכרטיס."></textarea>
     <div class="modal-error" id="moveError"></div>
     <div class="modal-actions">
       <button class="btn" id="moveCancelBtn" type="button">ביטול</button>
@@ -1641,6 +1650,7 @@
   let sortState = { key: null, dir: 1 }; // מיון א-ב בלחיצה על כותרת עמודה - ר' setupColumnSortClicks_
   let viewMode = 'responded'; // 'responded' = רק מי שהגיב (ברירת מחדל) | 'all' = הכל. ר' setupViewToggle_
   let activeFocusFilter = null; // מפתח הקובייה שנלחצה ב"המוקד של היום" (ר' FOCUS_DEFS)
+  let activeKpiFilter = null;   // 'responded' | 'today' - הקובייה העליונה שנלחצה (ר' setupKpiClicks_)
   let repNames = [];    // שמות הנציגות לתפריט "העבר ליד ל..." (מטאב "נציגות")
   let repWorkload = []; // [{ name, open, total }] - לסרגל הצד
   // 20 שורות בעמוד - הלקוחה ביקשה לראות 15-20 רשומות בלי לגלול.
@@ -1920,18 +1930,22 @@
     const stats = [
       { label: 'סה"כ לידים בקמפיין', value: data.total, icon: 'leads', fg: 'var(--accent)', bg: 'var(--accent-soft)',
         spark: dailySeries_(data.rows, function () { return true; }) },
+      // שתי הקוביות האלה ניתנות ללחיצה - kpi הוא המפתח שנשמר ב-activeKpiFilter,
+      // אותה בדיוק הגדרה שבודקת applyFilters_/getFilteredRows_.
       { label: 'תגובות התקבלו', value: data.replies, icon: 'reply', fg: 'var(--accent-2)', bg: 'var(--accent-2-soft)',
-        delta: 'מתוך ' + data.sent + ' שנשלחו',
+        delta: 'מתוך ' + data.sent + ' שנשלחו', kpi: 'responded',
         spark: dailySeries_(data.rows, function (r) { return !!r.reply || !!r.firstReply; }) },
       { label: 'תגובות חדשות היום', value: newToday, icon: 'bot', fg: 'var(--bad)', bg: 'rgba(225,68,47,.13)',
         delta: newToday ? 'דורשות התייחסות' : 'אין חדש מהבוקר',
-        hero: !!newToday,
+        hero: !!newToday, kpi: 'today',
         spark: dailySeries_(data.rows, function (r) { return !!r.lastActivityMs; }) }
     ];
     const statsHtml = stats.map(function (s) {
       const delta = s.delta ? '<div class="delta">' + s.delta + '</div>' : '';
-      return '<div class="stat' + (s.hero ? ' hero' : '') +
-        '" style="--sc:' + s.fg + ';--sb:' + s.bg + ';color:inherit">' +
+      const clickable = s.kpi ? ' clickable' : '';
+      const kpiAttr = s.kpi ? ' data-kpi="' + s.kpi + '" role="button" tabindex="0"' : '';
+      return '<div class="stat' + (s.hero ? ' hero' : '') + clickable +
+        '" style="--sc:' + s.fg + ';--sb:' + s.bg + ';color:inherit"' + kpiAttr + '>' +
         '<div class="stat-head">' +
           '<div class="stat-icon" style="background:' + s.bg + ';color:' + s.fg + '">' + ICONS[s.icon] + '</div>' +
           '<span class="label">' + s.label + '</span>' +
@@ -1958,6 +1972,7 @@
         '<div class="rate-bar"><i style="width:' + Math.max(0, Math.min(100, replyRate)) + '%"></i></div>' +
       '</div>';
     document.getElementById('stats').innerHTML = statsHtml + rateTileHtml;
+    setupKpiClicks_();
 
     // גרף הפילוח ירד מהמסך הראשי (החליף אותו פס שיעור התגובה), אבל
     // הלוגיקה נשארת - הלג'נד מוסתר ומשמש רק לחישוב הקטגוריות לסינון.
@@ -2462,6 +2477,14 @@
         return !!r.hasResponded || !!r.scheduledAt || !!r.scheduleMissingDate;
       });
     }
+    // הקוביות העליונות: "תגובות" = מי שהגיב באיזשהו ערוץ, "תגובות חדשות
+    // היום" = מי שהגיב היום. אותה הגדרה בדיוק שלפיה מחושב המספר בקובייה,
+    // כדי שמה שרואים בטבלה תמיד יסתדר עם המספר שנלחץ.
+    if (activeKpiFilter === 'responded') {
+      rows = rows.filter(function (r) { return !!r.hasResponded; });
+    } else if (activeKpiFilter === 'today') {
+      rows = rows.filter(isNewToday_);
+    }
     if (activeCategoryFilter) {
       rows = rows.filter(function (r) { return rowMatchesCategory_(r, activeCategoryFilter); });
     }
@@ -2542,27 +2565,67 @@
    * מהלג'נד, או סינון עמודה) + כמה שורות מוצגות מתוך הסך הכול בקמפיין -
    * כדי שלעולם לא יקרה שסינון ישן ונשכח יגרום ל"חשבתי שראיתי הכל" בטעות.
    */
+  /** מנקה את כל הסינונים הפעילים בבת אחת - חיפוש, קטגוריה, מוקד, עמודות וקוביות עליונות. */
+  function clearAllFilters_() {
+    document.getElementById('searchInput').value = '';
+    activeCategoryFilter = null;
+    activeFocusFilter = null;
+    activeKpiFilter = null;
+    columnFilters = {};
+    renderFocusPanels_(currentData ? currentData.rows : []);
+    renderKpiActiveState_();
+    renderTableHead_(visibleColumns);
+    applyFilters_(true);
+  }
+
   function renderActiveFilterChip_() {
     const el = document.getElementById('activeFilterChip');
     if (!el || !currentData) return;
     const q = document.getElementById('searchInput').value.trim();
     const hasColumnFilters = Object.keys(columnFilters).some(function (k) { return !!columnFilters[k]; });
-    if (!q && !activeCategoryFilter && !hasColumnFilters && !activeFocusFilter) { el.innerHTML = ''; return; }
+    if (!q && !activeCategoryFilter && !hasColumnFilters && !activeFocusFilter && !activeKpiFilter) {
+      el.innerHTML = ''; return;
+    }
 
     const shown = getFilteredRows_().length;
     const total = currentData.rows.length;
     const focus = activeFocusFilter ? focusDef_(activeFocusFilter) : null;
-    const focusText = focus ? ' - ' + focus.label : '';
+    const kpiText = activeKpiFilter === 'responded' ? ' - תגובות'
+      : (activeKpiFilter === 'today' ? ' - תגובות חדשות היום' : '');
+    const focusText = focus ? ' - ' + focus.label : kpiText;
     el.innerHTML = '<span class="filter-chip">מציג ' + shown + ' מתוך ' + total + ' (יש סינון פעיל' + focusText + ')' +
       ' <button type="button" id="clearAllFilters">נקה הכל ✕</button></span>';
     document.getElementById('clearAllFilters').addEventListener('click', function () {
-      document.getElementById('searchInput').value = '';
-      activeCategoryFilter = null;
-      activeFocusFilter = null;
-      columnFilters = {};
-      renderFocusPanels_(currentData ? currentData.rows : []);
-      renderTableHead_(visibleColumns);
-      applyFilters_(true);
+      clearAllFilters_();
+    });
+  }
+
+  /**
+   * לחיצה על קובייה עליונה מסננת ("תגובות" / "תגובות חדשות היום"), לחיצה
+   * חוזרת מבטלת - כמו "המוקד של היום". גם Enter/Space, כדי שיהיה נגיש
+   * גם למי שמנווט במקלדת (role="button" בלי זה חצי-שימושי).
+   */
+  function setupKpiClicks_() {
+    const el = document.getElementById('stats');
+    if (!el) return;
+    el.querySelectorAll('.stat[data-kpi]').forEach(function (tile) {
+      const toggle = function () {
+        const key = tile.getAttribute('data-kpi');
+        activeKpiFilter = activeKpiFilter === key ? null : key;
+        renderKpiActiveState_();
+        applyFilters_(true);
+      };
+      tile.addEventListener('click', toggle);
+      tile.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+    });
+    renderKpiActiveState_();
+  }
+
+  function renderKpiActiveState_() {
+    document.querySelectorAll('#stats .stat[data-kpi]').forEach(function (tile) {
+      tile.classList.toggle('on', tile.getAttribute('data-kpi') === activeKpiFilter);
     });
   }
 
@@ -3071,6 +3134,7 @@
     const errorEl = document.getElementById('moveError');
     const confirmBtn = document.getElementById('moveConfirmBtn');
     const cancelBtn = document.getElementById('moveCancelBtn');
+    const noteEl = document.getElementById('moveNote');
     // אם חלק מהחלון חסר - יוצאים בשקט במקום להפיל את כל הסקריפט
     // ואיתו את הדשבורד כולו.
     if (!modal || !pickerEl || !confirmBtn || !cancelBtn) return;
@@ -3083,6 +3147,7 @@
       const row = findRow_(phone);
       movePhone = phone;
       chosenRep = '';
+      if (noteEl) noteEl.value = '';
       errorEl.textContent = '';
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'העבר ליד';
@@ -3133,7 +3198,7 @@
           confirmBtn.textContent = 'העבר ליד';
           errorEl.textContent = (err && err.message) ? err.message : err;
         })
-        .assignLead(currentTabName, movePhone, chosenRep);
+        .assignLead(currentTabName, movePhone, chosenRep, noteEl ? noteEl.value : '');
     });
   }
 
