@@ -347,9 +347,35 @@
         dismissedBanner = false;
         showBanner(fresh);
         notifyBrowser(fresh);
+        playAlertSound_();
       }
     }
     seenIds = ids;
+  }
+
+  // צליל התראה קצר (שני "צפצופים") - נבנה ישירות ב-Web Audio, בלי קובץ
+  // שמע חיצוני, כדי שהדף יישאר עצמאי (ולא ייתקע אם קובץ לא נטען).
+  // דורש שהנציגה כבר קיימה אינטראקציה עם הדף פעם אחת (לחיצה/גלילה) -
+  // מגבלת דפדפנים סטנדרטית על השמעת שמע; הבאנר הוויזואלי תמיד יעבוד גם בלעדיו.
+  function playAlertSound_() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      [0, 0.16].forEach(function (delay) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + delay + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + delay + 0.14);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + delay);
+        osc.stop(ctx.currentTime + delay + 0.15);
+      });
+    } catch (e) { /* דפדפן שלא תומך - הבאנר הוויזואלי מספיק */ }
   }
 
   function showBanner(fresh) {
