@@ -2029,7 +2029,23 @@ function debugRepTemplate() {
 function debugStatus() {
   const sheetName = 'שם הטאב כאן';
   const phone = '0500000000';
+  debugStatusFor_(sheetName, phone);
+}
 
+/**
+ * עטיפה נוחה להרצה ישירה - בדיקת הסטטוס של יעקב אפללו בקמפיין
+ * "אודיוקודס" (התלונה: הסטטוס חוזר לערך הקודם אחרי כל עדכון ידני).
+ * בודקת גם אם הוא מופיע בטעות בכמה טאבים/שורות - כי אם כן, ייתכן
+ * שהעדכון נכתב לשורה אחרת מזו שמוצגת בדשבורד.
+ */
+function debugYaakov() {
+  debugContactByPhone('0545689396');
+  Logger.log('');
+  Logger.log('=== פירוט מלא לחישוב הסטטוס - טאב "אודיוקודס" ===');
+  debugStatusFor_('אודיוקודס', '0545689396');
+}
+
+function debugStatusFor_(sheetName, phone) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) { Logger.log('הטאב "' + sheetName + '" לא נמצא'); return; }
@@ -2052,6 +2068,7 @@ function debugStatus() {
   const pearlTag = get_(CALL_TAG_HEADER);
   const statusList = getStatusList_();
 
+  Logger.log('שורה נמצאה במיקום: ' + found.rowIndex);
   Logger.log('--- ערכי הגלם מהשורה ---');
   Logger.log('"' + STATUS_HEADER + '" (contactStatus): "' + status + '"');
   Logger.log('"' + FIRST_REPLY_HEADER + '" (contactStatus הראשי ב-unifiedStatus_): "' + firstReply + '"');
