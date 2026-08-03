@@ -1384,33 +1384,18 @@ function callTextForStatus_(transcript, summary, tagText) {
 }
 
 /**
- * מושכת מפרלה את הפרטים המלאים של השיחה: התמלול, קישור להקלטה ומשך.
- * ה-Webhook עצמו לא כולל אותם - רק סיכום קצר - ולכן בלי הקריאה הזו
- * הלקוחה נשארת בלי מה שבאמת נאמר בשיחה.
- *
- * לעולם לא זורקת: אם אין מזהה שיחה, אם פרלה מחזירה שגיאה או אם המבנה
- * השתנה - מוחזר אובייקט ריק והזרימה ממשיכה בדיוק כמו קודם.
+ * פרטי השיחה המלאים: התמלול, קישור להקלטה ומשך - **כבר נמצאים ב-Webhook
+ * עצמו** (payload.transcript / payload.recording / payload.duration),
+ * אומת בפועל מול אירוע אמיתי מפרלה. אין צורך בקריאת API נוספת - ניסיון
+ * קודם לפנות שוב לפרלה (GET /Call/{id}) התבסס על ניחוש שגוי של מזהה
+ * השיחה ולכן מעולם לא הביא תוצאה.
  */
 function pearlCallDetails_(payload) {
-  const empty = { transcript: '', recording: '', duration: 0 };
-  const callId = String(pearlFirst_(payload || {}, ['id', 'callId', 'call_id', 'conversationId']) || '');
-  if (!callId) return empty;
-
-  try {
-    const res = pearlFetch_('get', '/Call/' + encodeURIComponent(callId));
-    if (!res.ok || !res.data) {
-      Logger.log('שליפת פרטי שיחה מפרלה נכשלה (' + res.code + '): ' + String(res.text || '').slice(0, 200));
-      return empty;
-    }
-    return {
-      transcript: pearlTranscriptText_(pearlFirst_(res.data, ['transcript', 'Transcript', 'conversation', 'messages'])),
-      recording: String(pearlFirst_(res.data, ['recording', 'recordingUrl', 'Recording', 'audioUrl']) || ''),
-      duration: Number(pearlFirst_(res.data, ['duration', 'callDuration']) || 0)
-    };
-  } catch (err) {
-    Logger.log('שליפת פרטי שיחה מפרלה נכשלה: ' + err.message);
-    return empty;
-  }
+  return {
+    transcript: pearlTranscriptText_(payload && payload.transcript),
+    recording: String((payload && payload.recording) || ''),
+    duration: Number((payload && payload.duration) || 0)
+  };
 }
 
 /**
@@ -1993,6 +1978,58 @@ function debugContactByPhone(phone) {
  */
 function debugIshai() {
   debugContactByPhone('532742755');
+}
+
+/**
+ * כלי אבחון: מדפיס ליומן את **כל** הערכים שנכנסים לחישוב "סטטוס איש
+ * קשר" (unifiedStatus_) עבור שורה ספציפית - כדי לדעת בדיוק למה קובייה
+ * כמו "בתהליך" סופרת אחרת ממה שמוצג בעמודת הסטטוס בטבלה. להרצה ידנית
+ * מהעורך: להזין את שם הטאב ואת הטלפון בשורות למטה ולהריץ.
+ */
+function debugStatus() {
+  const sheetName = 'שם הטאב כאן';
+  const phone = '0500000000';
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) { Logger.log('הטאב "' + sheetName + '" לא נמצא'); return; }
+
+  const found = findRowByPhone_(sheet, phone);
+  if (!found) { Logger.log('הטלפון לא נמצא בטאב "' + sheetName + '"'); return; }
+
+  const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
+  const get_ = function (header, legacy) {
+    const col = legacy ? findHeaderIndex_(found.headers, header, legacy)
+                       : findColumnNormalized_(found.headers, header);
+    return col !== -1 ? String(rowValues[col] || '') : '(אין עמודה)';
+  };
+
+  const status = get_(STATUS_HEADER, STATUS_HEADER_LEGACY);
+  const firstReply = get_(FIRST_REPLY_HEADER);
+  const callStatus = get_(CALL_STATUS_HEADER);
+  const callResult = get_(CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
+  const transcript = get_(CALL_TRANSCRIPT_HEADER);
+  const pearlTag = get_(CALL_TAG_HEADER);
+  const statusList = getStatusList_();
+
+  Logger.log('--- ערכי הגלם מהשורה ---');
+  Logger.log('"' + STATUS_HEADER + '" (contactStatus): "' + status + '"');
+  Logger.log('"' + FIRST_REPLY_HEADER + '" (contactStatus הראשי ב-unifiedStatus_): "' + firstReply + '"');
+  Logger.log('"' + CALL_STATUS_HEADER + '" (callStatus): "' + callStatus + '"');
+  Logger.log('"' + CALL_RESULT_HEADER + '" (callResult): "' + callResult + '"');
+  Logger.log('"' + CALL_TRANSCRIPT_HEADER + '": "' + transcript + '"');
+  Logger.log('"' + CALL_TAG_HEADER + '": "' + pearlTag + '"');
+  Logger.log('--- רשימת סטטוסים (מהטאב "רשימת סטטוסים") ---');
+  Logger.log(JSON.stringify(statusList));
+  Logger.log('--- בדיקת חוקיות כל מועמד ---');
+  Logger.log('firstReply חוקי? ' + isAllowedStatusValue_(firstReply, statusList));
+  Logger.log('callStatus חוקי? ' + isAllowedStatusValue_(callStatus, statusList));
+  Logger.log('status חוקי? ' + isAllowedStatusValue_(status, statusList));
+  Logger.log('--- התוצאה הסופית ---');
+  const callText = callTextForStatus_(transcript, callResult, pearlTag);
+  const unified = unifiedStatus_(firstReply, callStatus, status, statusList, callText);
+  Logger.log('unifiedStatus_ מחזירה: "' + unified + '"');
+  Logger.log('מכילה "בתהליך"? ' + (unified.indexOf('בתהליך') !== -1));
 }
 
 /**
@@ -2838,6 +2875,18 @@ ${callHistory ? 'Call History:\n' + callHistory + '\n' : ''}
  * התוצאה נשמרת בשורת ההקצאה: לחיצה חוזרת מחזירה את מה שכבר נוצר, בלי
  * קריאה נוספת ל-Gemini (מהיר יותר לנציגה, וזול יותר ככל שיש יותר נציגות).
  */
+/**
+ * מסכמת ב-AI עבור דשבורד הנציגה - **קוראת מהשורה החיה בטאב הקמפיין**,
+ * לא מהצילום הקפוא שנשמר ברגע ההעברה (assignLead.snapshot) - בקשה
+ * מפורשת של הלקוחה: הטיפ ימשיך להתעדכן גם אם ממשיכים לדבר עם הליד
+ * אחרי ההעברה (עוד שיחת פרלה/וואטסאפ). "צילום המצב" עצמו (מה שהנציגה
+ * רואה בכרטיס לפני שהיא לוחצת על ה-AI) לא השתנה - רק המקור של הכפתור.
+ * אין מטמון קבוע יותר (לעומת הגרסה הקודמת): כל לחיצה מייצרת סיכום
+ * עדכני, כי המטרה היא בדיוק לשקף מה שקרה בינתיים.
+ * אם השורה בקמפיין נמחקה/הטאב לא קיים - נופלים בחזרה לצילום המצב, כדי
+ * שהכפתור לא ייכשל סתם על משהו שקרה בצד השני (ר' עקרון "כתיבה חזרה"
+ * ב-writeBackRepStatus_).
+ */
 function getRepAiSummary(repKey, assignmentId) {
   const rep = repByKey_(repKey);
   if (!rep) throw new Error('לינק לא מזוהה');
@@ -2846,8 +2895,11 @@ function getRepAiSummary(repKey, assignmentId) {
   const H = data.headers;
   const idCol = assignCol_(H, 'מזהה הקצאה');
   const repCol = assignCol_(H, 'נציגה');
-  const snapCol = assignCol_(H, 'תיעוד בעת ההעברה');
+  const campCol = assignCol_(H, 'קמפיין');
+  const phoneCol = assignCol_(H, 'טלפון נייד');
   const nameCol = assignCol_(H, 'איש קשר');
+  const noteToRepCol = assignCol_(H, 'הערה לנציגה');
+  const snapCol = assignCol_(H, 'תיעוד בעת ההעברה');
 
   for (let i = 0; i < data.values.length; i++) {
     const row = data.values[i];
@@ -2856,18 +2908,39 @@ function getRepAiSummary(repKey, assignmentId) {
       throw new Error('ההקצאה הזו שייכת לנציגה אחרת');
     }
 
-    const cacheCol = ensureColumn_(data.sheet, H, 'סיכום AI');
-    const cached = data.sheet.getRange(i + 2, cacheCol + 1).getValue();
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { /* מטמון פגום - ניצור מחדש */ }
+    const sheetName = String(row[campCol] || '');
+    const phone = String(row[phoneCol] || '');
+    const noteToRep = noteToRepCol !== -1 ? String(row[noteToRepCol] || '') : '';
+
+    let whatsappHistory = '';
+    let callHistory = '';
+    const sheet = sheetName ? SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName) : null;
+    const found = sheet ? findRowByPhone_(sheet, phone) : null;
+    if (found) {
+      const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
+      const get_ = function (header, legacy) {
+        const col = legacy ? findHeaderIndex_(found.headers, header, legacy)
+                           : findColumnNormalized_(found.headers, header);
+        return col !== -1 ? String(rowValues[col] || '') : '';
+      };
+      whatsappHistory = get_(REPLY_HEADER, REPLY_HEADER_LEGACY);
+      callHistory = callTextForStatus_(get_(CALL_TRANSCRIPT_HEADER),
+        get_(CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY), '');
     }
 
-    const history = String(row[snapCol] || '').trim();
-    if (!history) throw new Error('אין תיעוד שיחה לסכם עבור הליד הזה');
+    if (!whatsappHistory && !callHistory) {
+      callHistory = String(row[snapCol] || '');
+    }
+    if (noteToRep) {
+      callHistory = [callHistory, 'הערה מטליה בזמן ההעברה: ' + noteToRep]
+        .filter(function (s) { return !!s.trim(); }).join('\n');
+    }
 
-    const result = geminiSummarize_(String(row[nameCol] || ''), history, '');
-    data.sheet.getRange(i + 2, cacheCol + 1).setValue(JSON.stringify(result));
-    return result;
+    if (!whatsappHistory && !callHistory) {
+      throw new Error('אין עדיין תיעוד לסכם עבור הליד הזה');
+    }
+
+    return geminiSummarize_(String(row[nameCol] || ''), whatsappHistory, callHistory);
   }
   throw new Error('ההקצאה לא נמצאה');
 }
