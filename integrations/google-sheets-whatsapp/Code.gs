@@ -2712,6 +2712,14 @@ function completeAssignment(repKey, assignmentId, statusText, noteText) {
       data.sheet.getRange(rowIndex, noteCol + 1).setValue(noteText || '');
       data.sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
 
+      // באג אמיתי שנמצא בפועל: REP_QUICK_STATUSES_ (הכפתורים שהנציגה בוחרת
+      // מהם) יכול להכיל ערך שלא קיים ב"רשימת סטטוסים" (למשל "תואמה
+      // פגישה" - היה חסר). writeBackRepStatus_ כותבת אותו ל"סטטוס איש
+      // קשר" (עדיפות #1 ב-unifiedStatus_), אבל אם הוא לא באוצר המילים
+      // הסגור - unifiedStatus_ מדלג עליו ומציגה סטטוס אחר לגמרי בדשבורד,
+      // למרות שהעמודה עצמה נכונה. בדיוק כמו טקסט כפתור וואטסאפ חדש -
+      // רושמים אותו ברשימה אוטומטית לפני הכתיבה חזרה, כדי שהוא תמיד יהיה תקין.
+      addStatusIfMissing_(statusText);
       writeBackRepStatus_(String(row[campCol]), String(row[phoneCol]), rep.name, statusText, noteText);
       return {
         success: true,
