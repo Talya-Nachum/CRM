@@ -401,43 +401,6 @@ function lastContactSheet_(ss, phoneSuffixValue) {
 }
 
 /**
- * מוצא-מילוט אחרון: מספר טלפון שמעולם לא נשלחה אליו הודעה/שיחה דרך
- * המערכת הזו (למשל הקלדה ידנית בוואטסאפ, לא דרך כפתור "שלח הודעות") -
- * אין שום זיכרון פנימי לגביו. סורק את כל טאבי הקמפיין בחיפוש שורה עם
- * אותו טלפון; אם יש כמה התאמות, לא ודאי איזו נכונה - נבחר הקמפיין שהתחיל
- * הכי לאחרונה (recordCampaignStart_, פרוקסי סביר ל"הכי פעיל עכשיו") ונרשמת
- * אזהרה ביומן כדי שאפשר יהיה לבדוק/לנקות שורות בדיקה ישנות שנשארו בטאב
- * לא-רלוונטי. עדיף ניחוש מודע ורשום מאשר לא לכתוב בכלל - זו בקשה מפורשת
- * של הלקוחה (בניגוד לגרסה קודמת של הפונקציה הזו).
- */
-function bestEffortCampaignSheetsForPhone_(ss, incomingPhone) {
-  const allSheets = getCampaignSheets_(ss);
-  const matches = [];
-  allSheets.forEach(function (sheet) {
-    const headers = headerRow_(sheet);
-    const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
-    if (phoneCol === -1) return;
-    const data = sheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) {
-      if (phoneSuffix_(data[i][phoneCol]) === incomingPhone) { matches.push(sheet); return; }
-    }
-  });
-  if (matches.length > 1) {
-    const props = PropertiesService.getScriptProperties();
-    matches.sort(function (a, b) {
-      const ta = new Date(props.getProperty('CAMPAIGN_START_' + a.getName()) || 0).getTime();
-      const tb = new Date(props.getProperty('CAMPAIGN_START_' + b.getName()) || 0).getTime();
-      return tb - ta;
-    });
-    Logger.log('אזהרה: טלפון המסתיים ב-' + incomingPhone + ' קיים בכמה קמפיינים בו-זמנית (' +
-      matches.map(function (s) { return s.getName(); }).join(', ') +
-      ') בלי זיכרון שליחה מהמערכת - נבחר "' + matches[0].getName() +
-      '" (הקמפיין שהתחיל הכי לאחרונה). כדאי לבדוק אם יש שורת בדיקה ישנה שכדאי להסיר.');
-  }
-  return matches;
-}
-
-/**
  * סופרת אירועי פעילות (תשובת וואטסאפ / תוצאת שיחה) ביום הנוכחי, לכל
  * טאב קמפיין - לצורך גרף המגמה של 7 הימים האחרונים בדשבורד. נשמר
  * ב-Script Properties כ-JSON קטן {"yyyy-MM-dd": count, ...}, עם ניקוי
@@ -1012,11 +975,11 @@ function handleInforuWebhook_(ss, payload) {
     // (recordLastContact_), מהחדש לישן. עדיין וודאי שאנחנו שלחנו משם.
     if (!sheets.length) sheets = trackedCampaignSheets_(ss, incomingPhone);
 
-    // שכבה 3 - מוצא-מילוט: הודעה שמעולם לא יצאה דרך המערכת (למשל
-    // הקלדה ידנית בוואטסאפ). לא ודאי, אבל עדיף ניחוש רשום ומודע מאשר
-    // תגובה שלא נכתבת בשום מקום - בקשה מפורשת של הלקוחה.
-    if (!sheets.length) sheets = bestEffortCampaignSheetsForPhone_(ss, incomingPhone);
-
+    // אין שכבה שלישית בכוונה: הודעה שיצאה בעקיפין (לא דרך המערכת, למשל
+    // הקלדה ידנית בוואטסאפ) - אין שום דרך לדעת בוודאות לאיזה קמפיין
+    // שייכת התגובה שלה, ולכן היא לא מתעדכנת בשום מקום. "לא התעדכן"
+    // הוא בעצמו סימן שהמערכת לא זיהתה שליחה משלה - זו בקשה מפורשת של
+    // הלקוחה, בניגוד לגרסה קודמת שניחשה קמפיין ולעיתים טעתה.
     if (!sheets.length) {
       logSheetAppendOrphan_(ss, incomingPhone, 'וואטסאפ');
       return;
@@ -1318,13 +1281,11 @@ function orderedPearlSheets_(ss, incomingPhone, eventPearlId) {
   if (pearlMatched.length) return pearlMatched;
 
   // אחרת - כל הטאבים שהתקשרנו מהם בפועל למספר הזה (recordLastContact_
-  // ב-startCallsInSheet_), מהחדש לישן. ורק אם גם זה לא ידוע בכלל (הליד
-  // נטען ישירות לפרלה בלי לעבור דרך המערכת שלנו) - מוצא-מילוט אחרון
-  // לפי טלפון בלבד, עם אזהרה ביומן אם יש כמה מועמדים (ר' תיעוד
-  // bestEffortCampaignSheetsForPhone_).
-  const tracked = trackedCampaignSheets_(ss, incomingPhone);
-  if (tracked.length) return tracked;
-  return bestEffortCampaignSheetsForPhone_(ss, incomingPhone);
+  // ב-startCallsInSheet_), מהחדש לישן. אם גם זה לא ידוע (הליד נטען ישירות
+  // לפרלה בלי לעבור דרך המערכת שלנו) - שום טאב, בכוונה: אין דרך לדעת
+  // בוודאות לאיזה קמפיין השיחה שייכת, ועדיף "לא התעדכן" (סימן שהשיחה
+  // לא יצאה מכאן) על פני ניחוש שעלול לעדכן קמפיין לא-קשור.
+  return trackedCampaignSheets_(ss, incomingPhone);
 }
 
 /**
