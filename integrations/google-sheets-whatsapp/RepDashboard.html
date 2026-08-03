@@ -353,43 +353,44 @@
     seenIds = ids;
   }
 
-  // צליל התראה קצר (שני "צפצופים") - נבנה ישירות ב-Web Audio, בלי קובץ
-  // שמע חיצוני. ה-AudioContext נוצר/מופעל (resume) רק בתגובה ישירה
-  // ללחיצה אמיתית של הנציגה (warmAudio_ למטה) ונשמר לשימוש חוזר -
-  // אם יוצרים אותו רק בתוך ה-interval (בלי לחיצה קרובה) הדפדפן חוסם
-  // אותו בשקט (מדיניות autoplay) והוא נשאר "suspended" בלי שגיאה
-  // ובלי צליל, שזה בדיוק מה שקרה בבדיקה. הבאנר הוויזואלי תמיד יעבוד גם בלעדיו.
-  let audioCtx_ = null;
+  // צליל התראה קצר (שני "צפצופים"), טון 880Hz למשך כ-0.22 שניות, ספון
+  // כ-WAV ב-data URI (בלי קובץ חיצוני). **לא** משתמשים ב-Web Audio
+  // (AudioContext) - כרום משהה (suspend) AudioContext לבד אחרי כ-30
+  // שניות חוסר פעילות, ובדיקת ליד חדש רצה כל 60 שניות - כך שהקונטקסט
+  // תמיד היה "יישן" בדיוק כשצריך אותו, וזה מה שקרה בפועל בבדיקה.
+  // אלמנט <audio> רגיל לא סובל מהבעיה הזו - ברגע שהושמע בהצלחה פעם
+  // אחת בעקבות לחיצה אמיתית (warmAudio_), הדפדפן ממשיך לאפשר לו
+  // להתנגן גם בלי לחיצה נוספת, כולל מתוך ה-interval.
+  const BEEP_DATA_URI = 'data:audio/wav;base64,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';
+  let audioEl_ = null;
 
   function warmAudio_() {
-    if (audioCtx_) return;
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
+    if (audioEl_) return;
     try {
-      audioCtx_ = new Ctx();
-      if (audioCtx_.state === 'suspended') audioCtx_.resume().catch(function () {});
+      audioEl_ = new Audio(BEEP_DATA_URI);
+      audioEl_.volume = 0.6;
+      // מנגנים ומיד עוצרים - זה מה ש"פותח" הרשאה להשמעה עתידית בלי
+      // לחיצה נוספת, בלי שהנציגה תשמע צליל מיותר עכשיו.
+      const p = audioEl_.play();
+      if (p && p.then) {
+        p.then(function () { audioEl_.pause(); audioEl_.currentTime = 0; }).catch(function () {});
+      }
     } catch (e) { /* מתעלמים */ }
   }
 
   function playAlertSound_() {
     try {
-      if (!audioCtx_) warmAudio_();
-      if (!audioCtx_) return;
-      if (audioCtx_.state === 'suspended') audioCtx_.resume().catch(function () {});
-      const ctx = audioCtx_;
-      [0, 0.16].forEach(function (delay) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.0001, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + delay + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + delay + 0.14);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(ctx.currentTime + delay);
-        osc.stop(ctx.currentTime + delay + 0.15);
-      });
+      if (!audioEl_) warmAudio_();
+      if (!audioEl_) return;
+      audioEl_.currentTime = 0;
+      audioEl_.play().catch(function () {});
+      setTimeout(function () {
+        try {
+          const second = new Audio(BEEP_DATA_URI);
+          second.volume = 0.6;
+          second.play().catch(function () {});
+        } catch (e) { /* מתעלמים */ }
+      }, 280);
     } catch (e) { /* דפדפן שלא תומך - הבאנר הוויזואלי מספיק */ }
   }
 
