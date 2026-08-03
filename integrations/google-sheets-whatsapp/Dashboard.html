@@ -1000,6 +1000,12 @@
   }
 
   .name-cell { font-weight: 600; }
+  .name-link {
+    background: none; border: none; padding: 0; margin: 0; font: inherit; color: var(--accent-ink);
+    cursor: pointer; text-align: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 100%; display: inline-block;
+  }
+  .name-link:hover { text-decoration: underline; }
   .phone-cell { font-variant-numeric: tabular-nums; color: var(--text-muted); }
   .date-cell { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12.5px; white-space: nowrap; }
 
@@ -1381,6 +1387,65 @@
     font-weight: 800;
   }
 
+  /* ---------- מסך פרטי איש קשר (לחיצה על שם בטבלה) ---------- */
+  .detail-overlay {
+    display: none; position: fixed; inset: 0; background: var(--bg-solid); z-index: 20;
+    overflow-y: auto;
+  }
+  .detail-overlay.show { display: block; }
+  .detail-panel { max-width: 920px; margin: 0 auto; padding: 18px 16px 60px; }
+  .detail-top { margin-bottom: 12px; }
+  .detail-back {
+    display: inline-flex; align-items: center; gap: 6px; background: none; border: none;
+    color: var(--text-muted); font-family: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer; padding: 6px 4px;
+  }
+  .detail-back:hover { color: var(--text); }
+  .detail-head {
+    display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); margin-bottom: 16px;
+  }
+  .detail-avatar {
+    width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center;
+    justify-content: center; font-weight: 800; font-size: 17px; background: var(--accent-soft); color: var(--accent-ink);
+  }
+  .detail-id { flex: 1; min-width: 0; }
+  .detail-nm { font-size: 18px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .detail-co { font-size: 13px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .detail-status-block { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+  .detail-lastact { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+  .detail-grid { display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start; }
+  @media (max-width: 720px) { .detail-grid { grid-template-columns: 1fr; } }
+
+  .detail-grid .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 16px 18px; margin-bottom: 14px;
+  }
+  .detail-grid .card h3 { font-size: 13px; font-weight: 800; margin: 0 0 12px; color: var(--text-muted); }
+  .detail-summary-text { margin: 0; font-size: 13.5px; line-height: 1.6; }
+
+  .detail-timeline { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
+  .detail-bub { max-width: 90%; padding: 10px 13px; border-radius: 12px; font-size: 13.5px; line-height: 1.55; }
+  .detail-bub .who-tag {
+    font-size: 10.5px; font-weight: 800; margin-bottom: 3px; display: flex; align-items: center; gap: 5px;
+  }
+  .detail-bub.lead { background: var(--surface-2); align-self: flex-start; border: 1px solid var(--border); }
+  .detail-bub.pearl { background: var(--accent-soft); color: var(--accent-ink); align-self: flex-end; }
+  .detail-bub.team { background: var(--good-soft); color: var(--good); align-self: flex-end; border: 1px dashed var(--good); }
+
+  .detail-facts { display: grid; grid-template-columns: 1fr; gap: 10px; font-size: 13px; }
+  .detail-facts div b { display: block; font-size: 11px; color: var(--text-muted); font-weight: 700; margin-bottom: 2px; }
+
+  .detail-actbtn {
+    width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 10px; border-radius: 10px; font-family: inherit; font-size: 13.5px; font-weight: 800;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+    margin-bottom: 8px;
+  }
+  .detail-actbtn:last-child { margin-bottom: 0; }
+  .detail-actbtn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .detail-actbtn-transfer { background: var(--accent-2-soft); color: var(--accent-2); border-color: var(--accent-2-soft); }
+
   .modal-label {
     font-size: 12.5px;
     color: var(--text-muted);
@@ -1617,6 +1682,61 @@
   </div>
 </div>
 
+<!-- מסך פרטי איש קשר - לחיצה על שם בטבלה. לא נוגע בטבלה עצמה בכלל, רק
+     מציג את אותו המידע (מ-currentData.rows) בלי דחיסות, ומפעיל את אותם
+     החלונות הקיימים (העברה/הערות/AI) דרך openCrmModalFor_/openMoveModalFor_. -->
+<div class="detail-overlay" id="detailOverlay">
+  <div class="detail-panel">
+    <div class="detail-top">
+      <button class="detail-back" type="button" id="detailBackBtn">→ חזרה לרשימה</button>
+    </div>
+    <div class="detail-head">
+      <div class="detail-avatar" id="detailAvatar"></div>
+      <div class="detail-id">
+        <div class="detail-nm" id="detailName"></div>
+        <div class="detail-co" id="detailCoTitle"></div>
+      </div>
+      <div class="detail-status-block">
+        <span class="status-pill" id="detailStatusPill"></span>
+        <span class="detail-lastact" id="detailLastActivity"></span>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <div>
+        <div class="card" id="detailPearlSummaryCard" style="display:none">
+          <h3>📝 סיכום פרלה</h3>
+          <p class="detail-summary-text" id="detailPearlSummary"></p>
+        </div>
+
+        <div class="card" id="detailTranscriptCard" style="display:none">
+          <h3>☎️ תמלול מלא של השיחה</h3>
+          <div class="detail-timeline" id="detailTranscript"></div>
+        </div>
+
+        <div class="card">
+          <h3>🗒️ כל התיעוד - מהחדש לישן</h3>
+          <div class="detail-timeline" id="detailNotesFeed"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3>👤 פרטי איש קשר</h3>
+          <div class="detail-facts" id="detailFacts"></div>
+        </div>
+
+        <div class="card">
+          <h3>⚙️ פעולות</h3>
+          <button class="detail-actbtn detail-actbtn-transfer" type="button" id="detailTransferBtn">↗ העברה לנציגה</button>
+          <button class="detail-actbtn" type="button" id="detailAiBtn">✨ סיכום AI + טיפ מכירה</button>
+          <button class="detail-actbtn detail-actbtn-primary" type="button" id="detailStatusBtn">✎ עדכון סטטוס / הערה</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- חלון "לינקים לנציגות" - כל נציגה והלינק האישי שלה, מוכן להעתקה -->
 <div class="modal-overlay" id="repLinksModal">
   <div class="modal-card">
@@ -1653,6 +1773,11 @@
   let activeKpiFilter = null;   // 'responded' | 'today' - הקובייה העליונה שנלחצה (ר' setupKpiClicks_)
   let repNames = [];    // שמות הנציגות לתפריט "העבר ליד ל..." (מטאב "נציגות")
   let repWorkload = []; // [{ name, open, total }] - לסרגל הצד
+  // שתי הפונקציות האלה מוזרקות ע"י setupCrmModal_/setupMoveLead_ (שם הן
+  // מקומיות) - כדי שמסך פרטי איש הקשר (openContactDetail_) יוכל להפעיל
+  // בדיוק את אותם חלונות שכפתורי הטבלה כבר מפעילים, בלי לשכפל לוגיקה.
+  let openCrmModalFor_ = null;
+  let openMoveModalFor_ = null;
   // 20 שורות בעמוד - הלקוחה ביקשה לראות 15-20 רשומות בלי לגלול.
   const PAGE_SIZE = 20;
   const AUTO_REFRESH_MS = 30000;
@@ -2086,7 +2211,10 @@
       cell: function (r) { return '<td class="company-cell" data-tip="' + escapeHtml_(r.company || '') + '">' + (r.company ? escapeHtml_(r.company) : '—') + '</td>'; } },
     { key: 'name', label: 'איש קשר', always: true, sortable: true,
       filterValue: function (r) { return r.name || ''; },
-      cell: function (r) { return '<td class="name-cell">' + escapeHtml_(r.name) + '</td>'; } },
+      cell: function (r) {
+        return '<td class="name-cell"><button type="button" class="name-link" data-phone="' +
+          escapeHtml_(r.phone) + '">' + escapeHtml_(r.name) + '</button></td>';
+      } },
     { key: 'title', label: 'תפקיד', always: true,
       filterValue: function (r) { return r.title || ''; },
       cell: function (r) { return '<td class="title-cell" data-tip="' + escapeHtml_(r.title || '') + '">' + (r.title ? escapeHtml_(r.title) : '—') + '</td>'; } },
@@ -2979,6 +3107,7 @@
       modal.classList.add('show');
       if (autoSummarize) generateSummary_();
     }
+    openCrmModalFor_ = openModal;
 
     function closeModal() {
       modal.classList.remove('show');
@@ -3165,6 +3294,7 @@
       }
       modal.classList.add('show');
     }
+    openMoveModalFor_ = open;
 
     document.getElementById('tableBody').addEventListener('click', function (e) {
       const btn = e.target.closest('.move-btn');
@@ -3192,6 +3322,125 @@
           errorEl.textContent = (err && err.message) ? err.message : err;
         })
         .assignLead(currentTabName, movePhone, chosenRep, noteEl ? noteEl.value : '');
+    });
+  }
+
+  /** שתי אותיות ראשונות לאווטאר - ראשית שם פרטי + ראשית שם משפחה אם יש. */
+  function initials_(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2);
+    return parts[0].slice(0, 1) + parts[1].slice(0, 1);
+  }
+
+  /**
+   * מסך פרטי איש קשר - לחיצה על שם בטבלה. לא משנה את הטבלה/הדשבורד
+   * בכלל, רק מציג באופן מלא (בלי דחיסות) בדיוק את הנתונים שכבר נטענו
+   * ב-currentData.rows, ומפעיל את אותם חלונות פעולה קיימים (העברה/
+   * הערות/AI) דרך openMoveModalFor_/openCrmModalFor_ - בלי לשכפל לוגיקה.
+   */
+  function setupContactDetail_() {
+    const overlay = document.getElementById('detailOverlay');
+    if (!overlay) return;
+
+    function close() { overlay.classList.remove('show'); }
+
+    function open(phone) {
+      const r = findRow_(phone);
+      if (!r) return;
+
+      document.getElementById('detailAvatar').textContent = initials_(r.name);
+      document.getElementById('detailName').textContent = r.name || phone;
+      document.getElementById('detailCoTitle').textContent =
+        [r.company, r.title].filter(Boolean).join(' · ') || '—';
+
+      const statusText = r.unifiedStatus || 'ממתין';
+      const c = colorForStatus_(statusText);
+      const pill = document.getElementById('detailStatusPill');
+      pill.textContent = statusText;
+      pill.style.background = softStatusColor_(c);
+      pill.style.color = c;
+      document.getElementById('detailLastActivity').textContent =
+        r.lastActivity ? 'עודכן ' + r.lastActivity : '';
+
+      // סיכום פרלה - מוצג רק אם יש בכלל תוצאת שיחה מצטברת.
+      const summaryCard = document.getElementById('detailPearlSummaryCard');
+      if (r.callResult) {
+        summaryCard.style.display = '';
+        document.getElementById('detailPearlSummary').textContent = String(r.callResult);
+      } else {
+        summaryCard.style.display = 'none';
+      }
+
+      // תמלול מלא - מגיע מהשרת כטקסט מוכן ("פרלה: ..." / "הליד: ...",
+      // ר' pearlTranscriptText_ ב-Code.gs), רק צריך לפרק לבועות לפי השורה.
+      const transcriptCard = document.getElementById('detailTranscriptCard');
+      const transcriptEl = document.getElementById('detailTranscript');
+      const transcriptLines = String(r.transcript || '').split('\n').filter(function (s) { return s.trim(); });
+      if (transcriptLines.length) {
+        transcriptCard.style.display = '';
+        transcriptEl.innerHTML = transcriptLines.map(function (line) {
+          const isPearl = line.indexOf('פרלה:') === 0;
+          const isLead = line.indexOf('הליד:') === 0;
+          const cls = isPearl ? 'pearl' : (isLead ? 'lead' : 'team');
+          const tag = isPearl ? '📞 פרלה' : (isLead ? 'הליד' : '');
+          const text = line.replace(/^(פרלה|הליד):\s*/, '');
+          return '<div class="detail-bub ' + cls + '">' +
+            (tag ? '<div class="who-tag">' + tag + '</div>' : '') + escapeHtml_(text) + '</div>';
+        }).join('');
+      } else {
+        transcriptCard.style.display = 'none';
+      }
+
+      // כל התיעוד המאוחד (ליד/פרלה/מיטוב) - אותו מקור בדיוק כמו עמודת
+      // "הערות" בטבלה (buildNotesEntries_ ב-Code.gs), רק בלי חיתוך לשורה אחת.
+      const feedEl = document.getElementById('detailNotesFeed');
+      const entries = (r.notesEntries || []);
+      if (entries.length) {
+        feedEl.innerHTML = entries.map(function (e) {
+          const a = NOTE_AUTHORS[e.who] || NOTE_AUTHORS.team;
+          const cls = e.who === 'lead' ? 'lead' : (e.who === 'pearl' ? 'pearl' : 'team');
+          return '<div class="detail-bub ' + cls + '">' +
+            '<div class="who-tag">' + a.icon + ' ' + a.label + '</div>' + escapeHtml_(e.text) + '</div>';
+        }).join('');
+      } else {
+        feedEl.innerHTML = '<div class="detail-summary-text" style="color:var(--text-muted)">אין עדיין שום תיעוד.</div>';
+      }
+
+      const factsEl = document.getElementById('detailFacts');
+      const factRows = [
+        ['טלפון', r.phone],
+        ['מייל', r.email],
+        ['מקור', r.source],
+        ['הוקצה ל', r.assignedTo]
+      ].filter(function (f) { return f[1]; });
+      factsEl.innerHTML = factRows.map(function (f) {
+        return '<div><b>' + escapeHtml_(f[0]) + '</b>' + escapeHtml_(String(f[1])) + '</div>';
+      }).join('') || '<div style="color:var(--text-muted)">אין פרטים נוספים</div>';
+
+      const assigned = !!r.assignedTo;
+      const transferBtn = document.getElementById('detailTransferBtn');
+      transferBtn.disabled = assigned;
+      transferBtn.textContent = assigned ? '✓ מוקצה ל' + r.assignedTo : '↗ העברה לנציגה';
+
+      overlay.classList.add('show');
+      overlay.scrollTop = 0;
+
+      document.getElementById('detailTransferBtn').onclick = function () {
+        if (!assigned && openMoveModalFor_) openMoveModalFor_(phone);
+      };
+      document.getElementById('detailAiBtn').onclick = function () {
+        if (openCrmModalFor_) openCrmModalFor_(phone, true);
+      };
+      document.getElementById('detailStatusBtn').onclick = function () {
+        if (openCrmModalFor_) openCrmModalFor_(phone, false);
+      };
+    }
+
+    document.getElementById('detailBackBtn').addEventListener('click', close);
+    document.getElementById('tableBody').addEventListener('click', function (e) {
+      const link = e.target.closest('.name-link');
+      if (link) open(link.getAttribute('data-phone'));
     });
   }
 
@@ -3415,6 +3664,7 @@
   setupCellTooltips_();
   setupViewToggle_();
   setupMoveLead_();
+  setupContactDetail_();
   setupRepLinks_();
 
   // רענון אוטומטי: כל 30 שניות טוענים מחדש את נתוני הטאב הפעיל (בלי לגעת
