@@ -376,11 +376,9 @@
     };
     const close = document.getElementById('bannerClose');
     if (close) close.addEventListener('click', dismiss);
-    // נעלם לבד אחרי כ-15 שניות אם לא נסגר ידנית - כדי שלא יישאר תקוע
-    // בפינת המסך כל היום.
-    setTimeout(function () {
-      if (!dismissedBanner) document.getElementById('bannerBox').innerHTML = '';
-    }, 15000);
+    // בכוונה **בלי** הסתרה אוטומטית - נשאר עד שסוגרים אותו ידנית. הייתה
+    // גרסה עם היעלמות אחרי 15 שניות, אבל זה סיכון אמיתי שהנציגה תפספס
+    // אותו אם היא לא מסתכלת בדיוק באותו רגע (בדיוק מה שקרה בבדיקה).
   }
 
   // התראת מערכת אמיתית - עובדת גם כשהטאב ברקע, כל עוד הדף פתוח.
