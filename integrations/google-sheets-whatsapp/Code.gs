@@ -1989,6 +1989,47 @@ function debugContactByPhone(phone) {
 }
 
 /**
+ * כלי אבחון: לחקירת "נשלח שוב לכל הרשימה" - מדפיסה לכל טאב שהטלפון
+ * נמצא בו (יכול להיות **כמה** טאבים - זה בדיוק אחד החשודים: אותו איש
+ * קשר קיים בשני קמפיינים שונים, וכל אחד שולח לו בנפרד, מה שנראה
+ * כמו "שליחה כפולה" גם שהקוד עצמו תקין) את ערך "סטטוס"/"סטטוס דיוור"
+ * (מה ש-shouldSendNow_ בודקת בפועל) ו"תאריך ושעת שליחה" - בדיוק מה
+ * שקובע אם השורה נשלחת שוב.
+ */
+function debugSendStatusByPhone_(phone) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = getCampaignSheets_(ss);
+  let foundAny = false;
+
+  sheets.forEach(function (sheet) {
+    const found = findRowByPhone_(sheet, phone);
+    if (!found) return;
+    foundAny = true;
+
+    const statusCol = findHeaderIndex_(found.headers, STATUS_HEADER, STATUS_HEADER_LEGACY);
+    const scheduleCol = findColumnNormalized_(found.headers, SCHEDULE_HEADER);
+    const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
+    const statusVal = statusCol !== -1 ? String(rowValues[statusCol] || '') : '(אין עמודה)';
+    const scheduleRaw = scheduleCol !== -1 ? rowValues[scheduleCol] : '(אין עמודה)';
+
+    Logger.log('=== טאב: "' + sheet.getName() + '", שורה ' + found.rowIndex + ' ===');
+    Logger.log('כותרת סטטוס שנמצאה בפועל: "' +
+      (statusCol !== -1 ? found.headers[statusCol] : '(לא נמצאה)') + '" (אינדקס ' + statusCol + ')');
+    Logger.log('ערך "סטטוס" הנוכחי: "' + statusVal + '" · חוקי כ"מאושר לשליחה"? ' +
+      (normalizeLabel_(statusVal) === normalizeLabel_(APPROVED_STATUS)));
+    Logger.log('ערך "' + SCHEDULE_HEADER + '" הנוכחי: ' + scheduleRaw);
+  });
+
+  if (!foundAny) Logger.log('המספר ' + phone + ' לא נמצא באף טאב קמפיין.');
+  else Logger.log('(אם המספר הזה מופיע ביותר מטאב אחד למעלה - זה כנראה ההסבר: כל טאב שולח לו בנפרד, בלי קשר לבאג.)');
+}
+
+/** עטיפה להרצה ישירה - בדיקת מקרה השליחה הכפולה שדווח. */
+function debugSendIssuePhone() {
+  debugSendStatusByPhone_('0549910102');
+}
+
+/**
  * כלי אבחון: עוברת על **כל** הטאבים בקובץ (לא רק טאבי קמפיין מוכרים -
  * גם טאב שחסרה בו עמודת "טלפון נייד" ולכן לא היה נתפס ע"י debugContactByPhone)
  * ומדפיסה ליומן כל כותרת עמודה שמופיעה **יותר מפעם אחת** באותו טאב (אחרי
