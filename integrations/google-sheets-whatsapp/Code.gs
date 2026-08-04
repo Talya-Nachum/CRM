@@ -1989,6 +1989,40 @@ function debugContactByPhone(phone) {
 }
 
 /**
+ * כלי אבחון: עוברת על **כל** הטאבים בקובץ (לא רק טאבי קמפיין מוכרים -
+ * גם טאב שחסרה בו עמודת "טלפון נייד" ולכן לא היה נתפס ע"י debugContactByPhone)
+ * ומדפיסה ליומן כל כותרת עמודה שמופיעה **יותר מפעם אחת** באותו טאב (אחרי
+ * נירמול - כלומר גם אם יש רק רווח נוסף שההבדל ביניהן). זה בדיוק המצב
+ * שבו הקוד קורא/כותב תמיד לעמודה הראשונה מבין השתיים, והעמודה השנייה
+ * "מתה" - נראית לעין אבל אף פעם לא נקראת/נכתבת בפועל. להרצה ידנית,
+ * בלי שום עריכה - בודקת את כל הקובץ בבת אחת.
+ */
+function debugDuplicateHeaders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let foundAny = false;
+  ss.getSheets().forEach(function (sheet) {
+    const headers = headerRow_(sheet);
+    if (!headers.length) return;
+    const counts = {};
+    headers.forEach(function (h, idx) {
+      const key = normalizeLabel_(h);
+      if (!key) return;
+      if (!counts[key]) counts[key] = [];
+      counts[key].push({ raw: h, col: idx + 1 });
+    });
+    const dups = Object.keys(counts).filter(function (k) { return counts[k].length > 1; });
+    if (!dups.length) return;
+    foundAny = true;
+    Logger.log('=== טאב: "' + sheet.getName() + '" - נמצאו כותרות כפולות ===');
+    dups.forEach(function (k) {
+      const variants = counts[k].map(function (v) { return 'עמודה ' + v.col + ': "' + v.raw + '"'; }).join(' | ');
+      Logger.log('  ' + variants);
+    });
+  });
+  if (!foundAny) Logger.log('לא נמצאו כותרות כפולות באף טאב בקובץ.');
+}
+
+/**
  * עטיפה נוחה להרצה ישירה מהתפריט - מריצה את האבחון עבור Ishai Waisman.
  */
 function debugIshai() {
