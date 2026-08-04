@@ -67,13 +67,19 @@
           font-size:12.5px;font-family:inherit;color:var(--text)}
   .search:focus-visible{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(17,109,255,.14)}
 
-  .banner{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#116dff,#3B82F6);
-          color:#fff;border-radius:11px;padding:9px 13px;margin-bottom:9px;flex-shrink:0;
-          box-shadow:0 6px 16px rgba(17,109,255,.25)}
+  /* פופ-אפ צף בפינת המסך - לא חלק מזרימת הדף, כדי שיהיה בולט ומיידי
+     כמו התראת מערכת, בלי צליל (בקשה מפורשת - הצליל הקודם הפחיד). */
+  .banner{position:fixed;top:16px;left:16px;z-index:50;max-width:320px;display:flex;
+          align-items:flex-start;gap:10px;background:linear-gradient(135deg,#116dff,#3B82F6);
+          color:#fff;border-radius:14px;padding:13px 15px;box-shadow:0 18px 44px rgba(17,109,255,.35);
+          animation:bannerIn .32s cubic-bezier(.22,.9,.32,1.1)}
+  @keyframes bannerIn{from{transform:translateY(-14px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .banner .bicon{font-size:20px;line-height:1;flex-shrink:0}
   .banner .b1{font-size:14px;font-weight:800}
-  .banner .b2{font-size:12.5px;opacity:.92}
+  .banner .b2{font-size:12.5px;opacity:.92;margin-top:2px}
   .banner .bx{margin-inline-start:auto;font-size:15px;opacity:.85;cursor:pointer;background:none;
-              border:none;color:#fff;font-family:inherit}
+              border:none;color:#fff;font-family:inherit;flex-shrink:0}
+  @media (prefers-reduced-motion:reduce){.banner{animation:none}}
 
   .grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
         gap:12px;align-content:start;padding:11px 2px 4px}
@@ -199,15 +205,6 @@
         <span class="v" style="color:var(--green)" id="statToday">–</span></div>
       <div class="statrow"><span class="l">טופלו בסך הכל</span>
         <span class="v" id="statTotal">–</span></div>
-    </div>
-    <div class="panel">
-      <h4>🔔 התראות</h4>
-      <button type="button" id="soundTestBtn"
-        style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:#fff;
-               font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--text)">
-        🔊 בדיקת צליל
-      </button>
-      <div id="soundStatus" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5"></div>
     </div>
     <div>
       <div class="sec-label">לפי קמפיין</div>
@@ -356,71 +353,9 @@
         dismissedBanner = false;
         showBanner(fresh);
         notifyBrowser(fresh);
-        playAlertSound_();
       }
     }
     seenIds = ids;
-  }
-
-  // צליל התראה - טון בודד עדין (660Hz, כ-0.28 שניות, עוצמה נמוכה עם
-  // fade-in/out ארוך), ספון כ-WAV ב-data URI (בלי קובץ חיצוני).
-  // **גרסה קודמת** הייתה שני צפצופים חדים ב-880Hz, בעוצמה גבוהה -
-  // בפועל הרגישו כמו אזעקה ומפחידים, הוחלפו לטון יחיד רך ושקט בהרבה.
-  // משתמשים ב-<audio> ולא ב-Web Audio (AudioContext) כי כרום משהה
-  // (suspend) AudioContext לבד אחרי כ-30 שניות חוסר פעילות, ובדיקת
-  // ליד חדש רצה כל 60 שניות - כך שהקונטקסט תמיד היה "יישן" בדיוק
-  // כשצריך אותו. <audio> רגיל לא סובל מהבעיה הזו - ברגע שהושמע
-  // בהצלחה פעם אחת בעקבות לחיצה אמיתית (warmAudio_), הדפדפן ממשיך
-  // לאפשר לו להתנגן גם בלי לחיצה נוספת, כולל מתוך ה-interval.
-  const BEEP_DATA_URI = 'data:audio/wav;base64,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';
-  let audioEl_ = null;
-
-  // כתובת סטטוס גלויה בסרגל הצד ("🔔 התראות") - כדי שאפשר יהיה לדעת
-  // בדיוק מה קרה בלי לפתוח כלים למפתחים (הנציגות לא טכניות). מציגה גם
-  // את מצב הרשאת ההתראות של הדפדפן.
-  function reportSoundStatus_(msg) {
-    const el = document.getElementById('soundStatus');
-    if (el) el.textContent = msg;
-  }
-
-  function notifPermissionText_() {
-    if (typeof Notification === 'undefined') return 'לא נתמך בדפדפן זה';
-    if (Notification.permission === 'granted') return 'התראת מערכת: מאושרת ✓';
-    if (Notification.permission === 'denied') return 'התראת מערכת: נחסמה ע"י הדפדפן ✗';
-    return 'התראת מערכת: טרם אושרה';
-  }
-
-  function warmAudio_() {
-    if (audioEl_) return;
-    try {
-      audioEl_ = new Audio(BEEP_DATA_URI);
-      audioEl_.volume = 0.35;
-      // מנגנים ומיד עוצרים - זה מה ש"פותח" הרשאה להשמעה עתידית בלי
-      // לחיצה נוספת, בלי שהנציגה תשמע צליל מיותר עכשיו.
-      const p = audioEl_.play();
-      if (p && p.then) {
-        p.then(function () {
-          audioEl_.pause();
-          audioEl_.currentTime = 0;
-          reportSoundStatus_('צליל: מוכן ✓ · ' + notifPermissionText_());
-        }).catch(function (err) {
-          reportSoundStatus_('צליל: נחסם ע"י הדפדפן (' + (err && err.name || err) + ') · ' + notifPermissionText_());
-        });
-      }
-    } catch (e) {
-      reportSoundStatus_('צליל: שגיאה - ' + (e && e.message || e));
-    }
-  }
-
-  function playAlertSound_() {
-    try {
-      if (!audioEl_) warmAudio_();
-      if (!audioEl_) return;
-      audioEl_.currentTime = 0;
-      audioEl_.play().catch(function (err) {
-        reportSoundStatus_('צליל: ניסיון השמעה נכשל (' + (err && err.name || err) + ')');
-      });
-    } catch (e) { /* דפדפן שלא תומך - הבאנר הוויזואלי מספיק */ }
   }
 
   function showBanner(fresh) {
@@ -431,15 +366,21 @@
     const first = fresh[0];
     const extra = fresh.length > 1 ? ' (ועוד ' + (fresh.length - 1) + ')' : '';
     document.getElementById('bannerBox').innerHTML =
-      '<div class="banner"><span style="font-size:17px">🔔</span>' +
+      '<div class="banner"><span class="bicon">🔔</span>' +
       '<div><div class="b1">ליד חדש הועבר אלייך' + esc(extra) + '</div>' +
       '<div class="b2">' + esc(first.name) + (first.company ? ' · ' + esc(first.company) : '') + '</div></div>' +
       '<button type="button" class="bx" id="bannerClose">✕</button></div>';
-    const close = document.getElementById('bannerClose');
-    if (close) close.addEventListener('click', function () {
+    const dismiss = function () {
       dismissedBanner = true;
       document.getElementById('bannerBox').innerHTML = '';
-    });
+    };
+    const close = document.getElementById('bannerClose');
+    if (close) close.addEventListener('click', dismiss);
+    // נעלם לבד אחרי כ-15 שניות אם לא נסגר ידנית - כדי שלא יישאר תקוע
+    // בפינת המסך כל היום.
+    setTimeout(function () {
+      if (!dismissedBanner) document.getElementById('bannerBox').innerHTML = '';
+    }, 15000);
   }
 
   // התראת מערכת אמיתית - עובדת גם כשהטאב ברקע, כל עוד הדף פתוח.
@@ -792,16 +733,6 @@
   });
 
   // "מחממים" את הצליל בלחיצה/הקשה **אמיתית** הראשונה של הנציגה על הדף -
-  // once כדי לא ליצור אלמנט שמע חדש בכל לחיצה. זו הדרך שמבטיחה
-  // שההרשאה להשמעה תישאר פתוחה גם מאוחר יותר מתוך ה-interval, בלי
-  // לחיצה נוספת.
-  document.addEventListener('click', warmAudio_, { once: true });
-  document.addEventListener('keydown', warmAudio_, { once: true });
-
-  reportSoundStatus_('לחצי על "בדיקת צליל" כדי לוודא שהצליל עובד בדפדפן הזה.');
-  const testBtn = document.getElementById('soundTestBtn');
-  if (testBtn) testBtn.addEventListener('click', function () { playAlertSound_(); });
-
   askNotificationPermission();
   load(false);
   setInterval(function () { load(true); }, REFRESH_MS);
