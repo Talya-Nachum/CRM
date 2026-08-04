@@ -216,6 +216,9 @@
     <div class="top">
       <span class="avatar" id="repAvatar">–</span>
       <span class="hello" id="repHello">טוען...</span>
+      <button type="button" id="notifBtn" style="display:none;flex-shrink:0;padding:7px 12px;border-radius:9px;
+        border:1px solid var(--blue);background:rgba(17,109,255,.08);color:var(--blue);font-family:inherit;
+        font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap">🔔 הפעלת התראות</button>
       <span class="spacer"></span>
       <span class="vt">
         <button type="button" data-view="open" class="on">לטיפול <span class="b" id="cntOpen">0</span></button>
@@ -381,7 +384,8 @@
     // אותו אם היא לא מסתכלת בדיוק באותו רגע (בדיוק מה שקרה בבדיקה).
   }
 
-  // התראת מערכת אמיתית - עובדת גם כשהטאב ברקע, כל עוד הדף פתוח.
+  // התראת מערכת אמיתית - קופצת גם כשהטאב ברקע (טאב אחר/אפליקציה אחרת),
+  // כל עוד הדף הזה עדיין פתוח איפשהו בדפדפן.
   function notifyBrowser(fresh) {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
     try {
@@ -392,11 +396,32 @@
     } catch (e) { /* דפדפן שלא תומך - הבאנר בדף מספיק */ }
   }
 
-  function askNotificationPermission() {
-    if (typeof Notification === 'undefined') return;
-    if (Notification.permission === 'default') {
-      try { Notification.requestPermission(); } catch (e) { /* מתעלמים */ }
+  /**
+   * מציגה/מסתירה את כפתור "🔔 הפעלת התראות" לפי מצב ההרשאה הנוכחי.
+   * **בכוונה לא** קוראים ל-Notification.requestPermission() אוטומטית
+   * בטעינת הדף - דפדפנים מודרניים חוסמים/מתעלמים משקט מבקשת הרשאה
+   * שלא מגיעה מלחיצה אמיתית של המשתמש, ובדיוק זו הסיבה שההתראה לא
+   * הופיעה בבדיקה. הכפתור נראה רק כשההרשאה עדיין לא הוכרעה.
+   */
+  function updateNotifBtn_() {
+    const btn = document.getElementById('notifBtn');
+    if (!btn) return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'default') {
+      btn.style.display = 'none';
+      return;
     }
+    btn.style.display = '';
+  }
+
+  function setupNotifBtn_() {
+    const btn = document.getElementById('notifBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      try {
+        Notification.requestPermission().then(function () { updateNotifBtn_(); });
+      } catch (e) { /* מתעלמים */ }
+    });
+    updateNotifBtn_();
   }
 
   // ---------------- תצוגה ----------------
@@ -731,7 +756,7 @@
   });
 
   // "מחממים" את הצליל בלחיצה/הקשה **אמיתית** הראשונה של הנציגה על הדף -
-  askNotificationPermission();
+  setupNotifBtn_();
   load(false);
   setInterval(function () { load(true); }, REFRESH_MS);
 })();
