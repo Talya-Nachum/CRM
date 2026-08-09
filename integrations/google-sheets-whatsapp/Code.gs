@@ -1959,6 +1959,47 @@ function distillCallStatuses() {
  * טאבי הקמפיין (לא רק אחד) כדי לגלות גם אם אותו מספר טלפון קיים
  * ביותר מטאב אחד. אין צורך לדעת את שם הטאב המדויק מראש.
  */
+/**
+ * כלי אבחון: בודקת בכל טאב שהטלפון נמצא בו את **כל** העמודות הקשורות
+ * לשיחת פרלה - כדי לדעת אם השיחה בכלל דיווחה בחזרה (מזהה ליד קיים?),
+ * אם היה תוכן בפועל (תמלול/סיכום ריקים = שיחה שלא התחברה בפועל -
+ * לא באג, פשוט אין מה להציג), או שמשהו אחר קרה.
+ */
+function debugPearlDataByPhone_(phone) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = getCampaignSheets_(ss);
+  let foundAny = false;
+
+  sheets.forEach(function (sheet) {
+    const found = findRowByPhone_(sheet, phone);
+    if (!found) return;
+    foundAny = true;
+
+    const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
+    const get_ = function (header) {
+      const col = findColumnNormalized_(found.headers, header);
+      return col !== -1 ? '"' + rowValues[col] + '" (עמודה ' + (col + 1) + ')' : '(אין עמודה כזו בטאב)';
+    };
+
+    Logger.log('=== טאב: "' + sheet.getName() + '", שורה ' + found.rowIndex + ' ===');
+    Logger.log('"' + CALL_LEAD_ID_HEADER + '": ' + get_(CALL_LEAD_ID_HEADER));
+    Logger.log('"' + CALL_STATUS_HEADER + '": ' + get_(CALL_STATUS_HEADER));
+    Logger.log('"' + CALL_RESULT_HEADER + '": ' + get_(CALL_RESULT_HEADER));
+    Logger.log('"' + CALL_TRANSCRIPT_HEADER + '": ' + get_(CALL_TRANSCRIPT_HEADER));
+    Logger.log('"' + CALL_TAG_HEADER + '": ' + get_(CALL_TAG_HEADER));
+    Logger.log('"' + CALL_DURATION_HEADER + '": ' + get_(CALL_DURATION_HEADER));
+    Logger.log('"' + CALL_SENTIMENT_HEADER + '": ' + get_(CALL_SENTIMENT_HEADER));
+    Logger.log('"' + CALL_DATE_HEADER + '": ' + get_(CALL_DATE_HEADER));
+  });
+
+  if (!foundAny) Logger.log('המספר ' + phone + ' לא נמצא באף טאב קמפיין.');
+}
+
+/** עטיפה להרצה ישירה - בדיקת יונתן (הליד שדווח שחסר לו תמלול פרלה). */
+function debugYonatanPearl() {
+  debugPearlDataByPhone_('0526555996');
+}
+
 function debugContactByPhone(phone) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = getCampaignSheets_(ss);
