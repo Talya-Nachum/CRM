@@ -561,6 +561,7 @@
   tr.lm-row { cursor: pointer; }
   tr.lm-row:hover { background: var(--surface-2); }
   tr.lm-row.expired { background: var(--bad-soft); }
+  tr.lm-row.loading { cursor: wait; opacity: 0.6; }
   .lm-chip {
     display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
     background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap;
@@ -1917,6 +1918,7 @@
   let openCrmModalFor_ = null;
   let openMoveModalFor_ = null;
   let openContactDetailFor_ = null;
+  let detailOpenedFromLeadMgmt_ = false; // "→ חזרה" בכרטיס צריך לחזור למסך "כל הלידים", לא לדשבורד, כשמגיעים משם
   // 20 שורות בעמוד - הלקוחה ביקשה לראות 15-20 רשומות בלי לגלול.
   const PAGE_SIZE = 20;
   const AUTO_REFRESH_MS = 30000;
@@ -2150,21 +2152,33 @@
     body.innerHTML = statsHtml + boardHtml + tableHtml;
 
     // לחיצה על שורה פותחת את **אותו** מסך פרטי איש קשר שיש היום בדשבורד
-    // הראשי (הערה + שינוי סטטוס + העברה לנציגה) - לא מסך נפרד. עוברים
-    // לטאב הקמפיין שהליד שייך אליו ואז פותחים את הכרטיס שלו.
+    // הראשי (הערה + שינוי סטטוס + העברה לנציגה) - לא מסך נפרד. אם הליד
+    // כבר בטאב הקמפיין הטעון כרגע - פותחים מיד בלי קריאה נוספת לשרת
+    // (זה מה שהיה איטי - כל לחיצה טענה מחדש את כל הקמפיין). אחרת עוברים
+    // לטאב שלו קודם, עם חיווי טעינה ברור על השורה עצמה כדי שלא ייראה תקוע.
     body.querySelectorAll('tr.lm-row').forEach(function (tr) {
       tr.addEventListener('click', function () {
+        if (tr.classList.contains('loading')) return;
         const it = data.rows[Number(tr.getAttribute('data-idx'))];
         if (!it) return;
-        document.getElementById('leadMgmtModal').classList.remove('show');
-        const tabBtn = document.querySelector('.tab[data-tab="' + it.campaign.replace(/"/g, '\\"') + '"]');
-        if (tabBtn) {
-          document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
-          tabBtn.classList.add('active');
-        }
-        loadCampaign(it.campaign, false, function () {
+
+        function openDetail() {
+          document.getElementById('leadMgmtModal').classList.remove('show');
+          const tabBtn = document.querySelector('.tab[data-tab="' + it.campaign.replace(/"/g, '\\"') + '"]');
+          if (tabBtn) {
+            document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+            tabBtn.classList.add('active');
+          }
+          detailOpenedFromLeadMgmt_ = true;
           if (openContactDetailFor_) openContactDetailFor_(it.phone);
-        });
+        }
+
+        if (currentTabName === it.campaign && currentData) { openDetail(); return; }
+
+        tr.classList.add('loading');
+        const firstCell = tr.querySelector('td');
+        if (firstCell) firstCell.innerHTML = '<b>⏳ טוען את ' + escapeHtml_(it.campaign) + '...</b>';
+        loadCampaign(it.campaign, false, openDetail);
       });
     });
   }
@@ -3564,7 +3578,13 @@
     const overlay = document.getElementById('detailOverlay');
     if (!overlay) return;
 
-    function close() { overlay.classList.remove('show'); }
+    function close() {
+      overlay.classList.remove('show');
+      if (detailOpenedFromLeadMgmt_) {
+        detailOpenedFromLeadMgmt_ = false;
+        openLeadMgmt_();
+      }
+    }
 
     function open(phone) {
       const r = findRow_(phone);
