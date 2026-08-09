@@ -1316,18 +1316,24 @@ function handleNlpearlWebhook_(ss, payload) {
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
       const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
-      const resultCol = findHeaderIndex_(headers, CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
-      if (phoneCol === -1 || resultCol === -1) continue;
+      if (phoneCol === -1) continue;
 
       for (let i = 1; i < data.length; i++) {
         const sheetPhone = phoneSuffix_(data[i][phoneCol]);
         if (sheetPhone && sheetPhone === incomingPhone) {
           const rowIndex = i + 1;
-          // "סיכום שיחה" מצטבר: הסיכום של פרלה, ואם אין - התגית, כדי
-          // שלעולם לא תישאר שורה בלי שום תיעוד.
+          // "סיכום שיחה" מצטבר: הסיכום של פרלה, ואם אין - התגית. העמודה
+          // **אופציונלית** לגמרי (כמו תמלול/הקלטה/תגית) - אם היא לא
+          // קיימת (גם לא בשם הישן "תוצאות שיחה") נוצרת לבד. באג אמיתי
+          // שנתפס בפועל: לפני התיקון, אם רק העמודה הזו הייתה חסרה
+          // בטאב - **כל השורה** דולגה לגמרי (גם תמלול/תגית/משך/רגש לא
+          // נכתבו), למרות שה-Webhook הגיע מלא מפרלה. עכשיו, בדיוק כמו
+          // שאר השדות, חוסר העמודה לא עוצר כלום.
           const resultText = summary || tagText;
           if (resultText) {
-            const existingResult = data[i][resultCol];
+            let resultCol = findHeaderIndex_(headers, CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
+            if (resultCol === -1) resultCol = ensureColumn_(sheet, headers, CALL_RESULT_HEADER);
+            const existingResult = resultCol < data[i].length ? data[i][resultCol] : '';
             const combined = existingResult ? (existingResult + '\n' + resultText) : resultText;
             sheet.getRange(rowIndex, resultCol + 1).setValue(combined);
           }
