@@ -509,31 +509,74 @@
   .task .t2 { display: block; font-size: 10.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .task .tn { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
-  /* באנר "ליד לניסיון חוזר" - לידים שהוקצו לנציגה ולא טופלו תוך 9
-     שעות, חזרו לבד למיטוב (expireStaleAssignments_ ב-Code.gs). */
-  #expiredBanner:empty { display: none; }
-  .expired-banner {
-    background: var(--bad-soft); border: 1px solid var(--bad); border-radius: var(--radius);
-    padding: 12px 14px; margin-bottom: 4px;
+  /* אריח "כל הלידים" בסרגל הצד - פותח את מסך ניהול הלידים המלא
+     (getLeadManagementData ב-Code.gs) רק בלחיצה, לא באנר קבוע בדשבורד. */
+  .lead-mgmt-tile {
+    display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px;
+    padding: 12px 11px; border-radius: 12px; border: 1px solid var(--border);
+    background: linear-gradient(135deg, var(--accent-soft), var(--surface));
+    font-family: inherit; color: inherit; cursor: pointer; text-align: right;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
   }
-  .expired-banner h3 {
-    margin: 0 0 9px; font-size: 14px; font-weight: 800; color: var(--bad);
-    display: flex; align-items: center; gap: 6px;
+  .lead-mgmt-tile:hover { box-shadow: var(--shadow); border-color: var(--accent); }
+  .lead-mgmt-tile .ico {
+    width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0; background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
   }
-  .expired-row {
-    display: flex; align-items: flex-start; gap: 10px; background: var(--surface);
-    border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; margin-bottom: 7px;
+  .lead-mgmt-tile .txt { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+  .lead-mgmt-tile .t1 { font-size: 13.5px; font-weight: 800; }
+  .lead-mgmt-tile .t2 { font-size: 11px; color: var(--text-muted); }
+  .lead-mgmt-tile .badge {
+    flex-shrink: 0; min-width: 20px; padding: 2px 6px; border-radius: 999px; background: var(--bad);
+    color: #fff; font-size: 11px; font-weight: 800; text-align: center;
   }
-  .expired-row:last-child { margin-bottom: 0; }
-  .expired-row .txt { min-width: 0; flex: 1; font-size: 12.5px; }
-  .expired-row .txt b { font-size: 13.5px; }
-  .expired-row .sub { color: var(--text-muted); margin-top: 2px; }
-  .expired-row .note { margin-top: 4px; padding: 6px 8px; border-radius: 8px; background: var(--surface-2); }
-  .expired-row .note b { color: var(--text-muted); font-weight: 700; }
-  .expired-row button {
-    flex-shrink: 0; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--surface); color: var(--text); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+  .lead-mgmt-tile .badge:empty { display: none; }
+
+  /* --- מסך "ניהול לידים" המלא (מודל ברוחב מלא) --- */
+  #leadMgmtModal .modal-card { max-width: 1180px; width: 96vw; max-height: 92vh; display: flex; flex-direction: column; }
+  #leadMgmtModal .modal-actions { flex-shrink: 0; }
+  .lm-body { overflow-y: auto; flex: 1; min-height: 0; }
+  .lm-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .lm-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; }
+  .lm-stat .n { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .lm-stat .l { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+  .lm-stat.good .n { color: var(--good); }
+  .lm-stat.bad .n { color: var(--bad); }
+  .lm-board { margin-bottom: 14px; }
+  .lm-board h4 { margin: 0 0 8px; font-size: 13.5px; font-weight: 800; }
+  .lm-board-row {
+    display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 9px;
+    background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 6px;
   }
+  .lm-board-row .rank { width: 20px; font-weight: 800; color: var(--text-muted); font-size: 12px; text-align: center; }
+  .lm-board-row .name { flex: 1; font-weight: 700; font-size: 13px; }
+  .lm-board-row .cnt { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .lm-board-row .bar { height: 6px; border-radius: 4px; background: var(--accent); }
+  .lm-board-row .bar-track { flex: 2; height: 6px; border-radius: 4px; background: var(--surface-3, #EDF0F5); overflow: hidden; }
+  .lm-table-wrap { overflow-x: auto; }
+  table.lm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.lm-table th {
+    position: sticky; top: 0; background: var(--surface); text-align: right; padding: 8px 9px;
+    font-size: 11px; color: var(--text-muted); font-weight: 700; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  table.lm-table td { padding: 8px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr.lm-row { cursor: pointer; }
+  tr.lm-row:hover { background: var(--surface-2); }
+  tr.lm-row.expired { background: var(--bad-soft); }
+  .lm-chip {
+    display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+    background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap;
+  }
+  .lm-chip.scheduled { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+  .lm-chip.expired { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+  .lm-chip.open { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .lm-detail {
+    display: none; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin-top: 4px; font-size: 12.5px; white-space: pre-wrap; line-height: 1.6;
+  }
+  .lm-detail.open { display: block; }
+  .lm-detail b { color: var(--text-muted); font-weight: 700; }
+  .lm-empty { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 13px; }
 
   /* פס שיעור התגובה - הצעה של הלקוחה, במקום גרף העוגה. */
   .rate-row { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; }
@@ -1620,6 +1663,11 @@
       <span class="loading-state">טוען קמפיינים...</span>
     </nav>
     <div id="repPanel"></div>
+    <button class="lead-mgmt-tile" id="leadMgmtTile" type="button">
+      <span class="ico">📋</span>
+      <span class="txt"><span class="t1">כל הלידים</span><span class="t2">סטטיסטיקה, מי תיאמה הכי הרבה וכל ליד שהועבר</span></span>
+      <span class="badge" id="leadMgmtBadge"></span>
+    </button>
   </aside>
 
   <div class="page">
@@ -1638,7 +1686,6 @@
 
   <section class="stats" id="stats"></section>
   <section class="tasks" id="tasksRow"></section>
-  <section id="expiredBanner"></section>
 
   <div class="card table-card">
     <div class="table-toolbar">
@@ -1827,6 +1874,21 @@
     <div id="repAssignList" style="max-height:55vh; overflow-y:auto"></div>
     <div class="modal-actions">
       <button class="btn" id="repAssignCloseBtn" type="button">סגירה</button>
+    </div>
+  </div>
+</div>
+
+<!-- מסך "ניהול לידים" המלא - נפתח בלחיצה על האריח "כל הלידים" בסרגל הצד.
+     נטען לפי דרישה בלבד (getLeadManagementData), לא חלק מרענון הדשבורד הרגיל. -->
+<div class="modal-overlay" id="leadMgmtModal">
+  <div class="modal-card">
+    <h3>📋 כל הלידים שהועברו לצוות</h3>
+    <div class="modal-sub">כל ליד שהועבר לנציגה, מכל הקמפיינים - כולל מה שכבר טופל וכל מה שחזר אלינו אחרי 9 שעות. לחיצה על שורה פותחת את הפרטים המלאים.</div>
+    <div class="lm-body" id="lmBody">
+      <div class="lm-empty">טוען...</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="leadMgmtCloseBtn" type="button">סגירה</button>
     </div>
   </div>
 </div>
@@ -2021,48 +2083,101 @@
   ];
 
   /**
-   * באנר "ליד לניסיון חוזר" - לידים שהוקצו לנציגה ולא טופלו תוך 9 שעות
-   * וחזרו לבד למיטוב (expireStaleAssignments_ ב-Code.gs). גורר את ההערה
-   * שנכתבה בהעברה + כל מה שהנציגה כן הספיקה לרשום. מוחקים שורה מהבאנר
-   * באמצעות deleteAssignmentById (אותו כפתור מחיקה שכבר בנוי לרשימת
-   * "הלידים של נציגה" - לא נוגע בסטטוס האמיתי של הליד בטאב הקמפיין).
+   * מסך "כל הלידים" - נטען לפי דרישה בלבד (getLeadManagementData ב-Code.gs)
+   * כשלוחצים על האריח בסרגל הצד, לא חלק מרענון הדשבורד הרגיל. מציג
+   * סטטיסטיקה + לוח מובילות (מי תיאמה הכי הרבה) + טבלה של כל ההקצאות
+   * (פתוחות/טופלו/פגו תוקף) עם לחיצה על שורה שפותחת את הפרטים המלאים
+   * (התיעוד שהועבר בזמן ההקצאה + מה שהנציגה כתבה).
    */
-  function renderExpiredBanner_(list) {
-    const el = document.getElementById('expiredBanner');
-    if (!el) return;
-    if (!list.length) { el.innerHTML = ''; return; }
+  let lmData_ = null;
 
-    el.innerHTML = '<div class="expired-banner"><h3>⏳ ליד לניסיון חוזר (' + list.length + ')</h3>' +
-      list.map(function (it) {
-        const notes = [];
-        if (it.noteToRep) notes.push('<div class="note"><b>ההערה שלך בהעברה:</b> ' + escapeHtml_(it.noteToRep) + '</div>');
-        if (it.repNote) notes.push('<div class="note"><b>מה ' + escapeHtml_(it.repName) + ' רשמה:</b> ' + escapeHtml_(it.repNote) + '</div>');
-        return '<div class="expired-row">' +
-          '<div class="txt"><b>' + escapeHtml_(it.name || it.phone) + '</b>' +
-          (it.company ? ' · ' + escapeHtml_(it.company) : '') +
-          '<div class="sub">היה אצל ' + escapeHtml_(it.repName) + ' · ' + escapeHtml_(it.campaign) +
-          ' · הועבר ' + escapeHtml_(it.assignedAt) + '</div>' +
-          notes.join('') + '</div>' +
-          '<button type="button" data-id="' + escapeHtml_(it.id) + '">✓ טופל</button>' +
-          '</div>';
-      }).join('') + '</div>';
+  function openLeadMgmt_() {
+    const modal = document.getElementById('leadMgmtModal');
+    const body = document.getElementById('lmBody');
+    modal.classList.add('show');
+    body.innerHTML = '<div class="lm-empty">טוען...</div>';
+    google.script.run
+      .withSuccessHandler(function (data) {
+        lmData_ = data;
+        renderLeadMgmtScreen_(data);
+      })
+      .withFailureHandler(function (err) {
+        body.innerHTML = '<div class="lm-empty">שגיאה בטעינה: ' + escapeHtml_((err && err.message) ? err.message : String(err)) + '</div>';
+      })
+      .getLeadManagementData();
+  }
 
-    el.querySelectorAll('button[data-id]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        b.disabled = true;
-        b.textContent = '...';
-        google.script.run
-          .withSuccessHandler(function () {
-            if (currentTabName) loadCampaign(currentTabName, true);
-          })
-          .withFailureHandler(function (err) {
-            b.disabled = false;
-            b.textContent = '✓ טופל';
-            alert((err && err.message) ? err.message : err);
-          })
-          .deleteAssignmentById(b.getAttribute('data-id'));
+  function renderLeadMgmtScreen_(data) {
+    const body = document.getElementById('lmBody');
+    if (!data || !data.rows || !data.rows.length) {
+      body.innerHTML = '<div class="lm-empty">עדיין לא הועברו לידים לצוות.</div>';
+      return;
+    }
+
+    const statsHtml = '<div class="lm-stats">' +
+      '<div class="lm-stat"><div class="n">' + data.total + '</div><div class="l">סה"כ הועברו</div></div>' +
+      '<div class="lm-stat good"><div class="n">' + data.scheduled + '</div><div class="l">תואמה פגישה</div></div>' +
+      '<div class="lm-stat"><div class="n">' + data.exhausted + '</div><div class="l">טופלו - לא תואם</div></div>' +
+      '<div class="lm-stat bad"><div class="n">' + data.expiredCount + '</div><div class="l">חזרו אחרי 9 שעות</div></div>' +
+      '</div>';
+
+    let boardHtml = '';
+    if (data.leaderboard && data.leaderboard.length) {
+      const max = Math.max.apply(null, data.leaderboard.map(function (r) { return r.count; }).concat([1]));
+      boardHtml = '<div class="lm-board"><h4>🏆 מי תיאמה הכי הרבה פגישות</h4>' +
+        data.leaderboard.map(function (r, i) {
+          const pct = Math.round((r.count / max) * 100);
+          return '<div class="lm-board-row"><span class="rank">' + (i + 1) + '</span>' +
+            '<span class="name">' + escapeHtml_(r.name) + '</span>' +
+            '<span class="bar-track"><span class="bar" style="width:' + pct + '%"></span></span>' +
+            '<span class="cnt">' + r.count + '</span></div>';
+        }).join('') + '</div>';
+    }
+
+    const tableHtml = '<div class="lm-table-wrap"><table class="lm-table"><thead><tr>' +
+      '<th>שם / חברה</th><th>טלפון</th><th>קמפיין</th><th>נציגה</th><th>סטטוס</th><th>הועבר</th>' +
+      '</tr></thead><tbody>' +
+      data.rows.map(function (it, i) {
+        let chipCls = 'open', chipText = it.status || 'פתוח';
+        if (it.isExpired) { chipCls = 'expired'; chipText = 'חזר אחרי 9 שעות'; }
+        else if (it.isDone) { chipCls = (it.status === 'תואמה פגישה') ? 'scheduled' : 'open'; chipText = it.status || 'טופל'; }
+
+        const detailParts = [];
+        if (it.noteToRep) detailParts.push('<b>ההערה שנכתבה בהעברה:</b>\n' + escapeHtml_(it.noteToRep) + '\n');
+        if (it.snapshot) detailParts.push('<b>תיעוד מלא בעת ההעברה:</b>\n' + escapeHtml_(it.snapshot) + '\n');
+        if (it.repNote) detailParts.push('<b>מה ' + escapeHtml_(it.repName) + ' רשמה:</b>\n' + escapeHtml_(it.repNote) + '\n');
+        if (it.doneAt) detailParts.push('<b>טופל בתאריך:</b> ' + escapeHtml_(it.doneAt));
+        const detailHtml = detailParts.length ? detailParts.join('\n') : 'אין עדיין תיעוד נוסף.';
+
+        return '<tr class="lm-row' + (it.isExpired ? ' expired' : '') + '" data-idx="' + i + '">' +
+          '<td><b>' + escapeHtml_(it.name || '(ללא שם)') + '</b>' + (it.company ? '<br><span style="color:var(--text-muted)">' + escapeHtml_(it.company) + '</span>' : '') + '</td>' +
+          '<td>' + escapeHtml_(it.phone) + '</td>' +
+          '<td>' + escapeHtml_(it.campaign) + '</td>' +
+          '<td>' + escapeHtml_(it.repName) + '</td>' +
+          '<td><span class="lm-chip ' + chipCls + '">' + escapeHtml_(chipText) + '</span></td>' +
+          '<td>' + escapeHtml_(it.assignedAt) + '</td>' +
+          '</tr>' +
+          '<tr class="lm-detail-row"><td colspan="6" style="padding:0;border:0"><div class="lm-detail" id="lmDetail' + i + '">' + detailHtml + '</div></td></tr>';
+      }).join('') + '</tbody></table></div>';
+
+    body.innerHTML = statsHtml + boardHtml + tableHtml;
+
+    body.querySelectorAll('tr.lm-row').forEach(function (tr) {
+      tr.addEventListener('click', function () {
+        const el = document.getElementById('lmDetail' + tr.getAttribute('data-idx'));
+        if (el) el.classList.toggle('open');
       });
     });
+  }
+
+  function setupLeadMgmt_() {
+    const tile = document.getElementById('leadMgmtTile');
+    const modal = document.getElementById('leadMgmtModal');
+    const closeBtn = document.getElementById('leadMgmtCloseBtn');
+    if (!tile || !modal) return;
+    tile.addEventListener('click', openLeadMgmt_);
+    closeBtn.addEventListener('click', function () { modal.classList.remove('show'); });
+    modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.remove('show'); });
   }
 
   function focusDef_(key) {
@@ -2224,7 +2339,6 @@
       '</div>';
     document.getElementById('stats').innerHTML = statsHtml + rateTileHtml;
     setupKpiClicks_();
-    renderExpiredBanner_(data.expiredAssignments || []);
 
     // גרף הפילוח ירד מהמסך הראשי (החליף אותו פס שיעור התגובה), אבל
     // הלוגיקה נשארת - הלג'נד מוסתר ומשמש רק לחישוב הקטגוריות לסינון.
@@ -3943,6 +4057,7 @@
   setupContactDetail_();
   setupRepLinks_();
   setupRepAssignModal_();
+  setupLeadMgmt_();
 
   // רענון אוטומטי: כל 30 שניות טוענים מחדש את נתוני הטאב הפעיל (בלי לגעת
   // ברשימת הטאבים עצמה, כדי לא "לקפוץ" למשתמש בזמן שהוא מסתכל).

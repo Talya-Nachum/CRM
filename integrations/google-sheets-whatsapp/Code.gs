@@ -2614,38 +2614,84 @@ function expireStaleAssignments_() {
 }
 
 /**
- * כל ההקצאות שפג תוקפן (חזרו למיטוב לבד) - לבאנר "ליד לניסיון חוזר"
- * בדשבורד הראשי. גוררת את ההערה שמיטוב כתבה בהעברה + כל מה שהנציגה
- * כן הספיקה לרשום (אם בכלל) לפני שפג הזמן.
+ * כל נתוני מסך "ניהול לידים" (לשונית נפרדת, נפתחת רק בלחיצה - לא
+ * מוצגת בדשבורד הראשי): כל ההקצאות אי-פעם (פתוחות/טופלו/חזרו למיטוב
+ * לבד אחרי 9 שעות), סטטיסטיקה מסכמת, ודירוג נציגות לפי תיאומים.
+ * expireStaleAssignments_ בהתחלה - כדי שהמצב תמיד יהיה עדכני, גם אם
+ * אף אחד לא טען את הדשבורד הרגיל לאחרונה.
  */
-function expiredAssignmentsForAdmin_() {
+function getLeadManagementData() {
+  expireStaleAssignments_();
   const data = assignRows_();
+  const H = data.headers;
   const idx = {
-    id: assignCol_(data.headers, 'מזהה הקצאה'), date: assignCol_(data.headers, 'תאריך הקצאה'),
-    rep: assignCol_(data.headers, 'נציגה'), camp: assignCol_(data.headers, 'קמפיין'),
-    phone: assignCol_(data.headers, 'טלפון נייד'), company: assignCol_(data.headers, 'שם חברה'),
-    name: assignCol_(data.headers, 'איש קשר'), status: assignCol_(data.headers, 'סטטוס שסומן'),
-    note: assignCol_(data.headers, 'הערת נציגה'), noteToRep: assignCol_(data.headers, 'הערה לנציגה')
+    id: assignCol_(H, 'מזהה הקצאה'), date: assignCol_(H, 'תאריך הקצאה'),
+    rep: assignCol_(H, 'נציגה'), camp: assignCol_(H, 'קמפיין'),
+    phone: assignCol_(H, 'טלפון נייד'), company: assignCol_(H, 'שם חברה'),
+    name: assignCol_(H, 'איש קשר'), snapshot: assignCol_(H, 'תיעוד בעת ההעברה'),
+    done: assignCol_(H, 'טופל'), status: assignCol_(H, 'סטטוס שסומן'),
+    note: assignCol_(H, 'הערת נציגה'), doneDate: assignCol_(H, 'תאריך טיפול'),
+    noteToRep: assignCol_(H, 'הערה לנציגה')
   };
   const tz = Session.getScriptTimeZone();
-  const list = [];
+  const fmt = function (v) {
+    return (v instanceof Date && !isNaN(v.getTime())) ? Utilities.formatDate(v, tz, 'dd/MM/yyyy HH:mm') : '';
+  };
+
+  const rows = [];
+  const repCounts = {};
+  let scheduled = 0, exhausted = 0, expiredCount = 0;
+
   data.values.forEach(function (row) {
-    if (normalizeLabel_(row[idx.status]) !== normalizeLabel_(ASSIGN_EXPIRED_STATUS_)) return;
-    const assignedAt = row[idx.date];
-    list.push({
+    const repName = String(row[idx.rep] || '');
+    const isDone = isDoneValue_(row[idx.done]);
+    const statusText = String(row[idx.status] || '');
+    const isExpired = normalizeLabel_(statusText) === normalizeLabel_(ASSIGN_EXPIRED_STATUS_);
+
+    if (isExpired) {
+      expiredCount++;
+    } else if (isDone) {
+      if (normalizeLabel_(statusText) === normalizeLabel_(REP_CELEBRATE_STATUS_)) {
+        scheduled++;
+        if (repName) repCounts[repName] = (repCounts[repName] || 0) + 1;
+      } else {
+        exhausted++;
+      }
+    }
+
+    const assignedAtDate = row[idx.date];
+    rows.push({
       id: String(row[idx.id] || ''),
       name: String(row[idx.name] || ''),
       company: String(row[idx.company] || ''),
       phone: String(row[idx.phone] || ''),
       campaign: String(row[idx.camp] || ''),
-      repName: String(row[idx.rep] || ''),
+      repName: repName,
       noteToRep: idx.noteToRep !== -1 ? String(row[idx.noteToRep] || '') : '',
       repNote: idx.note !== -1 ? String(row[idx.note] || '') : '',
-      assignedAt: (assignedAt instanceof Date && !isNaN(assignedAt.getTime()))
-        ? Utilities.formatDate(assignedAt, tz, 'dd/MM/yyyy HH:mm') : ''
+      snapshot: idx.snapshot !== -1 ? String(row[idx.snapshot] || '') : '',
+      status: statusText,
+      isDone: isDone,
+      isExpired: isExpired,
+      assignedAt: fmt(assignedAtDate),
+      assignedAtMs: (assignedAtDate instanceof Date && !isNaN(assignedAtDate.getTime())) ? assignedAtDate.getTime() : 0,
+      doneAt: fmt(row[idx.doneDate])
     });
   });
-  return list;
+
+  rows.sort(function (a, b) { return b.assignedAtMs - a.assignedAtMs; });
+  const leaderboard = Object.keys(repCounts)
+    .map(function (name) { return { name: name, count: repCounts[name] }; })
+    .sort(function (a, b) { return b.count - a.count; });
+
+  return {
+    total: data.values.length,
+    scheduled: scheduled,
+    exhausted: exhausted,
+    expiredCount: expiredCount,
+    leaderboard: leaderboard,
+    rows: rows
+  };
 }
 
 /**
@@ -3890,8 +3936,7 @@ function getCampaignData(sheetName) {
     statusColors: getStatusColors_(),
     statusList: getStatusList_(),
     repNames: getRepNames(),
-    repWorkload: repWorkload_(),
-    expiredAssignments: expiredAssignmentsForAdmin_()
+    repWorkload: repWorkload_()
   };
 }
 
