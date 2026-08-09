@@ -1976,20 +1976,45 @@ function debugPearlDataByPhone_(phone) {
     foundAny = true;
 
     const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
-    const get_ = function (header) {
-      const col = findColumnNormalized_(found.headers, header);
-      return col !== -1 ? '"' + rowValues[col] + '" (עמודה ' + (col + 1) + ')' : '(אין עמודה כזו בטאב)';
+    // get_ עם fallback לשם ישן (legacy) - בלי זה "סיכום שיחה" מוצג בטעות
+    // כ"אין עמודה" בטאבים ישנים שעדיין נקראים "תוצאות שיחה".
+    const get_ = function (header, legacy) {
+      const col = legacy ? findHeaderIndex_(found.headers, header, legacy)
+                         : findColumnNormalized_(found.headers, header);
+      return col !== -1 ? String(rowValues[col] || '') : '';
+    };
+    const show_ = function (header, legacy) {
+      const v = get_(header, legacy);
+      return v ? '"' + v + '"' : '(ריק/אין עמודה)';
     };
 
+    const callStatus = get_(CALL_STATUS_HEADER);
+    const callResult = get_(CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
+    const transcript = get_(CALL_TRANSCRIPT_HEADER);
+    const tagText = get_(CALL_TAG_HEADER);
+    const firstReply = get_(FIRST_REPLY_HEADER);
+    const status = get_(STATUS_HEADER, STATUS_HEADER_LEGACY);
+    const statusList = getStatusList_();
+
     Logger.log('=== טאב: "' + sheet.getName() + '", שורה ' + found.rowIndex + ' ===');
-    Logger.log('"' + CALL_LEAD_ID_HEADER + '": ' + get_(CALL_LEAD_ID_HEADER));
-    Logger.log('"' + CALL_STATUS_HEADER + '": ' + get_(CALL_STATUS_HEADER));
-    Logger.log('"' + CALL_RESULT_HEADER + '": ' + get_(CALL_RESULT_HEADER));
-    Logger.log('"' + CALL_TRANSCRIPT_HEADER + '": ' + get_(CALL_TRANSCRIPT_HEADER));
-    Logger.log('"' + CALL_TAG_HEADER + '": ' + get_(CALL_TAG_HEADER));
-    Logger.log('"' + CALL_DURATION_HEADER + '": ' + get_(CALL_DURATION_HEADER));
-    Logger.log('"' + CALL_SENTIMENT_HEADER + '": ' + get_(CALL_SENTIMENT_HEADER));
-    Logger.log('"' + CALL_DATE_HEADER + '": ' + get_(CALL_DATE_HEADER));
+    Logger.log('"' + CALL_LEAD_ID_HEADER + '": ' + show_(CALL_LEAD_ID_HEADER));
+    Logger.log('"' + CALL_STATUS_HEADER + '" (callStatus): ' + show_(CALL_STATUS_HEADER));
+    Logger.log('"' + CALL_RESULT_HEADER + '" (callResult): ' + show_(CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY));
+    Logger.log('"' + CALL_TRANSCRIPT_HEADER + '": ' + show_(CALL_TRANSCRIPT_HEADER));
+    Logger.log('"' + CALL_TAG_HEADER + '": ' + show_(CALL_TAG_HEADER));
+    Logger.log('"' + CALL_DURATION_HEADER + '": ' + show_(CALL_DURATION_HEADER));
+    Logger.log('"' + CALL_SENTIMENT_HEADER + '": ' + show_(CALL_SENTIMENT_HEADER));
+    Logger.log('"' + CALL_DATE_HEADER + '": ' + show_(CALL_DATE_HEADER));
+    Logger.log('"' + FIRST_REPLY_HEADER + '" (contactStatus): ' + show_(FIRST_REPLY_HEADER));
+    Logger.log('"' + STATUS_HEADER + '" (sendStatus): ' + show_(STATUS_HEADER, STATUS_HEADER_LEGACY));
+    Logger.log('--- מה שבאמת נכנס לחישוב הסטטוס ---');
+    const callText = callTextForStatus_(transcript, callResult, tagText);
+    Logger.log('callTextForStatus_ (transcript+callResult+tag משולבים): "' + callText + '"');
+    const fromNotes = classifyCallOutcome_(callTextForStatus_(callText, callStatus, ''));
+    Logger.log('classifyCallOutcome_ על הטקסט הזה + callStatus מחזירה: "' + fromNotes + '"' +
+      ', חוקי? ' + isAllowedStatusValue_(fromNotes, statusList));
+    Logger.log('unifiedStatus_ הסופי המוצג בדשבורד: "' +
+      unifiedStatus_(firstReply, callStatus, status, statusList, callText) + '"');
   });
 
   if (!foundAny) Logger.log('המספר ' + phone + ' לא נמצא באף טאב קמפיין.');
@@ -2003,6 +2028,14 @@ function debugYonatanPearl() {
 /** עטיפה להרצה ישירה - בדיקת דודו (עוד ליד שדווח שחסר לו תמלול פרלה). */
 function debugDodoPearl() {
   debugPearlDataByPhone_('0523605536');
+}
+
+/**
+ * עטיפה להרצה ישירה - בדיקת שרון (בנק יהב): אצל פרלה "Call Unsuccessful" +
+ * תג "לא מעוניין לשוחח", אצלנו מוצג "ממתין לשיחה נוספת" - לא תואם.
+ */
+function debugSharonPearl() {
+  debugPearlDataByPhone_('0586600121');
 }
 
 function debugContactByPhone(phone) {
