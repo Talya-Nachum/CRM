@@ -1976,16 +1976,23 @@ function debugPearlDataByPhone_(phone) {
     foundAny = true;
 
     const rowValues = sheet.getRange(found.rowIndex, 1, 1, found.headers.length).getValues()[0];
+    Logger.log('כותרות הטאב (' + found.headers.length + '): ' +
+      found.headers.map(function (h) { return '"' + h + '"'; }).join(' | '));
     // get_ עם fallback לשם ישן (legacy) - בלי זה "סיכום שיחה" מוצג בטעות
     // כ"אין עמודה" בטאבים ישנים שעדיין נקראים "תוצאות שיחה".
+    const colIndex_ = function (header, legacy) {
+      return legacy ? findHeaderIndex_(found.headers, header, legacy)
+                    : findColumnNormalized_(found.headers, header);
+    };
     const get_ = function (header, legacy) {
-      const col = legacy ? findHeaderIndex_(found.headers, header, legacy)
-                         : findColumnNormalized_(found.headers, header);
+      const col = colIndex_(header, legacy);
       return col !== -1 ? String(rowValues[col] || '') : '';
     };
     const show_ = function (header, legacy) {
-      const v = get_(header, legacy);
-      return v ? '"' + v + '"' : '(ריק/אין עמודה)';
+      const col = colIndex_(header, legacy);
+      if (col === -1) return '(העמודה לא קיימת בטאב הזה)';
+      const v = String(rowValues[col] || '');
+      return v ? '"' + v + '"' : '(עמודה קיימת אבל התא ריק)';
     };
 
     const callStatus = get_(CALL_STATUS_HEADER);
