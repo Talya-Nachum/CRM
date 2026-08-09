@@ -2000,6 +2000,11 @@ function debugYonatanPearl() {
   debugPearlDataByPhone_('0526555996');
 }
 
+/** עטיפה להרצה ישירה - בדיקת דודו (עוד ליד שדווח שחסר לו תמלול פרלה). */
+function debugDodoPearl() {
+  debugPearlDataByPhone_('0523605536');
+}
+
 function debugContactByPhone(phone) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = getCampaignSheets_(ss);
