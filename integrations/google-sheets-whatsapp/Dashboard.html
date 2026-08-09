@@ -518,10 +518,22 @@
   }
   .btn-lead-mgmt:hover { box-shadow: 0 10px 26px -6px rgba(31,170,89,0.55); transform: translateY(-1px); }
 
-  /* --- מסך "ניהול לידים" המלא (מודל ברוחב מלא) --- */
-  #leadMgmtModal .modal-card { max-width: 1180px; width: 96vw; max-height: 92vh; display: flex; flex-direction: column; }
-  #leadMgmtModal .modal-actions { flex-shrink: 0; }
-  .lm-body { overflow-y: auto; flex: 1; min-height: 0; }
+  /* --- מסך "ניהול לידים" - דף נפרד מלא, לא חלון צף: אותו דפוס בדיוק
+     כמו מסך פרטי איש קשר (.detail-overlay) - רקע מלא, לא כרטיס ממורכז. --- */
+  .lm-overlay {
+    display: none; position: fixed; inset: 0; background: var(--bg-solid); z-index: 22;
+    overflow-y: auto;
+  }
+  .lm-overlay.show { display: block; }
+  .lm-panel { max-width: 1180px; margin: 0 auto; padding: 18px 16px 60px; }
+  .lm-top {
+    position: sticky; top: 0; z-index: 5; margin: -18px -16px 16px; padding: 12px 16px;
+    background: var(--bg-solid); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .lm-top h1 { margin: 0; font-size: 17px; font-weight: 800; }
+  .lm-sub { font-size: 12.5px; color: var(--text-muted); margin-bottom: 16px; }
+  .lm-body { }
   .lm-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
   .lm-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; }
   .lm-stat .n { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -1860,17 +1872,18 @@
   </div>
 </div>
 
-<!-- מסך "ניהול לידים" המלא - נפתח בלחיצה על האריח "כל הלידים" בסרגל הצד.
-     נטען לפי דרישה בלבד (getLeadManagementData), לא חלק מרענון הדשבורד הרגיל. -->
-<div class="modal-overlay" id="leadMgmtModal">
-  <div class="modal-card">
-    <h3>📋 כל הלידים שהועברו לצוות</h3>
-    <div class="modal-sub">כל ליד שהועבר לנציגה, מכל הקמפיינים - כולל מה שכבר טופל וכל מה שחזר אלינו אחרי 9 שעות. לחיצה על שורה פותחת את הפרטים המלאים.</div>
+<!-- מסך "ניהול לידים" - דף נפרד מלא (לא חלון צף), נפתח בלחיצה על הכפתור
+     בכותרת. נטען לפי דרישה בלבד (getLeadManagementData), לא חלק מרענון
+     הדשבורד הרגיל. אותו דפוס בדיוק כמו מסך פרטי איש קשר. -->
+<div class="lm-overlay" id="leadMgmtModal">
+  <div class="lm-panel">
+    <div class="lm-top">
+      <button class="detail-back" type="button" id="leadMgmtCloseBtn">→ חזרה לדשבורד</button>
+      <h1>📋 כל הלידים שהועברו לצוות</h1>
+    </div>
+    <div class="lm-sub">כל ליד שהועבר לנציגה, מכל הקמפיינים - כולל מה שכבר טופל וכל מה שחזר אלינו אחרי 9 שעות. לחיצה על שורה פותחת את הפרטים המלאים.</div>
     <div class="lm-body" id="lmBody">
       <div class="lm-empty">טוען...</div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" id="leadMgmtCloseBtn" type="button">סגירה</button>
     </div>
   </div>
 </div>
@@ -2106,14 +2119,13 @@
 
     let boardHtml = '';
     if (data.leaderboard && data.leaderboard.length) {
-      const max = Math.max.apply(null, data.leaderboard.map(function (r) { return r.count; }).concat([1]));
-      boardHtml = '<div class="lm-board"><h4>🏆 מי תיאמה הכי הרבה פגישות</h4>' +
+      // ממוין מהשרת לפי אחוז תיאומים (מתוך כל מה שהוקצה לה), מהגבוה לנמוך.
+      boardHtml = '<div class="lm-board"><h4>🏆 נציגות לפי אחוז תיאומים</h4>' +
         data.leaderboard.map(function (r, i) {
-          const pct = Math.round((r.count / max) * 100);
           return '<div class="lm-board-row"><span class="rank">' + (i + 1) + '</span>' +
             '<span class="name">' + escapeHtml_(r.name) + '</span>' +
-            '<span class="bar-track"><span class="bar" style="width:' + pct + '%"></span></span>' +
-            '<span class="cnt">' + r.count + '</span></div>';
+            '<span class="bar-track"><span class="bar" style="width:' + r.pct + '%"></span></span>' +
+            '<span class="cnt">' + r.pct + '% <small style="font-weight:600;color:var(--text-muted)">(' + r.count + ' מתוך ' + r.total + ')</small></span></div>';
         }).join('') + '</div>';
     }
 

@@ -2586,7 +2586,12 @@ const ASSIGN_EXPIRED_STATUS_ = 'פג תוקף - חזר למיטוב';
  */
 function expireStaleAssignments_() {
   const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  // לא waitLock ארוך: כמה דשבורדים (ראשי + כל נציגה) קוראים לפונקציה הזו
+  // בכל רענון (כל 30-60 שניות), וכולם מתחרים על אותה נעילה סקריפט-רחבה.
+  // אם הנעילה תפוסה - מדלגים על הבדיקה הפעם במקום להפיל את כל הקריאה
+  // (getRepData/getCampaignData/getLeadManagementData) עם שגיאת timeout;
+  // היא תתעדכן ממילא בקריאה הבאה של מישהו אחר.
+  if (!lock.tryLock(3000)) return;
   try {
     const data = assignRows_();
     if (!data.values.length) return;
@@ -2639,7 +2644,7 @@ function getLeadManagementData() {
   };
 
   const rows = [];
-  const repCounts = {};
+  const repStats = {}; // { repName: { total, scheduled } } - לאחוז התיאומים, לא רק מספר גולמי
   let scheduled = 0, exhausted = 0, expiredCount = 0;
 
   data.values.forEach(function (row) {
@@ -2648,12 +2653,17 @@ function getLeadManagementData() {
     const statusText = String(row[idx.status] || '');
     const isExpired = normalizeLabel_(statusText) === normalizeLabel_(ASSIGN_EXPIRED_STATUS_);
 
+    if (repName && !isExpired) {
+      if (!repStats[repName]) repStats[repName] = { total: 0, scheduled: 0 };
+      repStats[repName].total++;
+    }
+
     if (isExpired) {
       expiredCount++;
     } else if (isDone) {
       if (normalizeLabel_(statusText) === normalizeLabel_(REP_CELEBRATE_STATUS_)) {
         scheduled++;
-        if (repName) repCounts[repName] = (repCounts[repName] || 0) + 1;
+        if (repName) repStats[repName].scheduled++;
       } else {
         exhausted++;
       }
@@ -2680,9 +2690,12 @@ function getLeadManagementData() {
   });
 
   rows.sort(function (a, b) { return b.assignedAtMs - a.assignedAtMs; });
-  const leaderboard = Object.keys(repCounts)
-    .map(function (name) { return { name: name, count: repCounts[name] }; })
-    .sort(function (a, b) { return b.count - a.count; });
+  const leaderboard = Object.keys(repStats)
+    .map(function (name) {
+      const s = repStats[name];
+      return { name: name, count: s.scheduled, total: s.total, pct: s.total ? Math.round((s.scheduled / s.total) * 100) : 0 };
+    })
+    .sort(function (a, b) { return b.pct - a.pct || b.count - a.count; });
 
   return {
     total: data.values.length,
