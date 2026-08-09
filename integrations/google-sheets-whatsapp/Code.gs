@@ -2483,6 +2483,86 @@ function isDoneValue_(v) {
   return s === normalizeLabel_('כן') || s === 'true' || s === 'yes';
 }
 
+// ליד שמוקצה לנציגה ולא טופל תוך 9 שעות רצופות (לא שעות עבודה - זמן
+// שעון רגיל) חוזר לבד למיטוב, כדי שאף ליד לא "יתקע" אצל נציגה בלי
+// שאיש שם לב. בקשה מפורשת של הלקוחה.
+const ASSIGNMENT_TIMEOUT_MS_ = 9 * 60 * 60 * 1000;
+const ASSIGN_EXPIRED_STATUS_ = 'פג תוקף - חזר למיטוב';
+
+/**
+ * "מרפאה" הקצאות שנתקעו: כל הקצאה פתוחה (טופל != כן) שעברו עליה יותר
+ * מ-9 שעות מרגע ההעברה נסגרת אוטומטית עם סימון ייעודי (ASSIGN_EXPIRED_STATUS_)
+ * - כך שהליד נעלם מהדשבורד של הנציגה (openAssignmentFor_ לא רואה אותו
+ * יותר כפתוח) וחוזר להיות זמין להעברה מחדש, בלי לגעת בסטטוס האמיתי
+ * של הליד בטאב הקמפיין (בכוונה **לא** כמו completeAssignment - זו לא
+ * "החלטה" של הנציגה, אין למה לכתוב חזרה). נקראת בתחילת כל טעינה
+ * (getCampaignData/getRepData) - "מרפאה בזמן קריאה", לא דורשת טריגר
+ * מותקן בנפרד.
+ */
+function expireStaleAssignments_() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const data = assignRows_();
+    if (!data.values.length) return;
+    const dateCol = assignCol_(data.headers, 'תאריך הקצאה');
+    const doneCol = assignCol_(data.headers, 'טופל');
+    const statusCol = assignCol_(data.headers, 'סטטוס שסומן');
+    const doneDateCol = assignCol_(data.headers, 'תאריך טיפול');
+    if (dateCol === -1 || doneCol === -1) return;
+
+    const now = Date.now();
+    data.values.forEach(function (row, i) {
+      if (isDoneValue_(row[doneCol])) return;
+      const assignedAt = row[dateCol];
+      if (!(assignedAt instanceof Date) || isNaN(assignedAt.getTime())) return;
+      if (now - assignedAt.getTime() < ASSIGNMENT_TIMEOUT_MS_) return;
+
+      const rowIndex = i + 2;
+      data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
+      if (statusCol !== -1) data.sheet.getRange(rowIndex, statusCol + 1).setValue(ASSIGN_EXPIRED_STATUS_);
+      if (doneDateCol !== -1) data.sheet.getRange(rowIndex, doneDateCol + 1).setValue(new Date());
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * כל ההקצאות שפג תוקפן (חזרו למיטוב לבד) - לבאנר "ליד לניסיון חוזר"
+ * בדשבורד הראשי. גוררת את ההערה שמיטוב כתבה בהעברה + כל מה שהנציגה
+ * כן הספיקה לרשום (אם בכלל) לפני שפג הזמן.
+ */
+function expiredAssignmentsForAdmin_() {
+  const data = assignRows_();
+  const idx = {
+    id: assignCol_(data.headers, 'מזהה הקצאה'), date: assignCol_(data.headers, 'תאריך הקצאה'),
+    rep: assignCol_(data.headers, 'נציגה'), camp: assignCol_(data.headers, 'קמפיין'),
+    phone: assignCol_(data.headers, 'טלפון נייד'), company: assignCol_(data.headers, 'שם חברה'),
+    name: assignCol_(data.headers, 'איש קשר'), status: assignCol_(data.headers, 'סטטוס שסומן'),
+    note: assignCol_(data.headers, 'הערת נציגה'), noteToRep: assignCol_(data.headers, 'הערה לנציגה')
+  };
+  const tz = Session.getScriptTimeZone();
+  const list = [];
+  data.values.forEach(function (row) {
+    if (normalizeLabel_(row[idx.status]) !== normalizeLabel_(ASSIGN_EXPIRED_STATUS_)) return;
+    const assignedAt = row[idx.date];
+    list.push({
+      id: String(row[idx.id] || ''),
+      name: String(row[idx.name] || ''),
+      company: String(row[idx.company] || ''),
+      phone: String(row[idx.phone] || ''),
+      campaign: String(row[idx.camp] || ''),
+      repName: String(row[idx.rep] || ''),
+      noteToRep: idx.noteToRep !== -1 ? String(row[idx.noteToRep] || '') : '',
+      repNote: idx.note !== -1 ? String(row[idx.note] || '') : '',
+      assignedAt: (assignedAt instanceof Date && !isNaN(assignedAt.getTime()))
+        ? Utilities.formatDate(assignedAt, tz, 'dd/MM/yyyy HH:mm') : ''
+    });
+  });
+  return list;
+}
+
 /**
  * מקצה ליד לנציגה. הליד נשמר כ**צילום מצב** - כולל כל התיעוד עד הרגע
  * הזה - כי לפי ההחלטה של הלקוחה הליד "סופי" ברגע ההעברה. עדיין שומרים
@@ -2708,6 +2788,7 @@ function getRepData(repKey) {
   const rep = repByKey_(repKey);
   if (!rep) throw new Error('לינק לא מזוהה. יש לפנות לטליה לקבלת לינק חדש.');
 
+  expireStaleAssignments_();
   const data = assignRows_();
   const H = data.headers;
   const idx = {
@@ -3570,6 +3651,8 @@ function getCampaignData(sheetName) {
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return null;
 
+  expireStaleAssignments_();
+
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
@@ -3722,7 +3805,8 @@ function getCampaignData(sheetName) {
     statusColors: getStatusColors_(),
     statusList: getStatusList_(),
     repNames: getRepNames(),
-    repWorkload: repWorkload_()
+    repWorkload: repWorkload_(),
+    expiredAssignments: expiredAssignmentsForAdmin_()
   };
 }
 

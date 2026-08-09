@@ -509,6 +509,32 @@
   .task .t2 { display: block; font-size: 10.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .task .tn { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
+  /* באנר "ליד לניסיון חוזר" - לידים שהוקצו לנציגה ולא טופלו תוך 9
+     שעות, חזרו לבד למיטוב (expireStaleAssignments_ ב-Code.gs). */
+  #expiredBanner:empty { display: none; }
+  .expired-banner {
+    background: var(--bad-soft); border: 1px solid var(--bad); border-radius: var(--radius);
+    padding: 12px 14px; margin-bottom: 4px;
+  }
+  .expired-banner h3 {
+    margin: 0 0 9px; font-size: 14px; font-weight: 800; color: var(--bad);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .expired-row {
+    display: flex; align-items: flex-start; gap: 10px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; margin-bottom: 7px;
+  }
+  .expired-row:last-child { margin-bottom: 0; }
+  .expired-row .txt { min-width: 0; flex: 1; font-size: 12.5px; }
+  .expired-row .txt b { font-size: 13.5px; }
+  .expired-row .sub { color: var(--text-muted); margin-top: 2px; }
+  .expired-row .note { margin-top: 4px; padding: 6px 8px; border-radius: 8px; background: var(--surface-2); }
+  .expired-row .note b { color: var(--text-muted); font-weight: 700; }
+  .expired-row button {
+    flex-shrink: 0; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+
   /* פס שיעור התגובה - הצעה של הלקוחה, במקום גרף העוגה. */
   .rate-row { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; }
   .rate-row b { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
@@ -1612,6 +1638,7 @@
 
   <section class="stats" id="stats"></section>
   <section class="tasks" id="tasksRow"></section>
+  <section id="expiredBanner"></section>
 
   <div class="card table-card">
     <div class="table-toolbar">
@@ -1993,6 +2020,51 @@
       test: function (r) { return isDeclinedStatus_(r.unifiedStatus); } }
   ];
 
+  /**
+   * באנר "ליד לניסיון חוזר" - לידים שהוקצו לנציגה ולא טופלו תוך 9 שעות
+   * וחזרו לבד למיטוב (expireStaleAssignments_ ב-Code.gs). גורר את ההערה
+   * שנכתבה בהעברה + כל מה שהנציגה כן הספיקה לרשום. מוחקים שורה מהבאנר
+   * באמצעות deleteAssignmentById (אותו כפתור מחיקה שכבר בנוי לרשימת
+   * "הלידים של נציגה" - לא נוגע בסטטוס האמיתי של הליד בטאב הקמפיין).
+   */
+  function renderExpiredBanner_(list) {
+    const el = document.getElementById('expiredBanner');
+    if (!el) return;
+    if (!list.length) { el.innerHTML = ''; return; }
+
+    el.innerHTML = '<div class="expired-banner"><h3>⏳ ליד לניסיון חוזר (' + list.length + ')</h3>' +
+      list.map(function (it) {
+        const notes = [];
+        if (it.noteToRep) notes.push('<div class="note"><b>ההערה שלך בהעברה:</b> ' + escapeHtml_(it.noteToRep) + '</div>');
+        if (it.repNote) notes.push('<div class="note"><b>מה ' + escapeHtml_(it.repName) + ' רשמה:</b> ' + escapeHtml_(it.repNote) + '</div>');
+        return '<div class="expired-row">' +
+          '<div class="txt"><b>' + escapeHtml_(it.name || it.phone) + '</b>' +
+          (it.company ? ' · ' + escapeHtml_(it.company) : '') +
+          '<div class="sub">היה אצל ' + escapeHtml_(it.repName) + ' · ' + escapeHtml_(it.campaign) +
+          ' · הועבר ' + escapeHtml_(it.assignedAt) + '</div>' +
+          notes.join('') + '</div>' +
+          '<button type="button" data-id="' + escapeHtml_(it.id) + '">✓ טופל</button>' +
+          '</div>';
+      }).join('') + '</div>';
+
+    el.querySelectorAll('button[data-id]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        b.textContent = '...';
+        google.script.run
+          .withSuccessHandler(function () {
+            if (currentTabName) loadCampaign(currentTabName, true);
+          })
+          .withFailureHandler(function (err) {
+            b.disabled = false;
+            b.textContent = '✓ טופל';
+            alert((err && err.message) ? err.message : err);
+          })
+          .deleteAssignmentById(b.getAttribute('data-id'));
+      });
+    });
+  }
+
   function focusDef_(key) {
     return FOCUS_DEFS.filter(function (f) { return f.key === key; })[0] || null;
   }
@@ -2152,6 +2224,7 @@
       '</div>';
     document.getElementById('stats').innerHTML = statsHtml + rateTileHtml;
     setupKpiClicks_();
+    renderExpiredBanner_(data.expiredAssignments || []);
 
     // גרף הפילוח ירד מהמסך הראשי (החליף אותו פס שיעור התגובה), אבל
     // הלוגיקה נשארת - הלג'נד מוסתר ומשמש רק לחישוב הקטגוריות לסינון.

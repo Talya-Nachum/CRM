@@ -88,6 +88,13 @@
   .lead.fresh{border:2px solid var(--blue)}
   .lead .newtag{position:absolute;top:-9px;inset-inline-start:12px;background:var(--blue);color:#fff;
                 font-size:10.5px;font-weight:800;border-radius:20px;padding:1px 9px}
+  /* "שעון חול" - זמן שנותר לטיפול בליד לפני שהוא חוזר לבד למיטוב
+     (9 שעות רצופות מרגע ההעברה). צבע משתנה לפי דחיפות. */
+  .lead .timer{position:absolute;top:-9px;inset-inline-end:12px;font-size:10.5px;font-weight:800;
+               border-radius:20px;padding:1px 9px}
+  .lead .timer.ok{background:var(--green);color:#fff}
+  .lead .timer.warn{background:var(--orange);color:#fff}
+  .lead .timer.late{background:var(--red);color:#fff}
   .lead .co{font-size:12.5px;color:var(--muted);font-weight:700;white-space:nowrap;overflow:hidden;
             text-overflow:ellipsis}
   .lead .nm{font-size:17px;font-weight:800;margin:1px 0 5px;white-space:nowrap;overflow:hidden;
@@ -273,6 +280,9 @@
   const REP_KEY = '<?!= (typeof repKey !== "undefined" ? repKey : "") ?>';
   const NEW_LEAD_MINUTES = 120;      // ליד שהוקצה בשעתיים האחרונות מסומן "חדש"
   const REFRESH_MS = 60000;          // בדיקה אחת לדקה אם הגיע ליד חדש
+  // חייב להיות תואם ל-ASSIGNMENT_TIMEOUT_MS_ ב-Code.gs - שם נעשית ההחזרה
+  // בפועל. כאן זה רק לתצוגה (שעון חול).
+  const ASSIGNMENT_TIMEOUT_MS = 9 * 60 * 60 * 1000;
 
   let data = null;
   let view = 'open';
@@ -319,6 +329,23 @@
   function isFresh(lead) {
     if (!lead.assignedAtMs) return false;
     return (Date.now() - lead.assignedAtMs) < NEW_LEAD_MINUTES * 60 * 1000;
+  }
+
+  /**
+   * "שעון חול": כמה זמן נותר עד שהליד חוזר לבד למיטוב (9 שעות רצופות
+   * מההעברה). מציגה שעות ודקות עגולות, עם צבע שמתחדד ככל שהזמן אוזל -
+   * ירוק (מעל 4 שעות) → כתום (עד שעה) → אדום (פחות משעה/עבר הזמן).
+   */
+  function timerInfo_(lead) {
+    if (!lead.assignedAtMs) return null;
+    const remaining = ASSIGNMENT_TIMEOUT_MS - (Date.now() - lead.assignedAtMs);
+    if (remaining <= 0) return { cls: 'late', text: '⏳ הזמן עבר' };
+    const totalMin = Math.ceil(remaining / 60000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    const text = '⏳ ' + (h > 0 ? h + 'ש ' : '') + m + 'ד\' נותרו';
+    const cls = remaining > 4 * 60 * 60 * 1000 ? 'ok' : (remaining > 60 * 60 * 1000 ? 'warn' : 'late');
+    return { cls: cls, text: text };
   }
 
   function showError(msg) {
@@ -493,8 +520,10 @@
 
     grid.innerHTML = list.map(function (l) {
       const lastLine = String(l.history || '').split('\n').filter(function (s) { return s.trim(); })[0] || '';
+      const timer = timerInfo_(l);
       return '<div class="lead' + (isFresh(l) ? ' fresh' : '') + '">' +
         (isFresh(l) ? '<div class="newtag">חדש</div>' : '') +
+        (timer ? '<div class="timer ' + timer.cls + '">' + timer.text + '</div>' : '') +
         '<div class="co">' + esc(l.company) + '</div>' +
         '<div class="nm">' + esc(l.name) + '</div>' +
         (l.campaign ? '<span class="camp">' + esc(l.campaign) + '</span>' : '') +
@@ -683,8 +712,8 @@
       }
       box.insertAdjacentHTML('beforeend',
         '<div class="toast soft"><div class="big">💜</div>' +
-        '<h4>נשמר! הפנייה מתועדת</h4>' +
-        '<p>' + esc(lead.name) + ' · הסטטוס "' + esc(status) + '" עודכן אצל טליה</p></div>');
+        '<h4>תודה שניסית!</h4>' +
+        '<p>הליד יועבר לבדיקה נוספת כדי למצות את ההזדמנות</p></div>');
     }
 
     setTimeout(function () {
