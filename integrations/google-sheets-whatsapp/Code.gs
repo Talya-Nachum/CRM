@@ -2038,6 +2038,45 @@ function debugSharonPearl() {
   debugPearlDataByPhone_('0586600121');
 }
 
+/**
+ * כלי אבחון: מחפשת בטאב הגולמי WebhookLog (שם נרשמת **כל** קריאה
+ * נכנסת, לפני כל עיבוד) שורות שמכילות את הטלפון הנתון - כדי לדעת
+ * בוודאות אם ה-Webhook של פרלה בכלל הגיע אלינו לשיחה מסוימת, ומה
+ * בדיוק היה בתוכו (או שהוא מעולם לא הגיע - ואז זו בעיה בצד פרלה/
+ * ההגדרה שם, לא בקוד שלנו).
+ */
+function debugWebhookLogByPhone_(phone, limit) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('WebhookLog');
+  if (!sheet) { Logger.log('אין טאב WebhookLog.'); return; }
+
+  const suffix = phoneSuffix_(phone);
+  const data = sheet.getDataRange().getValues();
+  const matches = [];
+  for (let i = data.length - 1; i >= 1 && matches.length < (limit || 10); i--) {
+    const raw = String(data[i][1] || '');
+    if (raw.indexOf(suffix) !== -1) {
+      matches.push({ time: data[i][0], raw: raw });
+    }
+  }
+
+  if (!matches.length) {
+    Logger.log('לא נמצאה אף שורה ב-WebhookLog שמכילה את הטלפון ' + phone +
+      ' (סיומת שחיפשתי: ' + suffix + '). כלומר: שום Webhook הכולל את הטלפון הזה מעולם לא הגיע למערכת שלנו.');
+    return;
+  }
+  Logger.log('נמצאו ' + matches.length + ' שורות (מהחדש לישן):');
+  matches.forEach(function (m) {
+    Logger.log('--- ' + m.time + ' ---');
+    Logger.log(m.raw);
+  });
+}
+
+/** עטיפה להרצה ישירה - בדיקת WebhookLog הגולמי עבור שרון. */
+function debugSharonWebhookLog() {
+  debugWebhookLogByPhone_('0586600121', 10);
+}
+
 function debugContactByPhone(phone) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = getCampaignSheets_(ss);
