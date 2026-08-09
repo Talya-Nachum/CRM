@@ -509,28 +509,14 @@
   .task .t2 { display: block; font-size: 10.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .task .tn { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
-  /* אריח "כל הלידים" בסרגל הצד - פותח את מסך ניהול הלידים המלא
+  /* כפתור "כל הלידים שהועברו" - במקום בולט בראש הדף, ליד "שיתוף קישור",
+     לא אריח קטן בסרגל הצד. פותח את מסך ניהול הלידים המלא
      (getLeadManagementData ב-Code.gs) רק בלחיצה, לא באנר קבוע בדשבורד. */
-  .lead-mgmt-tile {
-    display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px;
-    padding: 12px 11px; border-radius: 12px; border: 1px solid var(--border);
-    background: linear-gradient(135deg, var(--accent-soft), var(--surface));
-    font-family: inherit; color: inherit; cursor: pointer; text-align: right;
-    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  .btn-lead-mgmt {
+    background: var(--good); border-color: transparent; color: #fff;
+    box-shadow: 0 8px 20px -6px rgba(31,170,89,0.45);
   }
-  .lead-mgmt-tile:hover { box-shadow: var(--shadow); border-color: var(--accent); }
-  .lead-mgmt-tile .ico {
-    width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0; background: var(--accent); color: #fff;
-    display: flex; align-items: center; justify-content: center; font-size: 15px;
-  }
-  .lead-mgmt-tile .txt { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
-  .lead-mgmt-tile .t1 { font-size: 13.5px; font-weight: 800; }
-  .lead-mgmt-tile .t2 { font-size: 11px; color: var(--text-muted); }
-  .lead-mgmt-tile .badge {
-    flex-shrink: 0; min-width: 20px; padding: 2px 6px; border-radius: 999px; background: var(--bad);
-    color: #fff; font-size: 11px; font-weight: 800; text-align: center;
-  }
-  .lead-mgmt-tile .badge:empty { display: none; }
+  .btn-lead-mgmt:hover { box-shadow: 0 10px 26px -6px rgba(31,170,89,0.55); transform: translateY(-1px); }
 
   /* --- מסך "ניהול לידים" המלא (מודל ברוחב מלא) --- */
   #leadMgmtModal .modal-card { max-width: 1180px; width: 96vw; max-height: 92vh; display: flex; flex-direction: column; }
@@ -867,13 +853,13 @@
     font-size: 14.5px;
   }
 
-  thead th.col-date    { width: 8%;   }
-  thead th.col-company { width: 13.5%;}
-  thead th.col-name    { width: 11%;  }
-  thead th.col-title   { width: 11%;  }
-  thead th.col-phone   { width: 9.5%; }
-  thead th.col-email   { width: 11%;  }
-  thead th.col-status  { width: 10.5%;}
+  thead th.col-date    { width: 11%;  }
+  thead th.col-company { width: 18%;  }
+  thead th.col-name    { width: 15%;  }
+  thead th.col-title   { width: 15%;  }
+  thead th.col-phone   { width: 13%;  }
+  thead th.col-email   { width: 14%;  }
+  thead th.col-status  { width: 14%;  }
   thead th.col-actions { width: 78px; }
 
   thead th {
@@ -1663,11 +1649,6 @@
       <span class="loading-state">טוען קמפיינים...</span>
     </nav>
     <div id="repPanel"></div>
-    <button class="lead-mgmt-tile" id="leadMgmtTile" type="button">
-      <span class="ico">📋</span>
-      <span class="txt"><span class="t1">כל הלידים</span><span class="t2">סטטיסטיקה, מי תיאמה הכי הרבה וכל ליד שהועבר</span></span>
-      <span class="badge" id="leadMgmtBadge"></span>
-    </button>
   </aside>
 
   <div class="page">
@@ -1680,6 +1661,7 @@
       </div>
       <button class="btn" id="repLinksBtn" type="button">🔗 לינקים</button>
       <button class="btn btn-accent" id="shareBtn" type="button">🔗 שיתוף קישור</button>
+      <button class="btn btn-lead-mgmt" id="leadMgmtTile" type="button">📋 כל הלידים שהועברו</button>
       <span class="copy-toast" id="copyToast">הקישור הועתק!</span>
     </div>
   </header>
@@ -1921,6 +1903,7 @@
   // בדיוק את אותם חלונות שכפתורי הטבלה כבר מפעילים, בלי לשכפל לוגיקה.
   let openCrmModalFor_ = null;
   let openMoveModalFor_ = null;
+  let openContactDetailFor_ = null;
   // 20 שורות בעמוד - הלקוחה ביקשה לראות 15-20 רשומות בלי לגלול.
   const PAGE_SIZE = 20;
   const AUTO_REFRESH_MS = 30000;
@@ -1987,13 +1970,13 @@
     if (el) el.innerHTML = channelIconsHtml_(campaignChannel_(rows));
   }
 
-  function loadCampaign(name, silent) {
+  function loadCampaign(name, silent, onDone) {
     currentTabName = name;
     if (!silent) {
       document.getElementById('tableBody').innerHTML = '<tr><td colspan="11" class="loading-state">טוען נתונים...</td></tr>';
     }
     google.script.run
-      .withSuccessHandler(function (data) { renderCampaign(data, silent); })
+      .withSuccessHandler(function (data) { renderCampaign(data, silent); if (onDone) onDone(); })
       .withFailureHandler(showError)
       .getCampaignData(name);
   }
@@ -2142,13 +2125,6 @@
         if (it.isExpired) { chipCls = 'expired'; chipText = 'חזר אחרי 9 שעות'; }
         else if (it.isDone) { chipCls = (it.status === 'תואמה פגישה') ? 'scheduled' : 'open'; chipText = it.status || 'טופל'; }
 
-        const detailParts = [];
-        if (it.noteToRep) detailParts.push('<b>ההערה שנכתבה בהעברה:</b>\n' + escapeHtml_(it.noteToRep) + '\n');
-        if (it.snapshot) detailParts.push('<b>תיעוד מלא בעת ההעברה:</b>\n' + escapeHtml_(it.snapshot) + '\n');
-        if (it.repNote) detailParts.push('<b>מה ' + escapeHtml_(it.repName) + ' רשמה:</b>\n' + escapeHtml_(it.repNote) + '\n');
-        if (it.doneAt) detailParts.push('<b>טופל בתאריך:</b> ' + escapeHtml_(it.doneAt));
-        const detailHtml = detailParts.length ? detailParts.join('\n') : 'אין עדיין תיעוד נוסף.';
-
         return '<tr class="lm-row' + (it.isExpired ? ' expired' : '') + '" data-idx="' + i + '">' +
           '<td><b>' + escapeHtml_(it.name || '(ללא שם)') + '</b>' + (it.company ? '<br><span style="color:var(--text-muted)">' + escapeHtml_(it.company) + '</span>' : '') + '</td>' +
           '<td>' + escapeHtml_(it.phone) + '</td>' +
@@ -2156,16 +2132,27 @@
           '<td>' + escapeHtml_(it.repName) + '</td>' +
           '<td><span class="lm-chip ' + chipCls + '">' + escapeHtml_(chipText) + '</span></td>' +
           '<td>' + escapeHtml_(it.assignedAt) + '</td>' +
-          '</tr>' +
-          '<tr class="lm-detail-row"><td colspan="6" style="padding:0;border:0"><div class="lm-detail" id="lmDetail' + i + '">' + detailHtml + '</div></td></tr>';
+          '</tr>';
       }).join('') + '</tbody></table></div>';
 
     body.innerHTML = statsHtml + boardHtml + tableHtml;
 
+    // לחיצה על שורה פותחת את **אותו** מסך פרטי איש קשר שיש היום בדשבורד
+    // הראשי (הערה + שינוי סטטוס + העברה לנציגה) - לא מסך נפרד. עוברים
+    // לטאב הקמפיין שהליד שייך אליו ואז פותחים את הכרטיס שלו.
     body.querySelectorAll('tr.lm-row').forEach(function (tr) {
       tr.addEventListener('click', function () {
-        const el = document.getElementById('lmDetail' + tr.getAttribute('data-idx'));
-        if (el) el.classList.toggle('open');
+        const it = data.rows[Number(tr.getAttribute('data-idx'))];
+        if (!it) return;
+        document.getElementById('leadMgmtModal').classList.remove('show');
+        const tabBtn = document.querySelector('.tab[data-tab="' + it.campaign.replace(/"/g, '\\"') + '"]');
+        if (tabBtn) {
+          document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+          tabBtn.classList.add('active');
+        }
+        loadCampaign(it.campaign, false, function () {
+          if (openContactDetailFor_) openContactDetailFor_(it.phone);
+        });
       });
     });
   }
@@ -2488,25 +2475,6 @@
           extra += '<div class="schedule-at">🕒 ' + escapeHtml_(r.scheduledAt) + '</div>';
         }
         return '<td><span class="status-pill" style="background:' + softStatusColor_(c) + ';color:' + c + ';">' + escapeHtml_(statusText) + '</span>' + extra + '</td>';
-      } },
-    { key: 'notes', label: 'הערות', always: true,
-      // יומן מאוחד: כל התיעוד יחד (ליד/פרלה/מיטוב), החדש למעלה. התא מציג
-      // קוביה עם עד 3 שורות; הטקסט המלא נפתח בטולטיפ במעבר עכבר.
-      filterValue: function (r) { return notesPlainText_(r.notesEntries); },
-      cell: function (r) {
-        const entries = visibleNotes_(r);
-        if (!entries.length) return '<td class="notes-cell"><span class="notes-empty">—</span></td>';
-        // שורה אחת בלבד (האחרונה) - זה מה שמאפשר 20 שורות במסך אחד.
-        // כל השאר זמין בטולטיפ במעבר עכבר ובחלון ה-"+".
-        const e = entries[0];
-        const a = NOTE_AUTHORS[e.who] || NOTE_AUTHORS.team;
-        const line = '<span class="note-line"><span class="note-who ' + a.cls + '">' +
-          a.icon + ' ' + a.label + ':</span> ' + escapeHtml_(e.text) + '</span>';
-        const more = entries.length > 1
-          ? '<span class="note-more">+' + (entries.length - 1) + '</span>' : '';
-        const badge = r._isNew ? '<span class="new-badge">חדש</span>' : '';
-        return '<td class="notes-cell" data-tip="' + escapeHtml_(notesPlainText_(entries)) + '">' +
-          '<div class="notes-box one-line">' + line + more + badge + '</div></td>';
       } },
     { key: 'actions', label: '', always: true,
       cell: function (r) {
@@ -3735,6 +3703,9 @@
       const tr = e.target.closest('tr[data-phone]');
       if (tr) open(tr.getAttribute('data-phone'));
     });
+    // חשוף גם למסך "כל הלידים" - שם צריך בדיוק את אותו מסך פרטים
+    // (הערה/סטטוס/העברה) בלי לשכפל אותו.
+    openContactDetailFor_ = open;
   }
 
   /** מציג את הלינק האישי של כל נציגה עם כפתור העתקה - כדי שלא צריך
