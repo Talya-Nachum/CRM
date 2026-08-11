@@ -3598,10 +3598,9 @@ ${callHistory ? 'Call History:\n' + callHistory + '\n' : ''}
 `;
 
   const response = UrlFetchApp.fetch(
-    // gemini-1.5-flash הוחזר עם 404 (מודל לא קיים יותר) - חזרה זמנית ל-gemini-flash-latest
-    // שכן עובד, גם אם עלול להיתקל שוב במכסת 429 בעומס גבוה. debugListGeminiModels()
-    // ייתן רשימה אמיתית של מודלים זמינים לפתרון קבוע.
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey,
+    // gemini-flash-latest מיצה את המכסה היומית (429) - מעבר למודל מוצמד אחר
+    // (gemini-2.5-flash) עם דלי מכסה נפרד משלו, שאמור לעבוד מיד.
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey,
     {
       method: 'post',
       contentType: 'application/json',
@@ -3934,10 +3933,9 @@ function matchCallStatus_(text, statusList) {
       'הרשימה:\n' + statusList.join('\n') + '\n\nהשיחה:\n' + text;
 
     const response = UrlFetchApp.fetch(
-      // gemini-1.5-flash הוחזר עם 404 (מודל לא קיים יותר) - חזרה זמנית ל-gemini-flash-latest
-      // שכן עובד, גם אם עלול להיתקל שוב במכסת 429 בעומס גבוה. debugListGeminiModels()
-      // ייתן רשימה אמיתית של מודלים זמינים לפתרון קבוע.
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey,
+      // gemini-flash-latest מיצה את המכסה היומית (429) - מעבר למודל מוצמד אחר
+      // (gemini-2.5-flash) עם דלי מכסה נפרד משלו, שאמור לעבוד מיד.
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey,
       {
         method: 'post',
         contentType: 'application/json',
