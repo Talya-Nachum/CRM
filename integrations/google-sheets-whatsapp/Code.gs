@@ -834,7 +834,12 @@ function doPost(e) {
       handleWixWebhook_(ss, payload);
     }
   } catch (err) {
-    logSheet.appendRow([new Date(), 'ERROR: ' + err.message + ' | ' + err.stack]);
+    // כולל את גוף הבקשה הגולמי בשורת השגיאה (לא רק את ההודעה) - כדי
+    // ש-debugWebhookLogByPhone_ (שמחפש טלפון בטקסט) ימצא גם שורת ERROR
+    // ולא רק שורות תקינות. באג אמיתי שקרה בפועל: שגיאת timeout על
+    // נעילה נבלעה כאן, וה-ERROR שנרשם לא כלל את הטלפון - כך שהחיפוש
+    // לפי טלפון "לא מצא כלום" למרות שהשגיאה כן הייתה רשומה בטאב.
+    logSheet.appendRow([new Date(), 'ERROR: ' + err.message + ' | ' + err.stack + ' | payload: ' + e.postData.contents]);
   }
 
   return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
@@ -1303,6 +1308,20 @@ function handleNlpearlWebhook_(ss, payload) {
   // הסטטוסים השוטפים (לא ענה וכו') מגיעים דרך אירועי ה-Lead למעלה.
   if (!summary && !tagText && !transcript) return;
 
+  // סיווג הסטטוס ב-AI (matchCallStatus_) קורא ל-Gemini ברשת - יכול לקחת
+  // כמה שניות טובות. באג אמיתי שנתפס בפועל: זה קרה **בתוך** הנעילה,
+  // כך שכל קריאת Webhook אחרת (גם לגמרי לא קשורה - וואטסאפ, קמפיין
+  // אחר) הייתה נתקעת מאחוריה. כשכמה שיחות פרלה הגיעו כמעט יחד (פרלה
+  // שולחת כמה אירועים ברצף על אותה שיחה), התור הזה גדל עד שקריאה
+  // מסוימת חיכתה יותר מ-10 שניות ל-waitLock, קיבלה שגיאת timeout,
+  // ו-doPost בלע אותה בשקט (רושם ERROR ב-WebhookLog ומחזיר "ok" - כדי
+  // שפרלה לא תנסה שוב ותכפיל נתונים) - כך שהתמלול/הסיכום שכן הגיעו
+  // פשוט לא נכתבו, בלי שום עדות ל"תקלה" מלבד שורת ERROR ב-WebhookLog
+  // שלא כוללת את הטלפון. לכן קוראים ל-Gemini **לפני** הנעילה - הנעילה
+  // עכשיו מגנה רק על הקריאה/כתיבה בגיליון עצמו, שהיא מהירה.
+  const statusListForClassify_ = getStatusList_();
+  const statusValueFromAi_ = matchCallStatus_(callTextForStatus_(transcript, summary, tagText), statusListForClassify_);
+
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -1370,14 +1389,14 @@ function handleNlpearlWebhook_(ss, payload) {
           // והתגית - ולא מהתגית לבדה. זו הבקשה המפורשת של הלקוחה: שתהיה
           // הלימה בין ההערות שהיא קוראת לבין הסטטוס שהיא רואה. תגית
           // גנרית כמו "כללי" כבר לא הופכת לסטטוס: אם היא לא ערך חוקי
-          // מ"רשימת סטטוסים", היא נשארת בעמודת התגית בלבד.
-          const statusList = getStatusList_();
-          const statusValue = matchCallStatus_(callTextForStatus_(transcript, summary, tagText), statusList);
+          // מ"רשימת סטטוסים", היא נשארת בעמודת התגית בלבד. (סווג ב-Gemini
+          // כבר בוצע למעלה, לפני הנעילה - ר' הערה שם.)
+          const statusValue = statusValueFromAi_;
           // אחידות מוחלטת: כותבים ל"סטטוס שיחה" **רק** ערך מאוצר המילים
           // הסגור. אם העיגול ב-AI נכשל והוחזר הנרטיב הגולמי - לא כותבים
           // כלום (הסטטוס הקודם נשאר), והטקסט המלא ממילא כבר נשמר
           // ב"סיכום שיחה" למעלה. כך פסקה חופשית לעולם לא נוחתת בעמודת הסטטוס.
-          if (statusCol !== -1 && isAllowedStatusValue_(statusValue, statusList)) {
+          if (statusCol !== -1 && isAllowedStatusValue_(statusValue, statusListForClassify_)) {
             sheet.getRange(rowIndex, statusCol + 1).setValue(statusValue);
           }
           recordDailyActivity_(sheet.getName());
