@@ -2138,11 +2138,95 @@ function debugNewLead2WebhookLog() {
  * ה-Webhook הגיע עכשיו. בטוח להריץ פעם אחת - להריץ שוב תכתוב את אותו
  * תוכן פעמיים לעמודת "סיכום שיחה" (היא מצטברת), אז מריצים רק פעם אחת.
  */
-function backfillRanDahanPearlCall() {
-  const raw = '{"id":"6a79db9ac5627d18e535dd75","pearlId":"6a796c47dd65630cba3da806","startTime":"2026-08-10T14:09:47.5905558Z","conversationStatus":110,"status":4,"from":"+972320550","to":"+972528313817","name":"רן דהן","duration":55,"recording":"https://api.nlpearl.ai/v2/Recording/69bfb7e9d22ecd27841d9318/6a796c47dd65630cba3da806/6a79db9ac5627d18e535dd75","transcript":[{"role":2,"content":"שלום רן, זאת מעיין מסי דאטה, מה שלומך?","startTime":2.7496438,"endTime":null},{"role":3,"content":"בסדר, אה... חייל גם מתקרב. לא. פנוי.","startTime":1.2193652,"endTime":13.159031},{"role":2,"content":"בטח, מבינה לחלוטין! רק במשפט , התקשרתי לגבי פתרון גיבוי וסייבר מהפכני של אקרוניס שמתמודד עם איומי AI. מתי יהיה נוח שאחזור אליך?","startTime":15.289546,"endTime":24.769558},{"role":3,"content":"טוב, של Acronis... דיברנו. וכרגע. לא נראה. לי שזה רלוונטי.","startTime":13.699834,"endTime":31.53873},{"role":2,"content":"אני מבינה לגמרי, אי","startTime":34.569553,"endTime":null},{"role":3,"content":"כרגע זה לא רלוונטי.","startTime":34.899315,"endTime":36.878952},{"role":2,"content":"אני מבינה לגמרי, אין בעי","startTime":38.689655,"endTime":null},{"role":3,"content":"שתהיה בנמרית חדשה, או. נובמבר אולי.","startTime":38.419395,"endTime":45.79881},{"role":2,"content":"בטח, מבינה לחלוטין!","startTime":47.909714,"endTime":null}],"summary":"שוחחתי עם רן לגבי פתרון הגיבוי והסייבר של Acronis. הוא ציין שכרגע הפתרון אינו רלוונטי עבורו, אך העלה אפשרות לחזור אליו בנובמבר.","collectedInfo":[{"id":"agentName","name":"Agent Name","value":"מעיין"},{"id":"firstName","name":"First Name","value":"רן"},{"id":"lastName","name":"Last Name","value":"דהן"},{"id":"emailAddress","name":"Email Address","value":"ran@elcam.co.il"},{"id":"phoneNumber","name":"Phone Number","value":"+972528313817"},{"id":"localPhoneNumber","name":"Local Phone Number","value":"0528313817"},{"id":"agentPhoneNumber","name":"Agent Phone Number","value":"+972320550"},{"id":"callbackDate","name":"תאריך חזרה","value":"נובמבר"}],"tags":["בתהליך עתידי","לא מעוניין"],"isCallTransferred":null,"overallSentiment":3,"leadId":"6a797e381201360a97d6563e"}';
+/**
+ * שחזור כללי - סורקת את **כל** טאב WebhookLog (לא רק ליד אחד), מוצאת כל
+ * אירועי שיחה של פרלה עם תוכן אמיתי (תמלול/סיכום/תגית), ולכל אחד בודקת
+ * אם התוכן שלו כבר נמצא בגליון - אם לא, מזריקה אותו מחדש דרך אותה
+ * פונקציית עיבוד רגילה (handleNlpearlWebhook_), בדיוק כאילו ה-Webhook
+ * הגיע עכשיו. בטוחה להרצה חוזרת: אירוע שכבר נכתב מזוהה ומדולג (הבדיקה
+ * מסתמכת על "סיכום שיחה" שהיא העמודה היחידה שמצטברת ולא נדרסת - כל שאר
+ * השדות נכתבים מחדש בבטחה גם אם זה כבר קרה).
+ * מדפיסה בסוף סיכום מספרי + רשימת הטלפונים ששוחזרו בפועל.
+ */
+function backfillMissedPearlCalls() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  handleNlpearlWebhook_(ss, JSON.parse(raw));
-  Logger.log('בוצע - בדקי את השורה של רן דהן (0528313817) בטאב אקרוניס: אמורים להופיע תמלול מלא, סיכום ותגית.');
+  const logSheet = ss.getSheetByName('WebhookLog');
+  if (!logSheet) { Logger.log('אין טאב WebhookLog.'); return; }
+
+  const data = logSheet.getDataRange().getValues();
+  const startedAt = Date.now();
+  const TIME_BUDGET_MS = 4.5 * 60 * 1000; // עוצרים בבטחה לפני מגבלת 6 הדקות של הרצה ידנית
+
+  let scannedEvents = 0, alreadyOk = 0, applied = 0, noRowFound = 0, errors = 0, stoppedEarly = false;
+  const appliedList = [];
+
+  for (let i = 1; i < data.length; i++) {
+    if (Date.now() - startedAt > TIME_BUDGET_MS) { stoppedEarly = true; break; }
+
+    const raw = String(data[i][1] || '');
+    if (!raw || raw.indexOf('ERROR:') === 0) continue;
+
+    let payload;
+    try { payload = JSON.parse(raw); } catch (e) { continue; }
+    if (!payload || !payload.pearlId || !payload.to) continue; // רק אירועי שיחה עם תוכן, לא אירועי סטטוס-ליד
+
+    const tagText = (Array.isArray(payload.tags) && payload.tags.length) ? payload.tags.join(', ') : String(payload.tags || '');
+    const summary = String(payload.summary || '');
+    const details = pearlCallDetails_(payload);
+    const transcript = details.transcript;
+    if (!summary && !tagText && !transcript) continue;
+
+    scannedEvents++;
+    const incomingPhone = phoneSuffix_(payload.to);
+    if (!incomingPhone) continue;
+
+    const resultText = summary || tagText;
+    const sheets = orderedPearlSheets_(ss, incomingPhone, String(payload.pearlId));
+    let matched = false;
+
+    for (const sheet of sheets) {
+      const sdata = sheet.getDataRange().getValues();
+      const headers = sdata[0];
+      const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+      if (phoneCol === -1) continue;
+
+      for (let r = 1; r < sdata.length; r++) {
+        if (phoneSuffix_(sdata[r][phoneCol]) !== incomingPhone) continue;
+        matched = true;
+
+        const resultCol = findHeaderIndex_(headers, CALL_RESULT_HEADER, CALL_RESULT_HEADER_LEGACY);
+        const existingResult = resultCol !== -1 ? String(sdata[r][resultCol] || '') : '';
+
+        if (resultText && existingResult.indexOf(resultText) !== -1) {
+          alreadyOk++;
+        } else {
+          try {
+            handleNlpearlWebhook_(ss, payload);
+            applied++;
+            appliedList.push(payload.to + (payload.name ? ' (' + payload.name + ')' : '') + ' - ' + sheet.getName());
+          } catch (e) {
+            errors++;
+            Logger.log('שגיאה בהזרקה חוזרת עבור ' + payload.to + ': ' + e.message);
+          }
+        }
+        break;
+      }
+      if (matched) break;
+    }
+    if (!matched) noRowFound++;
+  }
+
+  Logger.log('=== סיכום שחזור ===');
+  Logger.log('אירועי שיחה עם תוכן שנסרקו: ' + scannedEvents);
+  Logger.log('כבר היו תקינים בגליון (דולגו): ' + alreadyOk);
+  Logger.log('הוזרקו מחדש בהצלחה: ' + applied);
+  Logger.log('לא נמצאה שורה מתאימה בגליון: ' + noRowFound);
+  Logger.log('שגיאות בהזרקה חוזרת: ' + errors);
+  if (stoppedEarly) Logger.log('⚠ נעצר לפני הסוף (הגיע לתקציב הזמן הבטוח) - להריץ שוב כדי להמשיך משם, זה בטוח.');
+  if (appliedList.length) {
+    Logger.log('--- הלידים ששוחזרו בפועל ---');
+    appliedList.forEach(function (s) { Logger.log(s); });
+  }
 }
 
 function debugContactByPhone(phone) {
