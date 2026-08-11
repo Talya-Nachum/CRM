@@ -2160,6 +2160,39 @@ function debugNewLead3WebhookLog() {
 }
 
 /**
+ * gemini-1.5-flash החזיר 404 (מודל לא קיים יותר). במקום לנחש עוד שם מודל,
+ * זה שואל את Gemini עצמו איזה מודלים זמינים כרגע למפתח שלנו ותומכים
+ * ב-generateContent (בדיוק כמו שהודעת השגיאה עצמה הציעה: "Call ModelService.ListModels").
+ * להריץ ולהעתיק את הפלט מ-Logger (View > Logs).
+ */
+function debugListGeminiModels() {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  if (!apiKey) {
+    Logger.log('חסר מפתח GEMINI_API_KEY ב-Script Properties (Project Settings)');
+    return;
+  }
+  const response = UrlFetchApp.fetch(
+    'https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey,
+    { muteHttpExceptions: true }
+  );
+  const code = response.getResponseCode();
+  if (code !== 200) {
+    Logger.log('שגיאה (קוד ' + code + '): ' + response.getContentText());
+    return;
+  }
+  const data = JSON.parse(response.getContentText());
+  const models = data.models || [];
+  const usable = models.filter(function (m) {
+    return (m.supportedGenerationMethods || []).indexOf('generateContent') !== -1;
+  });
+  Logger.log('סה"כ מודלים זמינים: ' + models.length + ' | תומכים ב-generateContent: ' + usable.length);
+  Logger.log('--- מודלים שאפשר להשתמש בהם (שם מלא להעתקה) ---');
+  usable.forEach(function (m) {
+    Logger.log(m.name + '  (displayName: ' + m.displayName + ')');
+  });
+}
+
+/**
  * שחזור ממוקד וחד-פעמי לשיחה של אמיר ויינברגר (0502350625, "אקרוניס") -
  * ה-JSON הגולמי שוחזר בדיוק מ-WebhookLog. במקום לחכות שהסריקה הכללית
  * (backfillMissedPearlCalls) תגיע אליו מתוך יומן ארוך עם הרבה רעש, מריצים
