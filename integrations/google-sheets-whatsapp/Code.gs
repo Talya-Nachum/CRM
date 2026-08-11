@@ -3565,7 +3565,11 @@ ${callHistory ? 'Call History:\n' + callHistory + '\n' : ''}
 `;
 
   const response = UrlFetchApp.fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey,
+    // מוצמד לגרסה ספציפית (לא "latest") בכוונה: "gemini-flash-latest" קפץ
+    // לבד לגרסה חדשה (gemini-3.6-flash לפי הודעת השגיאה) עם מכסת חינם
+    // הרבה יותר קטנה - וזו הסיבה הסבירה לשגיאת ה-429 שקיבלנו, לא עומס
+    // אמיתי שלנו. גרסה מוצמדת לא תקפוץ לבד שוב.
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + apiKey,
     {
       method: 'post',
       contentType: 'application/json',
@@ -3898,7 +3902,11 @@ function matchCallStatus_(text, statusList) {
       'הרשימה:\n' + statusList.join('\n') + '\n\nהשיחה:\n' + text;
 
     const response = UrlFetchApp.fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey,
+      // מוצמד לגרסה ספציפית (לא "latest") בכוונה: "gemini-flash-latest" קפץ
+    // לבד לגרסה חדשה (gemini-3.6-flash לפי הודעת השגיאה) עם מכסת חינם
+    // הרבה יותר קטנה - וזו הסיבה הסבירה לשגיאת ה-429 שקיבלנו, לא עומס
+    // אמיתי שלנו. גרסה מוצמדת לא תקפוץ לבד שוב.
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + apiKey,
       {
         method: 'post',
         contentType: 'application/json',
