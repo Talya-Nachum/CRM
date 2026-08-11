@@ -2160,6 +2160,19 @@ function debugNewLead3WebhookLog() {
 }
 
 /**
+ * שחזור ממוקד וחד-פעמי לשיחה של אמיר ויינברגר (0502350625, "אקרוניס") -
+ * ה-JSON הגולמי שוחזר בדיוק מ-WebhookLog. במקום לחכות שהסריקה הכללית
+ * (backfillMissedPearlCalls) תגיע אליו מתוך יומן ארוך עם הרבה רעש, מריצים
+ * רק את האירוע הספציפי הזה - מיידי, בטוח, לא כפול (הסיכום מצטבר לפי טקסט).
+ */
+function backfillAmirPearlCall() {
+  const raw = '{"id":"6a7abc6ec5627d18e5375bbc","pearlId":"6a796c47dd65630cba3da806","startTime":"2026-08-11T06:08:58.7512165Z","conversationStatus":100,"status":4,"from":"+972320550","to":"+972502350625","name":"אמיר ויינברגר","duration":57,"recording":"https://api.nlpearl.ai/v2/Recording/69bfb7e9d22ecd27841d9318/6a796c47dd65630cba3da806/6a7abc6ec5627d18e5375bbc","transcript":[{"role":3,"content":"בוקר טוב.","startTime":0.1998744,"endTime":1.7793533},{"role":2,"content":"שלום אמיר, זאת מעיין מסי דאטה, מה שלומך?","startTime":1.7896014,"endTime":null},{"role":3,"content":"תודה, בסדר. מה שלומך? הלו. הלו.","startTime":5.859744,"endTime":13.979338},{"role":2,"content":"אמיר, התקשרתי כי אנחנו חברת ההפצה של מוצרי אקרוניס בישראל, לאקרוניס יש פתרון מהפכני שמתמודד עם איום האבטחה החדש שנוצר בעקבות כלי AI שכול אחד בארגון עובד איתו. ו..בעצם רציתי להציע פגישה קצרה של 20 דקות כדי לבדוק האם זה מתאים לארגון שלכם, הפגישה תתקיים עם מומחה מ-One Systems, מה דעתך?","startTime":17.42954,"endTime":40.989647},{"role":3,"content":"אמם, אפשרי.","startTime":18.19996,"endTime":44.959366},{"role":2,"content":"מעולה! אני דואגת שאלון מ-One Systems יחזור אליך לשיחה קצרה של 20 דקות. תודה רבה אמיר, שיהיה לך יום מעולה! ביי","startTime":46.689365,"endTime":55.34948}],"summary":"הצגתי לאמיר את פתרון האבטחה של Acronis להתמודדות עם איומים הנובעים משימוש בכלי AI בארגונים, והצעתי פגישה קצרה עם מומחה מ-One Systems. אמיר הסכים באופן עקרוני, וסיכמתי שאלון מ-One Systems יחזור אליו לשיחה טלפונית של 20 דקות.","collectedInfo":[{"id":"agentName","name":"Agent Name","value":"מעיין"},{"id":"firstName","name":"First Name","value":"אמיר"},{"id":"lastName","name":"Last Name","value":"ויינברגר"},{"id":"emailAddress","name":"Email Address","value":"amir@gal-almagor.co.il"},{"id":"phoneNumber","name":"Phone Number","value":"+972502350625"},{"id":"localPhoneNumber","name":"Local Phone Number","value":"0502350625"},{"id":"agentPhoneNumber","name":"Agent Phone Number","value":"+972320550"}],"tags":["ליד הועבר ללקוח"],"isCallTransferred":null,"overallSentiment":4,"leadId":"6a797e381201360a97d65618"}';
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  handleNlpearlWebhook_(ss, JSON.parse(raw));
+  Logger.log('בוצע - בדקי את השורה של אמיר ויינברגר (0502350625) בטאב אקרוניס.');
+}
+
+/**
  * שחזור חד-פעמי: האירוע העשיר של רן דהן (0528313817) שהגיע אתמול
  * מפרלה (תמלול+סיכום+תגית מלאים) אבל לא נכתב לגליון בגלל באג הנעילה
  * שתוקן. ה-JSON הגולמי הזה שוחזר בדיוק מטאב WebhookLog - מריצים דרך
