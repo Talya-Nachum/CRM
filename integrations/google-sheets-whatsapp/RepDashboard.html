@@ -105,8 +105,7 @@
   .channels{display:inline-flex;gap:3px;margin-inline-start:5px;vertical-align:middle}
   .ch{font-size:12.5px;line-height:1;cursor:help}
   .hist{margin-top:8px;padding:7px 9px;border-radius:9px;background:#F8FAFC;border:1px solid var(--border);
-        font-size:12.5px;line-height:1.5;color:#475467;white-space:nowrap;overflow:hidden;
-        text-overflow:ellipsis;cursor:help}
+        font-size:12.5px;line-height:1.5;color:#475467;white-space:pre-wrap;word-break:break-word}
   .hist.empty{color:#98A2B3;font-style:italic}
   /* הערה אישית מטליה בזמן ההעברה - צריכה לבלוט לפני התיעוד הרגיל,
      כדי שהנציגה תראה אותה לפני שהיא מרימה טלפון. */
@@ -132,6 +131,9 @@
            border-bottom:1.5px solid #EAEDF3;white-space:nowrap}
   tbody td{padding:7px;border-bottom:1px solid #F4F6F9;white-space:nowrap;overflow:hidden;
            text-overflow:ellipsis}
+  /* עמודת "הערה שכתבתי" - בלי חיתוך, בניגוד לשאר עמודות הטבלה (יש
+     מספיק מקום כי היא העמודה האחרונה והכי רחבה). */
+  tbody td.note-full{white-space:pre-wrap;word-break:break-word;overflow:visible;text-overflow:clip}
   .pill{display:inline-block;padding:2px 9px;border-radius:7px;font-size:12px;font-weight:800;
         max-width:100%;overflow:hidden;text-overflow:ellipsis}
 
@@ -529,10 +531,9 @@
         '<div class="nm">' + esc(l.name) + '</div>' +
         (l.campaign ? '<span class="camp">' + esc(l.campaign) + '</span>' : '') +
         channelIcons_(l.channel) +
-        (l.noteToRep ? '<div class="repnote" title="' + esc(l.noteToRep) + '"><b>הערה מטליה:</b> ' + esc(l.noteToRep) + '</div>' : '') +
-        '<div class="hist' + (lastLine ? '' : ' empty') + '"' +
-          (lastLine ? ' title="' + esc(l.history) + '"' : '') + '>' +
-          (lastLine ? esc(lastLine) : 'אין תיעוד קודם') + '</div>' +
+        (l.noteToRep ? '<div class="repnote"><b>הערה מטליה:</b> ' + esc(l.noteToRep) + '</div>' : '') +
+        '<div class="hist' + (lastLine ? '' : ' empty') + '">' +
+          (lastLine ? esc(l.history) : 'אין תיעוד קודם') + '</div>' +
         '<div class="info">' +
           '<div class="info-row"><b>טלפון</b><span>' + esc(prettyPhone(l.phone)) + '</span></div>' +
           '<div class="info-row"><b>מייל</b><span>' + esc(l.email || '—') + '</span></div>' +
@@ -573,7 +574,7 @@
           '<td><b>' + esc(l.name) + '</b></td><td>' + esc(l.campaign) + '</td>' +
           '<td><span class="pill" style="background:rgba(31,170,89,.14);color:#137A43">' +
             esc(l.status) + '</span></td>' +
-          '<td>' + esc(l.note || '—') + '</td></tr>';
+          '<td class="note-full">' + esc(l.note || '—') + '</td></tr>';
       }).join('') + '</tbody></table>';
   }
 
@@ -746,33 +747,26 @@
       [lead.campaign, 'הועבר אלייך ב-' + lead.assignedAt].filter(Boolean).join(' · ');
     document.getElementById('aiCall').href = telHref(lead.phone) || '#';
     document.getElementById('aiBody').innerHTML =
-      '<div class="aibox sum"><h5>📝 סיכום השיחה עד עכשיו</h5><p>מכינה סיכום...</p></div>' +
-      historyHtml(lead);
+      '<div class="aibox sum"><h5>📝 סיכום השיחה עד עכשיו</h5><p>מכינה סיכום...</p></div>';
     document.getElementById('aiModal').classList.add('show');
 
+    // כוונה מפורשת: כאן, בחלון "שרביט AI" בלבד, מציגים רק את התובנה
+    // המעובדת (סיכום + טיפ) - בלי לשפוך את התמלול הגולמי. ה-AI עצמו
+    // כן מקבל את כל התיעוד בצד השרת (getRepAiSummary) - רק לא מציגים
+    // אותו כאן. התיעוד הגולמי עדיין מוצג במלואו בכרטיס הליד עצמו (.hist).
     google.script.run
       .withSuccessHandler(function (res) {
         document.getElementById('aiBody').innerHTML =
           '<div class="aibox sum"><h5>📝 סיכום השיחה עד עכשיו</h5><p>' +
             esc(res.summary || 'לא התקבל סיכום') + '</p></div>' +
           (res.salesTip ? '<div class="aibox tip"><h5>🪄 טיפ מכירה</h5><p>' +
-            esc(res.salesTip) + '</p></div>' : '') +
-          historyHtml(lead);
+            esc(res.salesTip) + '</p></div>' : '');
       })
       .withFailureHandler(function (err) {
         document.getElementById('aiBody').innerHTML =
-          '<div class="err">' + esc((err && err.message) ? err.message : err) + '</div>' +
-          historyHtml(lead);
+          '<div class="err">' + esc((err && err.message) ? err.message : err) + '</div>';
       })
       .getRepAiSummary(REP_KEY, lead.id);
-  }
-
-  function historyHtml(lead) {
-    const lines = String(lead.history || '').split('\n').filter(function (s) { return s.trim(); });
-    if (!lines.length) return '';
-    return '<div class="timeline"><h5>💬 כל התיעוד מתחילת הקשר</h5>' +
-      lines.map(function (l) { return '<div class="tl">' + esc(l) + '</div>'; }).join('') +
-      '</div>';
   }
 
   // ---------------- חיווט ----------------
