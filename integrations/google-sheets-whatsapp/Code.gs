@@ -2090,6 +2090,16 @@ function debugSharonWebhookLog() {
   debugWebhookLogByPhone_('0586600121', 10);
 }
 
+/** עטיפה להרצה ישירה - דיווח על שיחה חדשה בפרלה (אתמול) בלי תמלול. */
+function debugNewLeadPearl() {
+  debugPearlDataByPhone_('0528576657');
+}
+
+/** עטיפה להרצה ישירה - WebhookLog הגולמי לאותה שיחה, כדי לדעת אם ה-Webhook בכלל הגיע. */
+function debugNewLeadWebhookLog() {
+  debugWebhookLogByPhone_('0528576657', 10);
+}
+
 function debugContactByPhone(phone) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = getCampaignSheets_(ss);
