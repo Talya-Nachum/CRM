@@ -3783,6 +3783,22 @@ const CALL_OUTCOME_RULES_ = [
       'לא זמין', 'המספר תפוס'] }
 ];
 
+const NEGATION_WORDS_ = ['לא', 'אין', 'בלי'];
+
+/**
+ * באג אמיתי שנתפס בפועל: "אבי... ואמר... לא תואמה פגישה" סווג בטעות
+ * כ"תואמה פגישה" - כי המילה "תואמה"/"פגישה" פשוט **מופיעה** בטקסט,
+ * בלי שום התייחסות למילת השלילה "לא" ממש לפניה. בודקת אם באחד
+ * מ-20 התווים שלפני ההתאמה יש מילת שלילה - ואם כן, לא נחשב כהתאמה
+ * (נופל הלאה לכלל הבא, ובסוף ל-AI שמבין הקשר טוב יותר מהתאמת מחרוזת).
+ */
+function isNegatedMatch_(normalized, matchIndex) {
+  const before = normalized.slice(Math.max(0, matchIndex - 20), matchIndex);
+  return NEGATION_WORDS_.some(function (w) {
+    return new RegExp('(^|\\s)' + w + '(\\s|$)').test(before);
+  });
+}
+
 /**
  * סיווג מהיר לפי מילות מפתח - רץ **לפני** ה-AI: הוא דטרמיניסטי, מיידי,
  * לא עולה כלום ולא נחשף למגבלות קצב. ה-AI נכנס רק כשזה לא הכריע.
@@ -3793,7 +3809,8 @@ function classifyCallOutcome_(text) {
   for (let i = 0; i < CALL_OUTCOME_RULES_.length; i++) {
     const rule = CALL_OUTCOME_RULES_[i];
     for (let j = 0; j < rule.words.length; j++) {
-      if (normalized.indexOf(normalizeLabel_(rule.words[j])) !== -1) return rule.status;
+      const idx = normalized.indexOf(normalizeLabel_(rule.words[j]));
+      if (idx !== -1 && !isNegatedMatch_(normalized, idx)) return rule.status;
     }
   }
   return '';
