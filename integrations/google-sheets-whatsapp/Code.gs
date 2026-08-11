@@ -3600,7 +3600,7 @@ ${callHistory ? 'Call History:\n' + callHistory + '\n' : ''}
   const response = UrlFetchApp.fetch(
     // gemini-flash-latest מיצה את המכסה היומית (429) - מעבר למודל מוצמד אחר
     // (gemini-2.5-flash) עם דלי מכסה נפרד משלו, שאמור לעבוד מיד.
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey,
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=' + apiKey,
     {
       method: 'post',
       contentType: 'application/json',
@@ -3935,7 +3935,7 @@ function matchCallStatus_(text, statusList) {
     const response = UrlFetchApp.fetch(
       // gemini-flash-latest מיצה את המכסה היומית (429) - מעבר למודל מוצמד אחר
       // (gemini-2.5-flash) עם דלי מכסה נפרד משלו, שאמור לעבוד מיד.
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=' + apiKey,
       {
         method: 'post',
         contentType: 'application/json',
