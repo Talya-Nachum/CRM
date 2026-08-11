@@ -2100,6 +2100,16 @@ function debugNewLeadWebhookLog() {
   debugWebhookLogByPhone_('0528576657', 10);
 }
 
+/** עטיפה להרצה ישירה - ליד שני שדווח: אין שום שיחה/תיעוד של פרלה בכלל. */
+function debugNewLead2Pearl() {
+  debugPearlDataByPhone_('0528313817');
+}
+
+/** עטיפה להרצה ישירה - WebhookLog הגולמי לליד השני. */
+function debugNewLead2WebhookLog() {
+  debugWebhookLogByPhone_('0528313817', 10);
+}
+
 function debugContactByPhone(phone) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = getCampaignSheets_(ss);
