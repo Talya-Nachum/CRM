@@ -840,6 +840,7 @@ function doPost(e) {
     // נעילה נבלעה כאן, וה-ERROR שנרשם לא כלל את הטלפון - כך שהחיפוש
     // לפי טלפון "לא מצא כלום" למרות שהשגיאה כן הייתה רשומה בטאב.
     logSheet.appendRow([new Date(), 'ERROR: ' + err.message + ' | ' + err.stack + ' | payload: ' + e.postData.contents]);
+    notifyWebhookError_(err, e.postData.contents);
   }
 
   return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
@@ -2129,6 +2130,21 @@ function debugNewLead2WebhookLog() {
   debugWebhookLogByPhone_('0528313817', 10);
 }
 
+/**
+ * שחזור חד-פעמי: האירוע העשיר של רן דהן (0528313817) שהגיע אתמול
+ * מפרלה (תמלול+סיכום+תגית מלאים) אבל לא נכתב לגליון בגלל באג הנעילה
+ * שתוקן. ה-JSON הגולמי הזה שוחזר בדיוק מטאב WebhookLog - מריצים דרך
+ * אותה פונקציית עיבוד רגילה (handleNlpearlWebhook_), בדיוק כאילו
+ * ה-Webhook הגיע עכשיו. בטוח להריץ פעם אחת - להריץ שוב תכתוב את אותו
+ * תוכן פעמיים לעמודת "סיכום שיחה" (היא מצטברת), אז מריצים רק פעם אחת.
+ */
+function backfillRanDahanPearlCall() {
+  const raw = '{"id":"6a79db9ac5627d18e535dd75","pearlId":"6a796c47dd65630cba3da806","startTime":"2026-08-10T14:09:47.5905558Z","conversationStatus":110,"status":4,"from":"+972320550","to":"+972528313817","name":"רן דהן","duration":55,"recording":"https://api.nlpearl.ai/v2/Recording/69bfb7e9d22ecd27841d9318/6a796c47dd65630cba3da806/6a79db9ac5627d18e535dd75","transcript":[{"role":2,"content":"שלום רן, זאת מעיין מסי דאטה, מה שלומך?","startTime":2.7496438,"endTime":null},{"role":3,"content":"בסדר, אה... חייל גם מתקרב. לא. פנוי.","startTime":1.2193652,"endTime":13.159031},{"role":2,"content":"בטח, מבינה לחלוטין! רק במשפט , התקשרתי לגבי פתרון גיבוי וסייבר מהפכני של אקרוניס שמתמודד עם איומי AI. מתי יהיה נוח שאחזור אליך?","startTime":15.289546,"endTime":24.769558},{"role":3,"content":"טוב, של Acronis... דיברנו. וכרגע. לא נראה. לי שזה רלוונטי.","startTime":13.699834,"endTime":31.53873},{"role":2,"content":"אני מבינה לגמרי, אי","startTime":34.569553,"endTime":null},{"role":3,"content":"כרגע זה לא רלוונטי.","startTime":34.899315,"endTime":36.878952},{"role":2,"content":"אני מבינה לגמרי, אין בעי","startTime":38.689655,"endTime":null},{"role":3,"content":"שתהיה בנמרית חדשה, או. נובמבר אולי.","startTime":38.419395,"endTime":45.79881},{"role":2,"content":"בטח, מבינה לחלוטין!","startTime":47.909714,"endTime":null}],"summary":"שוחחתי עם רן לגבי פתרון הגיבוי והסייבר של Acronis. הוא ציין שכרגע הפתרון אינו רלוונטי עבורו, אך העלה אפשרות לחזור אליו בנובמבר.","collectedInfo":[{"id":"agentName","name":"Agent Name","value":"מעיין"},{"id":"firstName","name":"First Name","value":"רן"},{"id":"lastName","name":"Last Name","value":"דהן"},{"id":"emailAddress","name":"Email Address","value":"ran@elcam.co.il"},{"id":"phoneNumber","name":"Phone Number","value":"+972528313817"},{"id":"localPhoneNumber","name":"Local Phone Number","value":"0528313817"},{"id":"agentPhoneNumber","name":"Agent Phone Number","value":"+972320550"},{"id":"callbackDate","name":"תאריך חזרה","value":"נובמבר"}],"tags":["בתהליך עתידי","לא מעוניין"],"isCallTransferred":null,"overallSentiment":3,"leadId":"6a797e381201360a97d6563e"}';
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  handleNlpearlWebhook_(ss, JSON.parse(raw));
+  Logger.log('בוצע - בדקי את השורה של רן דהן (0528313817) בטאב אקרוניס: אמורים להופיע תמלול מלא, סיכום ותגית.');
+}
+
 function debugContactByPhone(phone) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = getCampaignSheets_(ss);
@@ -2960,6 +2976,31 @@ function notifyRepOfNewLead_(rep, leadName, company, noteToRep) {
 function escapeHtmlServer_(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const ADMIN_ALERT_EMAIL_ = 'talya@mituvforsales.co.il';
+
+/**
+ * מייל התראה מיידי לטליה בכל פעם ש-doPost תופס שגיאה בעיבוד Webhook
+ * נכנס (וואטסאפ/פרלה/Wix). עד היום שגיאה כזו נרשמה בשקט ב-WebhookLog
+ * בלבד, ואף אחד לא ידע עליה עד שמישהי שמה לב שחסר תיעוד - לפעמים רק
+ * למחרת. כישלון בשליחת המייל עצמו לא אמור לקרות, אבל לגמרי לא קריטי -
+ * השורה ב-WebhookLog כבר נרשמה בכל מקרה.
+ */
+function notifyWebhookError_(err, rawPayload) {
+  try {
+    MailApp.sendEmail({
+      to: ADMIN_ALERT_EMAIL_,
+      subject: '⚠️ שגיאה בקליטת Webhook - מיטוב מכירות',
+      body: 'אירעה שגיאה בעיבוד Webhook נכנס (וואטסאפ / פרלה / Wix) - ' +
+        'ייתכן שנתונים מהאירוע הזה לא נשמרו בגיליון.\n\n' +
+        'שגיאה: ' + err.message + '\n\n' +
+        'תחילת הבקשה הגולמית:\n' + String(rawPayload || '').slice(0, 800) + '\n\n' +
+        'השורה המלאה נרשמה בטאב WebhookLog. אפשר לבדוק גם ב-Executions בעורך הסקריפטים.'
+    });
+  } catch (mailErr) {
+    Logger.log('שליחת מייל התראה על שגיאת Webhook נכשלה: ' + mailErr.message);
+  }
 }
 
 /**
