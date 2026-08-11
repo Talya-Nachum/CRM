@@ -105,7 +105,8 @@
   .channels{display:inline-flex;gap:3px;margin-inline-start:5px;vertical-align:middle}
   .ch{font-size:12.5px;line-height:1;cursor:help}
   .hist{margin-top:8px;padding:7px 9px;border-radius:9px;background:#F8FAFC;border:1px solid var(--border);
-        font-size:12.5px;line-height:1.5;color:#475467;max-height:52px;overflow:hidden}
+        font-size:12.5px;line-height:1.5;color:#475467;white-space:nowrap;overflow:hidden;
+        text-overflow:ellipsis;cursor:help}
   .hist.empty{color:#98A2B3;font-style:italic}
   /* הערה אישית מטליה בזמן ההעברה - צריכה לבלוט לפני התיעוד הרגיל,
      כדי שהנציגה תראה אותה לפני שהיא מרימה טלפון. */
@@ -248,7 +249,7 @@
     <div class="sub" id="doneSub"></div>
     <div class="opts" id="statusOpts"></div>
     <select class="fullsel" id="fullStatusSel"></select>
-    <textarea class="note" id="doneNote" placeholder="הערה (לא חובה) - למשל: &quot;חתם, מועבר לחיוב&quot;"></textarea>
+    <textarea class="note" id="doneNote" placeholder="הערה (חובה) - למשל: &quot;חתם, מועבר לחיוב&quot;"></textarea>
     <div class="modal-err" id="doneErr"></div>
     <div class="mrow">
       <button type="button" id="doneCancel">ביטול</button>
@@ -528,8 +529,9 @@
         '<div class="nm">' + esc(l.name) + '</div>' +
         (l.campaign ? '<span class="camp">' + esc(l.campaign) + '</span>' : '') +
         channelIcons_(l.channel) +
-        (l.noteToRep ? '<div class="repnote"><b>הערה מטליה:</b> ' + esc(l.noteToRep) + '</div>' : '') +
-        '<div class="hist' + (lastLine ? '' : ' empty') + '">' +
+        (l.noteToRep ? '<div class="repnote" title="' + esc(l.noteToRep) + '"><b>הערה מטליה:</b> ' + esc(l.noteToRep) + '</div>' : '') +
+        '<div class="hist' + (lastLine ? '' : ' empty') + '"' +
+          (lastLine ? ' title="' + esc(l.history) + '"' : '') + '>' +
           (lastLine ? esc(lastLine) : 'אין תיעוד קודם') + '</div>' +
         '<div class="info">' +
           '<div class="info-row"><b>טלפון</b><span>' + esc(prettyPhone(l.phone)) + '</span></div>' +
@@ -595,7 +597,7 @@
     document.getElementById('doneConfirm').disabled = false;
 
     const opts = document.getElementById('statusOpts');
-    const icons = { 'תואמה פגישה': '📅', 'בתהליך': '⏳', 'בתהליך עתידי': '🗓️', 'לא מעוניין': '🚫' };
+    const icons = { 'תואמה פגישה': '📅', 'בתהליך': '⏳', 'בתהליך עתידי': '🗓️', 'לא מעוניין': '🚫', 'סגור פניה': '🔒' };
     opts.innerHTML = (data.quickStatuses || []).map(function (s) {
       return '<button type="button" data-status="' + esc(s) + '">' +
         (icons[s] ? icons[s] + ' ' : '') + esc(s) + '</button>';
@@ -634,10 +636,15 @@
       document.getElementById('doneErr').textContent = 'יש לבחור סטטוס';
       return;
     }
+    const note = document.getElementById('doneNote').value.trim();
+    if (!note) {
+      document.getElementById('doneErr').textContent = 'יש לכתוב הערה לפני סיום הטיפול';
+      document.getElementById('doneNote').focus();
+      return;
+    }
     const btn = document.getElementById('doneConfirm');
     btn.disabled = true;
     btn.textContent = 'שומרת...';
-    const note = document.getElementById('doneNote').value.trim();
     const lead = activeLead;
     const status = chosenStatus;
 
@@ -645,7 +652,7 @@
       .withSuccessHandler(function (res) {
         btn.textContent = 'אישור וסיום';
         document.getElementById('doneModal').classList.remove('show');
-        celebrate(!!(res && res.celebrate), lead, status);
+        celebrate(res, lead, status);
         load(true);
       })
       .withFailureHandler(function (err) {
@@ -657,7 +664,14 @@
   }
 
   // ---------------- חגיגות ----------------
-  function celebrate(isMeeting, lead, status) {
+  // שלוש אפשרויות בלבד: "תואמה פגישה" - קונפטי. "לא מעוניין" - לבבות
+  // + הודעה שהליד חוזר לטליה לבדיקה נוספת. כל סטטוס אחר (כולל "סגור
+  // פניה"/"בתהליך עתידי") - נסגר בשקט, בלי שום פופ-אפ (בקשה מפורשת).
+  function celebrate(res, lead, status) {
+    const isMeeting = !!(res && res.celebrate);
+    const isSorry = !!(res && res.sorry);
+    if (!isMeeting && !isSorry) return;
+
     const box = document.getElementById('celebrate');
     box.innerHTML = '';
     box.classList.add('show');
