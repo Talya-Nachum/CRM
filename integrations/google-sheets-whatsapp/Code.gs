@@ -2149,6 +2149,16 @@ function debugNewLead2WebhookLog() {
   debugWebhookLogByPhone_('0528313817', 10);
 }
 
+/** עטיפה להרצה ישירה - ליד שדווח היום: אין תיעוד של שיחת פרלה, רק וואטסאפ מלפני שבוע. */
+function debugNewLead3Pearl() {
+  debugPearlDataByPhone_('0502350625');
+}
+
+/** עטיפה להרצה ישירה - WebhookLog הגולמי לליד הזה. */
+function debugNewLead3WebhookLog() {
+  debugWebhookLogByPhone_('0502350625', 10);
+}
+
 /**
  * שחזור חד-פעמי: האירוע העשיר של רן דהן (0528313817) שהגיע אתמול
  * מפרלה (תמלול+סיכום+תגית מלאים) אבל לא נכתב לגליון בגלל באג הנעילה
