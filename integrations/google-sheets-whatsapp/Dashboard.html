@@ -1536,6 +1536,48 @@
   .detail-bub.pearl { background: var(--accent-soft); color: var(--accent-ink); align-self: flex-end; }
   .detail-bub.team { background: var(--good-soft); color: var(--good); align-self: flex-end; border: 1px dashed var(--good); }
 
+  /* --- תמלול השיחה כבועות וואטסאפ (הדמיה מאושרת) - רק #detailTranscript,
+     לא נוגע ב-.detail-bub הרגילות שמשמשות את יומן ההערות המאוחד. --- */
+  #detailTranscript {
+    max-height: none; overflow: visible; gap: 1px; margin: -4px -6px; padding: 10px 12px; border-radius: 10px;
+    background:
+      radial-gradient(circle at 20px 20px, var(--surface-2) 1px, transparent 1px) 0 0/22px 22px,
+      var(--bg-2);
+  }
+  #detailTranscript .wa-row { display: flex; align-items: flex-end; gap: 7px; max-width: 100%; margin: 2px 0; }
+  #detailTranscript .wa-row.out { flex-direction: row-reverse; }
+  #detailTranscript .wa-av {
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 9.5px; font-weight: 800; margin-bottom: 2px;
+  }
+  #detailTranscript .wa-row.in .wa-av { background: #6FBF8B; color: #fff; }
+  #detailTranscript .wa-row.out .wa-av { background: var(--surface-2); color: var(--text-muted); }
+  #detailTranscript .wa-group { display: flex; flex-direction: column; max-width: 74%; margin: 3px 0; }
+  #detailTranscript .wa-row.out .wa-group { align-items: flex-end; }
+  #detailTranscript .wa-row.in .wa-group { align-items: flex-start; }
+  #detailTranscript .wa-who { font-size: 10px; font-weight: 800; margin-bottom: 1px; padding: 0 3px; }
+  #detailTranscript .wa-row.in .wa-who { color: #3E8A5C; }
+  #detailTranscript .wa-row.out .wa-who { color: var(--accent-ink); }
+  #detailTranscript .wa-bubble {
+    position: relative; padding: 6px 11px 5px; border-radius: 13px; font-size: 13px; line-height: 1.42;
+    box-shadow: 0 1px 1px rgba(17,17,31,0.06); white-space: pre-wrap;
+  }
+  #detailTranscript .wa-row.in .wa-bubble { background: #DCF3E2; color: #1B3A26; border-bottom-right-radius: 4px; }
+  #detailTranscript .wa-row.out .wa-bubble {
+    background: var(--surface); color: var(--text); border-bottom-left-radius: 4px;
+  }
+  #detailTranscript .wa-bubble .tail { position: absolute; bottom: 0; width: 10px; height: 10px; overflow: hidden; }
+  #detailTranscript .wa-row.in .wa-bubble .tail { right: -9px; }
+  #detailTranscript .wa-row.in .wa-bubble .tail::after {
+    content: ''; position: absolute; top: 0; right: 4px; width: 10px; height: 10px;
+    background: #DCF3E2; border-radius: 0 0 0 12px;
+  }
+  #detailTranscript .wa-row.out .wa-bubble .tail { left: -9px; }
+  #detailTranscript .wa-row.out .wa-bubble .tail::after {
+    content: ''; position: absolute; top: 0; left: 4px; width: 10px; height: 10px;
+    background: var(--surface); border-radius: 0 0 12px 0;
+  }
+
   .detail-facts { display: grid; grid-template-columns: 1fr; gap: 10px; font-size: 13px; }
   .detail-facts div b { display: block; font-size: 11px; color: var(--text-muted); font-weight: 700; margin-bottom: 2px; }
 
@@ -3614,7 +3656,8 @@
       }
 
       // תמלול מלא - מגיע מהשרת כטקסט מוכן ("פרלה: ..." / "הליד: ...",
-      // ר' pearlTranscriptText_ ב-Code.gs), רק צריך לפרק לבועות לפי השורה.
+      // ר' pearlTranscriptText_ ב-Code.gs), מוצג כבועות וואטסאפ (הדמיה
+      // מאושרת): פרלה = ירוק בצד ימין, הליד = לבן בצד שמאל.
       const transcriptCard = document.getElementById('detailTranscriptCard');
       const transcriptEl = document.getElementById('detailTranscript');
       const transcriptLines = String(r.transcript || '').split('\n').filter(function (s) { return s.trim(); });
@@ -3623,11 +3666,16 @@
         transcriptEl.innerHTML = transcriptLines.map(function (line) {
           const isPearl = line.indexOf('פרלה:') === 0;
           const isLead = line.indexOf('הליד:') === 0;
-          const cls = isPearl ? 'pearl' : (isLead ? 'lead' : 'team');
-          const tag = isPearl ? '📞 פרלה' : (isLead ? 'הליד' : '');
+          const dir = isPearl ? 'in' : 'out';
+          const who = isPearl ? '📞 פרלה' : (isLead ? 'הליד' : '');
+          const initials = isPearl ? 'פ' : 'ל';
           const text = line.replace(/^(פרלה|הליד):\s*/, '');
-          return '<div class="detail-bub ' + cls + '">' +
-            (tag ? '<div class="who-tag">' + tag + '</div>' : '') + escapeHtml_(text) + '</div>';
+          return '<div class="wa-row ' + dir + '">' +
+            '<span class="wa-av">' + initials + '</span>' +
+            '<div class="wa-group">' +
+            (who ? '<span class="wa-who">' + who + '</span>' : '') +
+            '<div class="wa-bubble">' + escapeHtml_(text) + '<span class="tail"></span></div>' +
+            '</div></div>';
         }).join('');
       } else {
         transcriptCard.style.display = 'none';
