@@ -1,0 +1,352 @@
+<script>
+  var allLeads = [];
+  var allStatuses = [];
+  var allTemplates = [];
+  var selectedIds = new Set();
+  var statusColorMap = {};
+  var palette = ['#64748b', '#b8791f', '#0f7a6b', '#2f4a7a', '#7a4fb0', '#b6423a', '#0891b2', '#be185d'];
+
+  document.addEventListener('DOMContentLoaded', function () {
+    loadConfig();
+    loadStatuses();
+    loadTemplates();
+    loadLeads();
+
+    document.getElementById('addLeadBtn').addEventListener('click', openAddModal);
+    document.getElementById('closeLeadModalBtn').addEventListener('click', closeLeadModal);
+    document.getElementById('cancelLeadBtn').addEventListener('click', closeLeadModal);
+    document.getElementById('leadForm').addEventListener('submit', onSubmitLead);
+    document.getElementById('deleteLeadBtn').addEventListener('click', onDeleteLead);
+    document.getElementById('searchInput').addEventListener('input', renderTable);
+    document.getElementById('statusFilter').addEventListener('change', renderTable);
+    document.getElementById('selectAll').addEventListener('change', onSelectAll);
+
+    document.getElementById('waBtn').addEventListener('click', openWaModal);
+    document.getElementById('closeWaModalBtn').addEventListener('click', closeWaModal);
+    document.getElementById('cancelWaBtn').addEventListener('click', closeWaModal);
+    document.getElementById('sendWaBtn').addEventListener('click', onSendWhatsApp);
+  });
+
+  /* ---------- config (header: countdown + buttons) ---------- */
+
+  function loadConfig() {
+    google.script.run.withSuccessHandler(function (cfg) {
+      startCountdown(cfg.academyStartDate);
+
+      var paymentBtn = document.getElementById('paymentBtn');
+      var infoBtn = document.getElementById('infoBtn');
+      paymentBtn.addEventListener('click', function () {
+        if (cfg.paymentUrl) window.open(cfg.paymentUrl, '_blank');
+        else showToast('דף הסליקה עדיין לא חובר', true);
+      });
+      infoBtn.addEventListener('click', function () {
+        if (cfg.infoUrl) window.open(cfg.infoUrl, '_blank');
+        else showToast('דף המידע עדיין לא חובר', true);
+      });
+    }).withFailureHandler(showError).getConfig();
+  }
+
+  function startCountdown(targetIso) {
+    function tick() {
+      var target = new Date(targetIso).getTime();
+      var diff = Math.max(0, target - Date.now());
+      var days = Math.floor(diff / 86400000);
+      var hours = Math.floor((diff % 86400000) / 3600000);
+      var mins = Math.floor((diff % 3600000) / 60000);
+      document.getElementById('cdDays').textContent = days;
+      document.getElementById('cdHours').textContent = String(hours).padStart(2, '0');
+      document.getElementById('cdMins').textContent = String(mins).padStart(2, '0');
+    }
+    tick();
+    setInterval(tick, 30000);
+  }
+
+  /* ---------- data loading ---------- */
+
+  function loadLeads() {
+    google.script.run.withSuccessHandler(function (leads) {
+      allLeads = leads;
+      renderTable();
+    }).withFailureHandler(showError).getLeads();
+  }
+
+  function loadStatuses() {
+    google.script.run.withSuccessHandler(function (statuses) {
+      allStatuses = statuses;
+      assignStatusColors();
+      populateStatusSelects();
+    }).withFailureHandler(showError).getStatuses();
+  }
+
+  function loadTemplates() {
+    google.script.run.withSuccessHandler(function (templates) {
+      allTemplates = templates;
+    }).withFailureHandler(showError).getTemplates();
+  }
+
+  function assignStatusColors() {
+    allStatuses.forEach(function (s, i) {
+      if (!statusColorMap[s]) statusColorMap[s] = palette[i % palette.length];
+    });
+  }
+
+  function colorForStatus(status) {
+    if (!statusColorMap[status]) {
+      var idx = Object.keys(statusColorMap).length % palette.length;
+      statusColorMap[status] = palette[idx];
+    }
+    return statusColorMap[status];
+  }
+
+  function populateStatusSelects() {
+    var filter = document.getElementById('statusFilter');
+    var current = filter.value;
+    filter.innerHTML = '<option value="">כל הסטטוסים</option>';
+    allStatuses.forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = s; opt.textContent = s;
+      filter.appendChild(opt);
+    });
+    filter.value = current;
+
+    var formSelect = document.getElementById('f_status');
+    formSelect.innerHTML = '';
+    allStatuses.forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = s; opt.textContent = s;
+      formSelect.appendChild(opt);
+    });
+  }
+
+  /* ---------- table rendering ---------- */
+
+  function filteredLeads() {
+    var search = document.getElementById('searchInput').value.trim().toLowerCase();
+    var statusFilter = document.getElementById('statusFilter').value;
+
+    return allLeads.filter(function (lead) {
+      var matchesStatus = !statusFilter || lead.status === statusFilter;
+      var haystack = [lead.company, lead.contactName, lead.phone, lead.email, lead.notes]
+        .join(' ').toLowerCase();
+      var matchesSearch = !search || haystack.indexOf(search) !== -1;
+      return matchesStatus && matchesSearch;
+    });
+  }
+
+  function renderTable() {
+    var filtered = filteredLeads();
+    var body = document.getElementById('leadsTableBody');
+    body.innerHTML = '';
+
+    document.getElementById('leadCount').textContent = filtered.length + ' לידים';
+
+    if (!filtered.length) {
+      body.innerHTML = '<tr><td colspan="12" class="empty-row">אין לידים להצגה</td></tr>';
+      updateSelectionUi();
+      return;
+    }
+
+    filtered.forEach(function (lead) {
+      var tr = document.createElement('tr');
+      if (selectedIds.has(lead.id)) tr.classList.add('selected');
+      var checked = selectedIds.has(lead.id) ? 'checked' : '';
+      tr.innerHTML =
+        '<td><input type="checkbox" class="row-check" data-id="' + lead.id + '" ' + checked + '></td>' +
+        '<td>' + escapeHtml(lead.source) + '</td>' +
+        '<td>' + escapeHtml(lead.company) + '</td>' +
+        '<td>' + escapeHtml(lead.companyId) + '</td>' +
+        '<td>' + escapeHtml(lead.contactName) + '</td>' +
+        '<td>' + escapeHtml(lead.role) + '</td>' +
+        '<td>' + escapeHtml(lead.phone) + '</td>' +
+        '<td>' + escapeHtml(lead.email) + '</td>' +
+        '<td>' + escapeHtml(lead.notes) + '</td>' +
+        '<td><span class="badge" style="background:' + colorForStatus(lead.status) + '">' + escapeHtml(lead.status) + '</span></td>' +
+        '<td>' + escapeHtml(lead.updatedAt) + '</td>' +
+        '<td><button type="button" class="row-edit">✎</button></td>';
+
+      tr.querySelector('.row-check').addEventListener('click', function (evt) { evt.stopPropagation(); });
+      tr.querySelector('.row-check').addEventListener('change', function (evt) {
+        toggleSelect(lead.id, evt.target.checked);
+      });
+      tr.addEventListener('click', function () { openEditModal(lead); });
+      body.appendChild(tr);
+    });
+
+    updateSelectionUi();
+  }
+
+  function toggleSelect(id, checked) {
+    if (checked) selectedIds.add(id); else selectedIds.delete(id);
+    updateSelectionUi();
+  }
+
+  function onSelectAll(evt) {
+    var checked = evt.target.checked;
+    filteredLeads().forEach(function (lead) {
+      if (checked) selectedIds.add(lead.id); else selectedIds.delete(lead.id);
+    });
+    renderTable();
+  }
+
+  function updateSelectionUi() {
+    document.getElementById('selCount').textContent = selectedIds.size;
+    document.getElementById('waBtn').disabled = selectedIds.size === 0;
+  }
+
+  function escapeHtml(str) {
+    if (str === undefined || str === null) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* ---------- lead modal ---------- */
+
+  function openAddModal() {
+    document.getElementById('modalTitle').textContent = 'הוספת ליד חדש';
+    document.getElementById('leadForm').reset();
+    document.getElementById('leadId').value = '';
+    document.getElementById('deleteLeadBtn').classList.add('hidden');
+    if (allStatuses.length) document.getElementById('f_status').value = allStatuses[0];
+    document.getElementById('leadOverlay').classList.remove('hidden');
+  }
+
+  function openEditModal(lead) {
+    document.getElementById('modalTitle').textContent = 'עריכת ליד';
+    document.getElementById('leadId').value = lead.id;
+    document.getElementById('f_source').value = lead.source || '';
+    document.getElementById('f_company').value = lead.company || '';
+    document.getElementById('f_companyId').value = lead.companyId || '';
+    document.getElementById('f_contactName').value = lead.contactName || '';
+    document.getElementById('f_role').value = lead.role || '';
+    document.getElementById('f_phone').value = lead.phone || '';
+    document.getElementById('f_email').value = lead.email || '';
+    document.getElementById('f_notes').value = lead.notes || '';
+    document.getElementById('f_status').value = lead.status || '';
+    document.getElementById('deleteLeadBtn').classList.remove('hidden');
+    document.getElementById('leadOverlay').classList.remove('hidden');
+  }
+
+  function closeLeadModal() {
+    document.getElementById('leadOverlay').classList.add('hidden');
+  }
+
+  function onSubmitLead(evt) {
+    evt.preventDefault();
+    var id = document.getElementById('leadId').value;
+    var data = {
+      source: document.getElementById('f_source').value.trim(),
+      company: document.getElementById('f_company').value.trim(),
+      companyId: document.getElementById('f_companyId').value.trim(),
+      contactName: document.getElementById('f_contactName').value.trim(),
+      role: document.getElementById('f_role').value.trim(),
+      phone: document.getElementById('f_phone').value.trim(),
+      email: document.getElementById('f_email').value.trim(),
+      notes: document.getElementById('f_notes').value.trim(),
+      status: document.getElementById('f_status').value
+    };
+
+    var submitBtn = evt.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+
+    var onDone = function () {
+      submitBtn.disabled = false;
+      closeLeadModal();
+      loadLeads();
+      showToast('הליד נשמר בהצלחה');
+    };
+    var onFail = function (err) {
+      submitBtn.disabled = false;
+      showError(err);
+    };
+
+    if (id) {
+      google.script.run.withSuccessHandler(onDone).withFailureHandler(onFail).updateLead(id, data);
+    } else {
+      google.script.run.withSuccessHandler(onDone).withFailureHandler(onFail).addLead(data);
+    }
+  }
+
+  function onDeleteLead() {
+    var id = document.getElementById('leadId').value;
+    if (!id) return;
+    if (!confirm('למחוק את הליד הזה?')) return;
+    google.script.run.withSuccessHandler(function () {
+      closeLeadModal();
+      selectedIds.delete(id);
+      loadLeads();
+      showToast('הליד נמחק');
+    }).withFailureHandler(showError).deleteLead(id);
+  }
+
+  /* ---------- whatsapp modal ---------- */
+
+  function openWaModal() {
+    var list = document.getElementById('recipientsList');
+    var ids = [...selectedIds];
+    var names = allLeads.filter(function (l) { return ids.indexOf(l.id) !== -1; })
+      .map(function (l) { return l.contactName || l.company || l.phone; });
+    list.innerHTML = names.map(function (n) { return '<span>' + escapeHtml(n) + '</span>'; }).join('');
+
+    var choice = document.getElementById('templateChoice');
+    choice.innerHTML = '';
+    if (!allTemplates.length) {
+      choice.innerHTML = '<div class="admin-msg">אין תבניות מוגדרות בטאב "תבניות"</div>';
+    } else {
+      allTemplates.forEach(function (t, i) {
+        var label = document.createElement('label');
+        label.className = 'tpl-option' + (i === 0 ? ' checked' : '');
+        label.innerHTML = '<input type="radio" name="tpl" value="' + escapeHtml(t.templateId) + '" ' + (i === 0 ? 'checked' : '') + '> ' + escapeHtml(t.name);
+        label.querySelector('input').addEventListener('change', function () {
+          choice.querySelectorAll('.tpl-option').forEach(function (el) { el.classList.remove('checked'); });
+          label.classList.add('checked');
+        });
+        choice.appendChild(label);
+      });
+    }
+
+    document.getElementById('waMsg').textContent = '';
+    document.getElementById('waOverlay').classList.remove('hidden');
+  }
+
+  function closeWaModal() {
+    document.getElementById('waOverlay').classList.add('hidden');
+  }
+
+  function onSendWhatsApp() {
+    var selected = document.querySelector('input[name="tpl"]:checked');
+    var msg = document.getElementById('waMsg');
+    if (!selected) { msg.textContent = 'יש לבחור תבנית'; return; }
+
+    var sendBtn = document.getElementById('sendWaBtn');
+    sendBtn.disabled = true;
+    msg.style.color = '';
+    msg.textContent = 'שולח...';
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        sendBtn.disabled = false;
+        closeWaModal();
+        selectedIds.clear();
+        loadLeads();
+        showToast('נשלח ל-' + result.sent + ' נמענים' + (result.skipped.length ? (', דילוג על ' + result.skipped.length + ' ללא טלפון') : ''));
+      })
+      .withFailureHandler(function (err) {
+        sendBtn.disabled = false;
+        msg.style.color = '#a3312a';
+        msg.textContent = err.message || 'שגיאה בשליחה';
+      })
+      .sendWhatsApp([...selectedIds], selected.value);
+  }
+
+  /* ---------- ui helpers ---------- */
+
+  function showToast(text, isError) {
+    var toast = document.getElementById('toast');
+    toast.textContent = text;
+    toast.className = 'toast' + (isError ? ' error' : '');
+    setTimeout(function () { toast.classList.add('hidden'); }, 3000);
+  }
+
+  function showError(err) {
+    showToast(err.message || 'אירעה שגיאה', true);
+  }
+</script>
