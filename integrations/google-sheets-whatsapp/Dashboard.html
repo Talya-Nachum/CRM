@@ -2027,14 +2027,56 @@
     if (el) el.innerHTML = channelIconsHtml_(campaignChannel_(rows));
   }
 
+  let loadCampaignToken_ = 0; // מזהה כל בקשת טעינה - כדי שתשובה ישנה/כפולה לא תדרוס תשובה חדשה יותר
+  let loadCampaignTimer_ = null;
+
+  /**
+   * טעינת קמפיין עם חיווי אמיתי כמה זמן עבר, ולא רק "טוען..." שקט לנצח -
+   * בקמפיינים גדולים (מאות שורות) עם עומס בו-זמני על הפרויקט (וובהוקים
+   * חיים) ההרצה יכולה לקחת הרבה יותר זמן מהרגיל, וקודם לא היה שום סימן
+   * להבדיל בין "עדיין עובד" ל"נתקע". כפתור "נסי שוב" ידני מופיע רק אחרי
+   * 20 שניות - לא מנסים שוב אוטומטית, כדי לא להוסיף עוד בקשה בו-זמנית
+   * על שרת שכבר עמוס (זה היה מחמיר בדיוק את הבעיה).
+   */
   function loadCampaign(name, silent, onDone) {
     currentTabName = name;
+    const myToken = ++loadCampaignToken_;
+    clearInterval(loadCampaignTimer_);
+    const startedAt = Date.now();
+
     if (!silent) {
-      document.getElementById('tableBody').innerHTML = '<tr><td colspan="11" class="loading-state">טוען נתונים...</td></tr>';
+      document.getElementById('tableBody').innerHTML =
+        '<tr><td colspan="11" class="loading-state" id="loadingRow">טוען נתונים...</td></tr>';
+      loadCampaignTimer_ = setInterval(function () {
+        if (myToken !== loadCampaignToken_) { clearInterval(loadCampaignTimer_); return; }
+        const row = document.getElementById('loadingRow');
+        if (!row) { clearInterval(loadCampaignTimer_); return; }
+        const secs = Math.round((Date.now() - startedAt) / 1000);
+        const retryHtml = secs >= 20
+          ? ' <button type="button" id="retryLoadBtn" style="margin-inline-start:10px;padding:4px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-family:inherit">נסי שוב</button>'
+          : '';
+        row.innerHTML = 'טוען נתונים... (' + secs + ' שניות - השרת עמוס, זה יכול לקחת זמן)' + retryHtml;
+        const retryBtn = document.getElementById('retryLoadBtn');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', function () {
+            loadCampaign(name, false, onDone);
+          });
+        }
+      }, 1000);
     }
+
     google.script.run
-      .withSuccessHandler(function (data) { renderCampaign(data, silent); if (onDone) onDone(); })
-      .withFailureHandler(showError)
+      .withSuccessHandler(function (data) {
+        if (myToken !== loadCampaignToken_) return; // תשובה לבקשה ישנה שכבר הוחלפה - מתעלמים
+        clearInterval(loadCampaignTimer_);
+        renderCampaign(data, silent);
+        if (onDone) onDone();
+      })
+      .withFailureHandler(function (err) {
+        if (myToken !== loadCampaignToken_) return;
+        clearInterval(loadCampaignTimer_);
+        showError(err);
+      })
       .getCampaignData(name);
   }
 
