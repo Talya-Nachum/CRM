@@ -2332,6 +2332,11 @@
   }
 
   function renderCampaign(data, silent) {
+    // אבחון זמני - למצוא למה "טריפל סי עדנה" מציג 94 בדשבורד אבל 625
+    // בבדיקת שרת ישירה. אפשר למחוק את השורה הזו אחרי שנפתור.
+    console.log('DEBUG renderCampaign: total=' + (data && data.total) +
+      ' rows.length=' + (data && data.rows && data.rows.length) +
+      ' hasNir=' + !!(data && data.rows && data.rows.some(function (r) { return String(r.phone).replace(/\D/g, '').indexOf('504441276') !== -1; })));
     currentData = data;
     if (!data) return;
 
