@@ -2029,6 +2029,7 @@
 
   let loadCampaignToken_ = 0; // מזהה כל בקשת טעינה - כדי שתשובה ישנה/כפולה לא תדרוס תשובה חדשה יותר
   let loadCampaignTimer_ = null;
+  let campaignLoadInFlight_ = false; // true כל עוד יש קריאה פעילה ל-getCampaignData - מונע מהרענון האוטומטי לערום עוד בקשה מעל בקשה שעוד לא הסתיימה
 
   /**
    * טעינת קמפיין עם חיווי אמיתי כמה זמן עבר, ולא רק "טוען..." שקט לנצח -
@@ -2043,6 +2044,7 @@
     const myToken = ++loadCampaignToken_;
     clearInterval(loadCampaignTimer_);
     const startedAt = Date.now();
+    campaignLoadInFlight_ = true;
 
     if (!silent) {
       document.getElementById('tableBody').innerHTML =
@@ -2067,13 +2069,18 @@
 
     google.script.run
       .withSuccessHandler(function (data) {
-        if (myToken !== loadCampaignToken_) return; // תשובה לבקשה ישנה שכבר הוחלפה - מתעלמים
+        // תשובה לבקשה ישנה שכבר הוחלפה (למשל ע"י "נסי שוב") - מתעלמים
+        // לגמרי, כולל לא נוגעים ב-campaignLoadInFlight_, כדי לא לכבות
+        // בטעות את הדגל בזמן שהבקשה החדשה עדיין רצה בפועל.
+        if (myToken !== loadCampaignToken_) return;
+        campaignLoadInFlight_ = false;
         clearInterval(loadCampaignTimer_);
         renderCampaign(data, silent);
         if (onDone) onDone();
       })
       .withFailureHandler(function (err) {
         if (myToken !== loadCampaignToken_) return;
+        campaignLoadInFlight_ = false;
         clearInterval(loadCampaignTimer_);
         showError(err);
       })
@@ -4159,7 +4166,14 @@
 
   // רענון אוטומטי: כל 30 שניות טוענים מחדש את נתוני הטאב הפעיל (בלי לגעת
   // ברשימת הטאבים עצמה, כדי לא "לקפוץ" למשתמש בזמן שהוא מסתכל).
+  // דילוג אם עדיין יש בקשה פעילה (campaignLoadInFlight_) - זה התיקון
+  // לבאג האמיתי: בקמפיין גדול/איטי (מאות שורות, עומס וובהוקים בו-זמני)
+  // טעינה יכולה לקחת יותר מ-30 שניות, וללא הבדיקה הזו הטיימר היה יורה
+  // עוד בקשה זהה מעל בקשה שעוד לא הסתיימה - כל 30 שניות עוד אחת נערמת,
+  // עד שכל הבקשות ביחד תופסות את כל משבצות ההרצה של הפרויקט ונראה
+  // כאילו הדשבורד "נתקע לגמרי" (בעוד שבפועל יש עשרות בקשות זהות שרצות
+  // בתור). עכשיו: אם יש עדיין בקשה בדרך, פשוט מדלגים על הסיבוב הזה.
   setInterval(function () {
-    if (currentTabName) loadCampaign(currentTabName, true);
+    if (currentTabName && !campaignLoadInFlight_) loadCampaign(currentTabName, true);
   }, AUTO_REFRESH_MS);
 </script>
