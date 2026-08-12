@@ -2074,7 +2074,25 @@
         if (myToken !== loadCampaignToken_) return;
         campaignLoadInFlight_ = false;
         clearInterval(loadCampaignTimer_);
-        renderCampaign(data, silent);
+        // הבדיקה שהייתה חסרה: אם השרת החזיר משהו ריק/לא תקין, זה היה
+        // נשאר "טוען נתונים..." לנצח בשקט (renderCampaign יוצאת מיד
+        // ב-if(!data)return). עכשיו זה מוצג כשגיאה אמיתית על המסך.
+        if (!data || !data.rows) {
+          document.getElementById('tableBody').innerHTML =
+            '<tr><td colspan="11" class="empty-state">⚠ השרת החזיר תשובה ריקה או לא תקינה לקמפיין הזה. ' +
+            'ייתכן שהטאב חסר עמודות נדרשות, או שיש בעיה בגיליון עצמו. תנסי לרענן; אם זה חוזר - זו תקלה אמיתית שצריך לתקן בקוד.</td></tr>';
+          return;
+        }
+        try {
+          renderCampaign(data, silent);
+        } catch (renderErr) {
+          // תפיסת שגיאה בזמן הצגה - כדי שלעולם לא יישאר תקוע בשקט על
+          // "טוען נתונים..." בלי שום הסבר. השגיאה מוצגת ישירות על המסך,
+          // בלי צורך לפתוח כלי פיתוח בדפדפן.
+          document.getElementById('tableBody').innerHTML =
+            '<tr><td colspan="11" class="empty-state">⚠ שגיאה בהצגת הנתונים: ' +
+            escapeHtml_(renderErr && renderErr.message ? renderErr.message : String(renderErr)) + '</td></tr>';
+        }
         if (onDone) onDone();
       })
       .withFailureHandler(function (err) {
