@@ -4197,7 +4197,10 @@ function buildNotesEntries_(reply, callResult, userNotes) {
 }
 
 function getCampaignData(sheetName) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // openById (לא getActiveSpreadsheet) - כדי לכפות שליפה טרייה של מבנה
+  // הגיליון, למקרה שההרצה הפרוסה מחזיקה הפניה ישנה/מטמון פנימי שלא
+  // מתעדכן לטאבים חדשים לאורך זמן (תיאוריה שעוד לא נבדקה בפועל).
+  const ss = SpreadsheetApp.openById(SpreadsheetApp.getActiveSpreadsheet().getId());
   // ss.getSheetByName(sheetName) התגלה כלא אמין לטאבים שנוצרו ממש עכשיו,
   // דרך האפליקציה הפרוסה (גם עם השהיה - נבדק ולא עזר). הפתרון האמיתי:
   // לא להסתמך על ההתאמה הפנימית של getSheetByName בכלל - לעבור על כל
