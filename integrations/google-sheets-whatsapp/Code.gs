@@ -2421,6 +2421,44 @@ function debugEdna() {
 }
 
 /**
+ * הדשבורד מציג 86 רשומות בטאב "טריפל סי עדנה" למרות שיש בגיליון מעל 700
+ * שורות. getCampaignData מדלגת על כל שורה בלי ערך בעמודת הטלפון - הפונקציה
+ * הזו סופרת בדיוק כמה שורות יש בגיליון מול כמה מהן יש להן טלפון מלא,
+ * כדי לוודא אם זו הסיבה או שיש עוד משהו.
+ */
+function debugEdnaRowCount() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('טריפל סי עדנה');
+  if (!sheet) {
+    Logger.log('❌ לא נמצא טאב בשם "טריפל סי עדנה"');
+    return;
+  }
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+  Logger.log('סה"כ שורות בגיליון (כולל כותרת): ' + data.length);
+  Logger.log('סה"כ שורות נתונים: ' + (data.length - 1));
+  Logger.log('עמודת טלפון נמצאה באינדקס: ' + phoneCol);
+
+  let withPhone = 0, withoutPhone = 0;
+  let firstEmptyRow = -1;
+  for (let i = 1; i < data.length; i++) {
+    const phone = phoneCol !== -1 ? data[i][phoneCol] : '';
+    if (phone) {
+      withPhone++;
+    } else {
+      withoutPhone++;
+      if (firstEmptyRow === -1) firstEmptyRow = i + 1;
+    }
+  }
+  Logger.log('שורות עם טלפון מלא: ' + withPhone);
+  Logger.log('שורות בלי טלפון (מדולגות מהדשבורד): ' + withoutPhone);
+  if (firstEmptyRow !== -1) {
+    Logger.log('השורה הריקה הראשונה (מספר שורה בגיליון): ' + firstEmptyRow);
+  }
+}
+
+/**
  * כלי אבחון: מדמה בדיוק את מה ש-doGet עושה בשביל לינק נציגה - בלי
  * דפדפן, בלי URL, בלי פריסה בכלל, ובלי שום עריכה ידנית של הקוד (לוקחת
  * לבד את הנציגה הראשונה מהטאב "נציגות"). להריץ ישירות, בלי לגעת בכלום.
