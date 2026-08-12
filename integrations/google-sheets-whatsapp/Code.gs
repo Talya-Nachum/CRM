@@ -4198,7 +4198,16 @@ function buildNotesEntries_(reply, callResult, userNotes) {
 
 function getCampaignData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(sheetName);
+  // טאב שנוצר ממש עכשיו לפעמים לא "מוכר" עדיין להרצה של האפליקציה
+  // הפרוסה (בניגוד להרצה ידנית מהעורך, שרואה את הגיליון החי ישירות) -
+  // עיכוב הפצה זמני של גוגל, לא שהטאב באמת לא קיים. במקום להיכשל מיד,
+  // מנסים שוב פעמיים נוספות עם השהיה קצרה לפני שמוותרים.
+  let sheet = ss.getSheetByName(sheetName);
+  for (let attempt = 0; !sheet && attempt < 2; attempt++) {
+    Utilities.sleep(700);
+    SpreadsheetApp.flush();
+    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  }
   if (!sheet) return null;
 
   expireStaleAssignments_();
