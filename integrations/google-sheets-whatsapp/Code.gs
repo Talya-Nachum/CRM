@@ -2421,40 +2421,53 @@ function debugEdna() {
 }
 
 /**
- * הדשבורד מציג 86 רשומות בטאב "טריפל סי עדנה" למרות שיש בגיליון מעל 700
- * שורות. getCampaignData מדלגת על כל שורה בלי ערך בעמודת הטלפון - הפונקציה
- * הזו סופרת בדיוק כמה שורות יש בגיליון מול כמה מהן יש להן טלפון מלא,
- * כדי לוודא אם זו הסיבה או שיש עוד משהו.
+ * ניר (0504441276) קיים בגיליון (debugContactByPhone מוצא אותו) אבל לא
+ * מופיע בדשבורד - לא בטבלה, לא בחיפוש. הבדיקה הזו בודקת את החשד המרכזי:
+ * ss.getSheetByName('טריפל סי עדנה') - בדיוק מה ש-getCampaignData קוראת
+ * כשבוחרים את הקמפיין הזה - עלול "לפגוע" בטאב אחר עם שם כמעט זהה (רווח
+ * נסתר בסוף וכו'), בעוד שניר בפועל נמצא בטאב האחר. מדפיסה את *כל* שמות
+ * הטאבים בגיליון עם מרכאות (חושף רווחים נסתרים), איזה טאב בדיוק נפתח,
+ * ואם ניר נמצא באותו טאב ספציפי (לא רק "איפשהו בגיליון").
  */
-function debugEdnaRowCount() {
+function debugEdnaTabMismatch() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('טריפל סי עדנה');
+  const allSheets = ss.getSheets();
+  Logger.log('=== כל שמות הטאבים בגיליון (' + allSheets.length + ') ===');
+  allSheets.forEach(function (s) {
+    Logger.log('"' + s.getName() + '"');
+  });
+
+  const targetName = 'טריפל סי עדנה';
+  Logger.log('');
+  Logger.log('=== ss.getSheetByName("' + targetName + '") - בדיוק מה שהדשבורד קורא ===');
+  const sheet = ss.getSheetByName(targetName);
   if (!sheet) {
-    Logger.log('❌ לא נמצא טאב בשם "טריפל סי עדנה"');
+    Logger.log('❌ לא נמצא טאב תואם בדיוק לשם "' + targetName + '"');
     return;
   }
+  Logger.log('נפתח בפועל: "' + sheet.getName() + '"');
+
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
-  Logger.log('סה"כ שורות בגיליון (כולל כותרת): ' + data.length);
-  Logger.log('סה"כ שורות נתונים: ' + (data.length - 1));
-  Logger.log('עמודת טלפון נמצאה באינדקס: ' + phoneCol);
+  const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+  Logger.log('סה"כ שורות נתונים בטאב הזה: ' + (data.length - 1));
 
-  let withPhone = 0, withoutPhone = 0;
-  let firstEmptyRow = -1;
+  let withPhone = 0;
+  let foundNir = false;
   for (let i = 1; i < data.length; i++) {
-    const phone = phoneCol !== -1 ? data[i][phoneCol] : '';
-    if (phone) {
-      withPhone++;
-    } else {
-      withoutPhone++;
-      if (firstEmptyRow === -1) firstEmptyRow = i + 1;
+    const phone = phoneCol !== -1 ? String(data[i][phoneCol] || '') : '';
+    if (phone) withPhone++;
+    if (phone.replace(/\D/g, '').indexOf('504441276') !== -1) {
+      foundNir = true;
+      Logger.log('✅ ניר נמצא בטאב הזה בשורה ' + (i + 1) + ': טלפון="' + phone +
+        '" שם="' + (nameCol !== -1 ? data[i][nameCol] : '') + '"');
     }
   }
-  Logger.log('שורות עם טלפון מלא: ' + withPhone);
-  Logger.log('שורות בלי טלפון (מדולגות מהדשבורד): ' + withoutPhone);
-  if (firstEmptyRow !== -1) {
-    Logger.log('השורה הריקה הראשונה (מספר שורה בגיליון): ' + firstEmptyRow);
+  Logger.log('שורות עם טלפון מלא בטאב "' + sheet.getName() + '": ' + withPhone);
+  if (!foundNir) {
+    Logger.log('❌ ניר *לא* נמצא בטאב הספציפי הזה - הוא בטאב אחר עם שם דומה. ' +
+      'תסתכלי ברשימת כל הטאבים למעלה ותשוו אותיות-אותיות לשם שבחרת בדשבורד.');
   }
 }
 
