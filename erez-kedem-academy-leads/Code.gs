@@ -190,15 +190,53 @@ function logWebhook_(payload) {
 
 /* ============================== Leads CRUD ============================== */
 
+/**
+ * קוראת את כל הלידים, כולל שורות שנוספו ידנית ישירות בגיליון (לא רק
+ * דרך כפתור "הוספת ליד" או ה-webhook) - כדי שאפשר יהיה להזין רשומות
+ * גם ישירות באקסל. שורה ידנית לרוב לא תמלא "מזהה"/"תאריך יצירה"/"סטטוס"
+ * (עמודות שהדשבורד מנהל לבד) - הפונקציה משלימה אותן אוטומטית בפעם
+ * הראשונה שהיא נקראת, כדי שעריכה/מחיקה/שליחת וואטסאפ מהדשבורד יעבדו
+ * גם על שורה כזו מכאן ואילך.
+ */
 function getLeads() {
   ensureSheets_();
   var sheet = getLeadsSheet_();
   var values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
-  return values.slice(1)
-    .filter(function (r) { return r[0]; })
-    .map(rowToLead_)
-    .reverse();
+
+  var idIdx = fieldIndex_('id');
+  var createdIdx = fieldIndex_('createdAt');
+  var updatedIdx = fieldIndex_('updatedAt');
+  var statusIdx = fieldIndex_('status');
+  var leads = [];
+
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    if (isRowEmpty_(row)) continue;
+
+    var now = new Date();
+    var needsWriteBack = false;
+    if (!row[idIdx]) { row[idIdx] = Utilities.getUuid(); needsWriteBack = true; }
+    if (!row[createdIdx]) { row[createdIdx] = now; needsWriteBack = true; }
+    if (!row[updatedIdx]) { row[updatedIdx] = now; needsWriteBack = true; }
+    if (!row[statusIdx]) { row[statusIdx] = getDefaultStatus_(); needsWriteBack = true; }
+
+    if (needsWriteBack) {
+      sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+    }
+
+    leads.push(rowToLead_(row));
+  }
+
+  return leads.reverse();
+}
+
+function fieldIndex_(key) {
+  return LEAD_FIELDS.map(function (f) { return f.key; }).indexOf(key);
+}
+
+function isRowEmpty_(row) {
+  return row.every(function (cell) { return cell === '' || cell === null || cell === undefined; });
 }
 
 function addLead(leadData) {
