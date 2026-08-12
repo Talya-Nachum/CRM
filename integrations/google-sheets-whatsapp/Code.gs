@@ -4333,7 +4333,11 @@ function getCampaignData(sheetName) {
       // "הגיב" = יצר איתנו אינטראקציה אמיתית: כתב/לחץ כפתור בוואטסאפ, או
       // שפרלה החזירה תוצאה. סטטוס-מערכת ("לא ענה") לבדו אינו תגובה.
       hasResponded: !!(reply || firstReply || callResult || transcript),
-      transcript: transcript,
+      // התמלול המלא לא נשלח כאן - רק דגל שיש כזה. 625 שורות עם תמלול
+      // מלא בכל אחת (שממילא לא מוצג בטבלה, רק בכרטיס ליד בודד) הם עומס
+      // מיותר על הטעינה הראשונית של כל הקמפיין. נשלף בנפרד ב-
+      // getContactTranscript() רק כשפותחים כרטיס ליד ספציפי.
+      hasTranscript: !!transcript,
       recording: recording,
       pearlTag: pearlTag,
       callDuration: callDuration,
@@ -4378,6 +4382,29 @@ function getCampaignData(sheetName) {
     repNames: getRepNames(),
     repWorkload: repWorkload_()
   };
+}
+
+/**
+ * שולפת רק את התמלול המלא של שיחה אחת - לפי טלפון - בלי לקרוא/לחשב
+ * שוב את כל שאר הקמפיין. נקראת רק כשפותחים כרטיס ליד ספציפי (ר'
+ * detailTranscriptCard ב-Dashboard.html), אחרי ש-getCampaignData כבר
+ * לא שולחת תמלולים מלאים בטעינה הראשונית (ר' hasTranscript).
+ */
+function getContactTranscript(sheetName, phone) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = getCampaignSheets_(ss).filter(function (s) { return s.getName() === sheetName; })[0];
+  if (!sheet) return { transcript: '' };
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+  const transcriptCol = findColumnNormalized_(headers, CALL_TRANSCRIPT_HEADER);
+  if (phoneCol === -1 || transcriptCol === -1) return { transcript: '' };
+  for (let i = 1; i < data.length; i++) {
+    if (phoneSuffix_(data[i][phoneCol]) === phoneSuffix_(phone)) {
+      return { transcript: String(data[i][transcriptCol] || '') };
+    }
+  }
+  return { transcript: '' };
 }
 
 /**

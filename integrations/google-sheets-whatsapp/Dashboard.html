@@ -3690,6 +3690,30 @@
     return parts[0].slice(0, 1) + parts[1].slice(0, 1);
   }
 
+  /** מציירת את בועות הוואטסאפ של תמלול שיחה בתוך אלמנט נתון - נקראת
+   *  אחרי ש-getContactTranscript מחזירה את הטקסט (ר' setupContactDetail_). */
+  function renderTranscriptBubbles_(el, transcriptText) {
+    const transcriptLines = String(transcriptText || '').split('\n').filter(function (s) { return s.trim(); });
+    if (!transcriptLines.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">אין תמלול</div>';
+      return;
+    }
+    el.innerHTML = transcriptLines.map(function (line) {
+      const isPearl = line.indexOf('פרלה:') === 0;
+      const isLead = line.indexOf('הליד:') === 0;
+      const dir = isPearl ? 'in' : 'out';
+      const who = isPearl ? '📞 פרלה' : (isLead ? 'הליד' : '');
+      const initialsCh = isPearl ? 'פ' : 'ל';
+      const text = line.replace(/^(פרלה|הליד):\s*/, '');
+      return '<div class="wa-row ' + dir + '">' +
+        '<span class="wa-av">' + initialsCh + '</span>' +
+        '<div class="wa-group">' +
+        (who ? '<span class="wa-who">' + who + '</span>' : '') +
+        '<div class="wa-bubble">' + escapeHtml_(text) + '<span class="tail"></span></div>' +
+        '</div></div>';
+    }).join('');
+  }
+
   /**
    * מסך פרטי איש קשר - לחיצה על שם בטבלה. לא משנה את הטבלה/הדשבורד
    * בכלל, רק מציג באופן מלא (בלי דחיסות) בדיוק את הנתונים שכבר נטענו
@@ -3738,25 +3762,22 @@
       // תמלול מלא - מגיע מהשרת כטקסט מוכן ("פרלה: ..." / "הליד: ...",
       // ר' pearlTranscriptText_ ב-Code.gs), מוצג כבועות וואטסאפ (הדמיה
       // מאושרת): פרלה = ירוק בצד ימין, הליד = לבן בצד שמאל.
+      // התמלול עצמו לא מגיע עם שאר נתוני הקמפיין (כדי לא להכביד את
+      // הטעינה הראשונית של קמפיינים גדולים) - נשלף בנפרד רק כשפותחים
+      // כרטיס ליד ספציפי, ר' getContactTranscript ב-Code.gs.
       const transcriptCard = document.getElementById('detailTranscriptCard');
       const transcriptEl = document.getElementById('detailTranscript');
-      const transcriptLines = String(r.transcript || '').split('\n').filter(function (s) { return s.trim(); });
-      if (transcriptLines.length) {
+      if (r.hasTranscript) {
         transcriptCard.style.display = '';
-        transcriptEl.innerHTML = transcriptLines.map(function (line) {
-          const isPearl = line.indexOf('פרלה:') === 0;
-          const isLead = line.indexOf('הליד:') === 0;
-          const dir = isPearl ? 'in' : 'out';
-          const who = isPearl ? '📞 פרלה' : (isLead ? 'הליד' : '');
-          const initials = isPearl ? 'פ' : 'ל';
-          const text = line.replace(/^(פרלה|הליד):\s*/, '');
-          return '<div class="wa-row ' + dir + '">' +
-            '<span class="wa-av">' + initials + '</span>' +
-            '<div class="wa-group">' +
-            (who ? '<span class="wa-who">' + who + '</span>' : '') +
-            '<div class="wa-bubble">' + escapeHtml_(text) + '<span class="tail"></span></div>' +
-            '</div></div>';
-        }).join('');
+        transcriptEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">טוען תמלול...</div>';
+        google.script.run
+          .withSuccessHandler(function (res) {
+            renderTranscriptBubbles_(transcriptEl, res && res.transcript);
+          })
+          .withFailureHandler(function () {
+            transcriptEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">שגיאה בטעינת התמלול</div>';
+          })
+          .getContactTranscript(currentTabName, phone);
       } else {
         transcriptCard.style.display = 'none';
       }
