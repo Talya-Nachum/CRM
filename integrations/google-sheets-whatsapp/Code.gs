@@ -2429,6 +2429,52 @@ function debugEdna() {
  * הטאבים בגיליון עם מרכאות (חושף רווחים נסתרים), איזה טאב בדיוק נפתח,
  * ואם ניר נמצא באותו טאב ספציפי (לא רק "איפשהו בגיליון").
  */
+/**
+ * חשד חדש: לא כמות השורות בקמפיין (טאב אחר עם 1500 שורות עבד תקין) -
+ * אלא עומס אמיתי של וובהוקים חיים (פרלה/וואטסאפ) שרצים **עכשיו ממש**
+ * על הפרויקט, ותופסים את מכסת ההרצות המקבילות המשותפת. הפונקציה הזו
+ * סופרת כמה שורות נכתבו ל-WebhookLog בכל אחת מ-10 הדקות האחרונות -
+ * אם יש הרבה (עשרות) בדקה אחת, זו כנראה הסיבה האמיתית, לא הדשבורד עצמו.
+ */
+function debugRecentWebhookVolume() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('WebhookLog');
+  if (!sheet) {
+    Logger.log('❌ לא נמצא טאב WebhookLog');
+    return;
+  }
+  const lastRow = sheet.getLastRow();
+  const windowSize = Math.min(lastRow - 1, 3000); // עד 3000 השורות האחרונות - מספיק בשביל 10 דקות גם בעומס גבוה
+  if (windowSize <= 0) {
+    Logger.log('אין נתונים ב-WebhookLog');
+    return;
+  }
+  const startRow = lastRow - windowSize + 1;
+  const data = sheet.getRange(startRow, 1, windowSize, 1).getValues();
+  const now = Date.now();
+  const buckets = {}; // מפתח: "HH:MM", ערך: כמות
+  let last10MinCount = 0;
+
+  data.forEach(function (row) {
+    const ts = row[0];
+    if (!(ts instanceof Date) || isNaN(ts.getTime())) return;
+    const ageMs = now - ts.getTime();
+    if (ageMs > 10 * 60 * 1000) return; // רק 10 הדקות האחרונות
+    last10MinCount++;
+    const key = Utilities.formatDate(ts, Session.getScriptTimeZone(), 'HH:mm');
+    buckets[key] = (buckets[key] || 0) + 1;
+  });
+
+  Logger.log('סה"כ שורות ב-WebhookLog ב-10 הדקות האחרונות: ' + last10MinCount);
+  Logger.log('--- לפי דקה ---');
+  Object.keys(buckets).sort().forEach(function (key) {
+    Logger.log(key + ' - ' + buckets[key] + ' וובהוקים');
+  });
+  if (!last10MinCount) {
+    Logger.log('אין שום וובהוק ב-10 הדקות האחרונות - כנראה שהעומס הוא לא מוובהוקים חיים.');
+  }
+}
+
 function debugEdnaTabMismatch() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const allSheets = ss.getSheets();

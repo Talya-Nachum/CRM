@@ -2054,10 +2054,9 @@
         const row = document.getElementById('loadingRow');
         if (!row) { clearInterval(loadCampaignTimer_); return; }
         const secs = Math.round((Date.now() - startedAt) / 1000);
-        const retryHtml = secs >= 20
-          ? ' <button type="button" id="retryLoadBtn" style="margin-inline-start:10px;padding:4px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-family:inherit">נסי שוב</button>'
-          : '';
-        row.innerHTML = 'טוען נתונים... (' + secs + ' שניות - השרת עמוס, זה יכול לקחת זמן)' + retryHtml;
+        if (secs < 20) return; // בלי שום ספירה/הודעה מדאיגה - רק "טוען נתונים..." עד שיש ממש טעם להציע לנסות שוב
+        row.innerHTML = 'טוען נתונים... <button type="button" id="retryLoadBtn" ' +
+          'style="margin-inline-start:10px;padding:4px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-family:inherit">נסי שוב</button>';
         const retryBtn = document.getElementById('retryLoadBtn');
         if (retryBtn) {
           retryBtn.addEventListener('click', function () {
