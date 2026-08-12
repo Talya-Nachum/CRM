@@ -117,6 +117,21 @@ function doPost(e) {
 /* ============================== Sheets bootstrap ============================== */
 
 function ensureSheets_() {
+  // כשהדף נטען, לפעמים הדפדפן שולח כמה בקשות כמעט בו-זמנית (למשל טעינה
+  // כפולה/רענון מהיר) - בלי הנעילה כאן, שתי הרצות מקבילות יכולות שתיהן
+  // "לראות" שטאב מסוים עדיין לא קיים ולנסות ליצור אותו פעמיים, מה שגורם
+  // לשגיאת "כבר קיים גיליון בשם...". הנעילה מבטיחה שרק הרצה אחת יוצרת
+  // טאבים בכל רגע נתון.
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    ensureSheetsLocked_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function ensureSheetsLocked_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
   var leadsSheet = ss.getSheetByName(LEADS_SHEET_NAME);
