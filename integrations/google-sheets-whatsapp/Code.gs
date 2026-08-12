@@ -4198,21 +4198,21 @@ function buildNotesEntries_(reply, callResult, userNotes) {
 
 function getCampaignData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  // טאב שנוצר ממש עכשיו לפעמים לא "מוכר" עדיין להרצה של האפליקציה
-  // הפרוסה (בניגוד להרצה ידנית מהעורך, שרואה את הגיליון החי ישירות) -
-  // עיכוב הפצה זמני של גוגל, לא שהטאב באמת לא קיים. במקום להיכשל מיד,
-  // מנסים שוב פעמיים נוספות עם השהיה קצרה לפני שמוותרים.
+  // ss.getSheetByName(sheetName) התגלה כלא אמין לטאבים שנוצרו ממש עכשיו,
+  // דרך האפליקציה הפרוסה (גם עם השהיה - נבדק ולא עזר). הפתרון האמיתי:
+  // לא להסתמך על ההתאמה הפנימית של getSheetByName בכלל - לעבור על כל
+  // הטאבים בפועל (ss.getSheets(), שכן עובד תמיד כי הוא לא תלוי באינדוקס
+  // פנימי) ולהשוות שמות ידנית, כולל השוואה מנורמלת (normalizeLabel_ -
+  // בדיוק כמו עמודות) שתתפוס גם תו נסתר/רווח עודף שהעתק-הדבק עלול להוסיף.
   let sheet = ss.getSheetByName(sheetName);
-  for (let attempt = 0; !sheet && attempt < 2; attempt++) {
-    Utilities.sleep(700);
-    SpreadsheetApp.flush();
-    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) {
+    const allSheets = ss.getSheets();
+    sheet = allSheets.filter(function (s) { return s.getName() === sheetName; })[0] || null;
+    if (!sheet) {
+      const normalizedTarget = normalizeLabel_(sheetName);
+      sheet = allSheets.filter(function (s) { return normalizeLabel_(s.getName()) === normalizedTarget; })[0] || null;
+    }
   }
-  // הניסיון החוזר לא פתר את זה בפועל - במקום להחזיר null סתמי (שנראה
-  // בצד הלקוח בדיוק כמו כל שגיאה אחרת), מחזירים כאן בדיוק מה שם הטאב
-  // שחיפשנו מול הרשימה האמיתית של שמות הטאבים שה-קוד רואה **באותה
-  // הרצה עצמה** - כדי לגלות בבת אחת אם יש הבדל נסתר בין השם שנשלח
-  // (אולי תו RTL/LRM נסתר מההעתקה בדפדפן) לבין השם האמיתי בגיליון.
   if (!sheet) {
     return {
       error: 'not_found',
