@@ -4201,26 +4201,24 @@ function getCampaignData(sheetName) {
   // הגיליון, למקרה שההרצה הפרוסה מחזיקה הפניה ישנה/מטמון פנימי שלא
   // מתעדכן לטאבים חדשים לאורך זמן (תיאוריה שעוד לא נבדקה בפועל).
   const ss = SpreadsheetApp.openById(SpreadsheetApp.getActiveSpreadsheet().getId());
-  // ss.getSheetByName(sheetName) התגלה כלא אמין לטאבים שנוצרו ממש עכשיו,
-  // דרך האפליקציה הפרוסה (גם עם השהיה - נבדק ולא עזר). הפתרון האמיתי:
-  // לא להסתמך על ההתאמה הפנימית של getSheetByName בכלל - לעבור על כל
-  // הטאבים בפועל (ss.getSheets(), שכן עובד תמיד כי הוא לא תלוי באינדוקס
-  // פנימי) ולהשוות שמות ידנית, כולל השוואה מנורמלת (normalizeLabel_ -
-  // בדיוק כמו עמודות) שתתפוס גם תו נסתר/רווח עודף שהעתק-הדבק עלול להוסיף.
-  let sheet = ss.getSheetByName(sheetName);
+  // תיקון מדויק יותר: getCampaignNames() (שממלאת את רשימת הקמפיינים
+  // בסרגל הצד, ותמיד רואה נכון גם טאבים חדשים-חדשים) בנויה על
+  // getCampaignSheets_(ss) - בדיוק אותה רשימה שנבדקת כאן עכשיו, ולא על
+  // ss.getSheetByName בכלל. אם טאב מופיע בסרגל, הוא בהכרח ברשימה הזו -
+  // ולכן זו המקור האמין היחיד שכדאי להסתמך עליו, במקום לנחש דרך חיפוש
+  // נפרד (getSheetByName) שהתגלה כלא עקבי איתה. השוואה מנורמלת
+  // (normalizeLabel_ - בדיוק כמו עמודות) תופסת גם תו נסתר/רווח עודף.
+  const campaignSheets = getCampaignSheets_(ss);
+  let sheet = campaignSheets.filter(function (s) { return s.getName() === sheetName; })[0] || null;
   if (!sheet) {
-    const allSheets = ss.getSheets();
-    sheet = allSheets.filter(function (s) { return s.getName() === sheetName; })[0] || null;
-    if (!sheet) {
-      const normalizedTarget = normalizeLabel_(sheetName);
-      sheet = allSheets.filter(function (s) { return normalizeLabel_(s.getName()) === normalizedTarget; })[0] || null;
-    }
+    const normalizedTarget = normalizeLabel_(sheetName);
+    sheet = campaignSheets.filter(function (s) { return normalizeLabel_(s.getName()) === normalizedTarget; })[0] || null;
   }
   if (!sheet) {
     return {
       error: 'not_found',
       requestedName: sheetName,
-      availableNames: ss.getSheets().map(function (s) { return s.getName(); })
+      availableNames: campaignSheets.map(function (s) { return s.getName(); })
     };
   }
 
