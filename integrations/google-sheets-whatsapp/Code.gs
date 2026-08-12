@@ -2472,6 +2472,36 @@ function debugEdnaTabMismatch() {
 }
 
 /**
+ * בטאב "טריפל סי עדנה" יש 625 שורות עם טלפון, אבל הדשבורד מציג רק
+ * 86-94. אין הבדל בשם הטאב (נבדק) ואין קאש בקוד. החשד הבא: גודל/זמן
+ * התשובה של getCampaignData ל-625 שורות (עם תמלולי שיחות מלאים בכל
+ * שורה) גדול/איטי מדי ל-google.script.run, וזה נתקע/נכשל בשקט בלי
+ * שגיאה גלויה. הפונקציה הזו מודדת בדיוק כמה זמן לוקח וכמה גדולה
+ * התשובה בפועל - בלי לשנות שום התנהגות אמיתית.
+ */
+function debugEdnaPayloadSize() {
+  const start = Date.now();
+  const data = getCampaignData('טריפל סי עדנה');
+  const elapsedMs = Date.now() - start;
+  if (!data) {
+    Logger.log('❌ getCampaignData החזירה null');
+    return;
+  }
+  const json = JSON.stringify(data);
+  Logger.log('זמן ריצה: ' + elapsedMs + ' מילישניות');
+  Logger.log('מספר שורות שהוחזרו בפועל: ' + data.rows.length);
+  Logger.log('גודל התשובה (JSON): ' + json.length + ' תווים (~' +
+    Math.round(json.length / 1024) + ' KB)');
+
+  let transcriptChars = 0;
+  data.rows.forEach(function (r) { transcriptChars += String(r.transcript || '').length; });
+  Logger.log('סה"כ תווים בכל התמלולים ביחד: ' + transcriptChars);
+
+  const nir = data.rows.filter(function (r) { return String(r.phone).replace(/\D/g, '').indexOf('504441276') !== -1; })[0];
+  Logger.log('ניר נמצא במערך שהפונקציה מחזירה בפועל: ' + (nir ? 'כן, שם="' + nir.name + '"' : 'לא!'));
+}
+
+/**
  * כלי אבחון: מדמה בדיוק את מה ש-doGet עושה בשביל לינק נציגה - בלי
  * דפדפן, בלי URL, בלי פריסה בכלל, ובלי שום עריכה ידנית של הקוד (לוקחת
  * לבד את הנציגה הראשונה מהטאב "נציגות"). להריץ ישירות, בלי לגעת בכלום.
