@@ -2075,9 +2075,17 @@
         if (myToken !== loadCampaignToken_) return;
         campaignLoadInFlight_ = false;
         clearInterval(loadCampaignTimer_);
-        // הבדיקה שהייתה חסרה: אם השרת החזיר משהו ריק/לא תקין, זה היה
-        // נשאר "טוען נתונים..." לנצח בשקט (renderCampaign יוצאת מיד
-        // ב-if(!data)return). עכשיו זה מוצג כשגיאה אמיתית על המסך.
+        // גרסה מאובחנת: אם getCampaignData לא מצאה את הטאב, היא מחזירה
+        // עכשיו { error:'not_found', requestedName, availableNames } במקום
+        // null סתמי - מציגים את זה מילה במילה כדי לגלות אם יש הבדל נסתר
+        // בין השם שנשלח לשמות האמיתיים בגיליון.
+        if (data && data.error === 'not_found') {
+          document.getElementById('tableBody').innerHTML =
+            '<tr><td colspan="11" class="empty-state">⚠ הטאב לא נמצא. שם שחיפשנו: "' + escapeHtml_(data.requestedName) +
+            '" (אורך: ' + data.requestedName.length + ' תווים).<br>שמות טאבים אמיתיים שנמצאו: ' +
+            data.availableNames.map(function (n) { return '"' + escapeHtml_(n) + '" (' + n.length + ')'; }).join(', ') + '</td></tr>';
+          return;
+        }
         if (!data || !data.rows) {
           document.getElementById('tableBody').innerHTML =
             '<tr><td colspan="11" class="empty-state">⚠ השרת החזיר תשובה ריקה או לא תקינה לקמפיין הזה. ' +

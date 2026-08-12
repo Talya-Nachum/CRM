@@ -4208,7 +4208,18 @@ function getCampaignData(sheetName) {
     SpreadsheetApp.flush();
     sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   }
-  if (!sheet) return null;
+  // הניסיון החוזר לא פתר את זה בפועל - במקום להחזיר null סתמי (שנראה
+  // בצד הלקוח בדיוק כמו כל שגיאה אחרת), מחזירים כאן בדיוק מה שם הטאב
+  // שחיפשנו מול הרשימה האמיתית של שמות הטאבים שה-קוד רואה **באותה
+  // הרצה עצמה** - כדי לגלות בבת אחת אם יש הבדל נסתר בין השם שנשלח
+  // (אולי תו RTL/LRM נסתר מההעתקה בדפדפן) לבין השם האמיתי בגיליון.
+  if (!sheet) {
+    return {
+      error: 'not_found',
+      requestedName: sheetName,
+      availableNames: ss.getSheets().map(function (s) { return s.getName(); })
+    };
+  }
 
   expireStaleAssignments_();
 
