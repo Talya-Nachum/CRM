@@ -2086,6 +2086,12 @@
             data.availableNames.map(function (n) { return '"' + escapeHtml_(n) + '" (' + n.length + ')'; }).join(', ') + '</td></tr>';
           return;
         }
+        if (data && data.error === 'exception') {
+          document.getElementById('tableBody').innerHTML =
+            '<tr><td colspan="11" class="empty-state">⚠ שגיאה אמיתית בשרת: ' + escapeHtml_(data.message) +
+            '<br><span style="font-size:11px;color:var(--text-muted)">' + escapeHtml_(data.stack) + '</span></td></tr>';
+          return;
+        }
         if (!data || !data.rows) {
           document.getElementById('tableBody').innerHTML =
             '<tr><td colspan="11" class="empty-state">⚠ השרת החזיר תשובה ריקה או לא תקינה לקמפיין הזה. ' +

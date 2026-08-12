@@ -4196,7 +4196,25 @@ function buildNotesEntries_(reply, callResult, userNotes) {
   return entries;
 }
 
+/**
+ * עטיפה דקה: כל חריגה בתוך getCampaignData_impl_ (השם הישן) נתפסת כאן
+ * ומוחזרת כאובייקט מידע במקום להישאר undefined/להיבלע בדרך לדפדפן -
+ * כל התיאוריות האחרות (שם טאב, משקל תמלול, קאש) נשללו בבדיקות בפועל,
+ * וזה הדרך היחידה שנשארה לגלות אם יש בכלל חריגה אמיתית שקורית בשרת.
+ */
 function getCampaignData(sheetName) {
+  try {
+    return getCampaignData_impl_(sheetName);
+  } catch (err) {
+    return {
+      error: 'exception',
+      message: String(err && err.message || err),
+      stack: String(err && err.stack || '')
+    };
+  }
+}
+
+function getCampaignData_impl_(sheetName) {
   // openById (לא getActiveSpreadsheet) - כדי לכפות שליפה טרייה של מבנה
   // הגיליון, למקרה שההרצה הפרוסה מחזיקה הפניה ישנה/מטמון פנימי שלא
   // מתעדכן לטאבים חדשים לאורך זמן (תיאוריה שעוד לא נבדקה בפועל).
