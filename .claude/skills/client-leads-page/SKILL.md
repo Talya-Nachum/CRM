@@ -1,0 +1,28 @@
+---
+name: client-leads-page
+description: Guides building a dedicated Google Sheets + Apps Script leads-management web app for one of Mituv's clients (Talya's telemarketing/sales agency) — a separate branded page where a client's leads land (from their landing page and/or manual entry), each with a status and bulk WhatsApp sending via Inforu. Use this whenever Talya asks to build, set up, or add a "leads page," "דף לידים," or CRM-style tool for a specific client/company name, or says something like "בנה לי דף לידים ל..." / "אני רוצה מערכת לידים ל...". Also use it when she asks to fix, extend, or debug an existing client leads page in this repo (the pattern was first built for "Erez Kedem Academy" in `erez-kedem-academy-leads/`) — this skill documents the recurring bugs already hit and their fixes, so re-diagnosing them from scratch is unnecessary.
+---
+
+# Client Leads Page
+
+Mituv builds a separate Google Sheets + Apps Script "leads page" for individual clients — a lightweight CRM-in-a-tab with a branded header, a leads table with a controlled status pipeline, and bulk WhatsApp sending through Inforu. The first one was built for Erez Kedem Academy; every future client page should follow the same proven pattern rather than being designed from scratch.
+
+**Read `templates/client-leads-page/BUILD-GUIDE.md` in this repo now.** It is the source of truth for this skill: the discovery questions to ask before writing any code, the architecture decisions already made (and why), and every environment gotcha already hit while building and deploying the first one (race conditions, credential whitespace, Hebrew punctuation normalization, and more). Do not re-derive any of that from first principles — read the file.
+
+## Building a new client's page
+
+1. **Confirm the spec before writing code.** This is a hard rule Talya has stated explicitly more than once — treat any jump straight to code as a mistake. Work through the discovery questions in BUILD-GUIDE.md §1 (fields, statuses, lead source, Inforu account, branding, WhatsApp templates), including the standalone-Sheet-vs-shared-tab architecture question. If she's already answered some of this earlier in the conversation, don't re-ask — just confirm your understanding briefly.
+2. **Mock the visual design first** if there's any new branding/layout element involved (new header pieces, new colors, a new interactive widget). Build a static Artifact with `google.script.run` mocked out and sample data, get sign-off, and only then move to real Apps Script code — this caught a real bug (a Hebrew-quote mismatch that silently broke a feature) before it ever reached her.
+3. **Copy `templates/client-leads-page/` into a new top-level folder** named for the client (e.g. `<client-name>-leads/`), and work through every `TODO(client)` marker across the 5 files.
+4. **Apply the known fixes from BUILD-GUIDE.md as you go** — they're already in the template (LockService around sheet bootstrap, self-healing `getLeads()`, trimmed Inforu credentials, Hebrew punctuation normalization) — just don't accidentally remove them while customizing.
+5. **Deliver setup instructions the way that has actually worked with Talya**, not the way that seems obvious to a developer:
+   - She is not technical and gets confused by jargon in Google's English UI — give her the exact Hebrew label she'll see (e.g. "הגדרות הפרויקט" not "Project Settings").
+   - Sending files for her to download does not work well — double-clicking an `.html` file opens it as a rendered (blank-looking) page, not as text, and this has caused repeated confusion. **Paste full file contents directly into chat as code blocks** she can select and copy from — this is the delivery method that actually worked, prefer it over file attachments for code she needs to paste into the Apps Script editor.
+   - Spell out the difference between "New deployment" (creates a new URL) and "Manage deployments → pencil → New version" (updates the existing URL) every time you mention redeploying — she has hit the stale-URL trap before.
+6. **Commit and push the new client folder** to the assigned branch once she's approved the working result, same as any other change in this repo.
+
+## Fixing or extending an existing client page
+
+Before debugging from scratch, check whether the symptom matches a known issue in BUILD-GUIDE.md's "מגבלות סביבת הפיתוח" section — several bugs (the sheet-creation race condition, the credential-whitespace auth failure, manually-added sheet rows not appearing) have already been hit and fixed once and are easy to reintroduce by accident when copying code around. If the fix already exists in `erez-kedem-academy-leads/Code.gs` but not in the client folder you're working on, port it over rather than re-solving it.
+
+When you fix a *new* class of bug that isn't yet documented, add it to `templates/client-leads-page/BUILD-GUIDE.md` so the next client page (and the next debugging session) benefits — that file is the whole point of this skill existing.

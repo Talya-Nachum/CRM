@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+  <header class="hub">
+    <div class="logo-mark">
+      <!-- לוגו מיטוב - קבוע לכל הלקוחות, בשיתוף פעולה -->
+      <svg class="mituv-icon" viewBox="0 0 64 64" fill="none">
+        <path d="M32 4 A28 28 0 0 1 58.5 25 L44 25 A14 14 0 0 0 32 18 Z" fill="#159aa8"/>
+        <path d="M58.5 25 A28 28 0 0 1 48 54 L40 42 A14 14 0 0 0 44 25 Z" fill="#1fc2c9"/>
+        <path d="M48 54 A28 28 0 0 1 16 54 L24 42 A14 14 0 0 0 40 42 Z" fill="#f4a828"/>
+        <path d="M16 54 A28 28 0 0 1 5.5 25 L20 25 A14 14 0 0 0 24 42 Z" fill="#ef8a1e"/>
+        <path d="M5.5 25 A28 28 0 0 1 32 4 L32 18 A14 14 0 0 0 20 25 Z" fill="#159aa8"/>
+        <path d="M17 30 L26 40 L47 17" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <span class="logo-divider" aria-hidden="true"></span>
+      <!-- TODO(client): להחליף את הריבוע הזה בלוגו האמיתי של הלקוח (SVG מוטמע
+           או <img src="data:image/png;base64,...">). אם יש קובץ לוגו, לבקש
+           ממנו לינק ל-Google Drive משותף ("כל מי שיש לו את הקישור") -
+           WebFetch לא תמיד יכול להוריד תמונות שנשלחות ישירות בצ'אט. -->
+      <div class="client-logo-placeholder" aria-hidden="true">לוגו</div>
+      <div class="logo-text">
+        <span class="word" id="clientNameLabel">שם הלקוח</span>
+        <span class="tag" id="clientTagLabel">ניהול לידים · בשיתוף מיטוב מכירות</span>
+      </div>
+    </div>
+
+    <!-- TODO(client): אם ל-TARGET_DATE ב-Code.gs יש ערך, הבלוק הזה יופיע
+         אוטומטית (ר' JavaScript.html - loadConfig). אם אין תאריך רלוונטי
+         ללקוח הזה, אפשר למחוק את כל ה-div הזה. -->
+    <div class="countdown hidden" id="countdownBlock">
+      <span class="cd-label" id="countdownLabel">עד המועד</span>
+      <div class="cd-units">
+        <div class="cd-unit"><span class="n" id="cdDays">--</span><span class="u">ימים</span></div>
+        <div class="cd-unit"><span class="n" id="cdHours">--</span><span class="u">שעות</span></div>
+        <div class="cd-unit"><span class="n" id="cdMins">--</span><span class="u">דקות</span></div>
+      </div>
+    </div>
+
+    <!-- TODO(client): לוודא שהטקסט "נרשמו עד כה" מתאים למונח העסקי של
+         הלקוח (למשל "נסגרו עסקאות"/"אושרו" וכו'), ולעדכן REGISTERED_STATUSES
+         ב-JavaScript.html בהתאם - ר' BUILD-GUIDE.md. -->
+    <button class="stat-banner" id="registeredBanner">
+      <span class="stat-n" id="registeredCount">0</span>
+      <span class="stat-u">נרשמו עד כה</span>
+    </button>
+
+    <div class="hub-actions">
+      <button class="hub-btn gold" id="paymentBtn">מעבר לתשלום</button>
+      <button class="hub-btn ghost" id="infoBtn">מידע נוסף</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input id="searchInput" class="search-input" type="text" placeholder="חיפוש לפי שם, חברה, טלפון או אימייל...">
+      <select id="statusFilter" class="status-filter">
+        <option value="">כל הסטטוסים</option>
+      </select>
+      <button class="btn btn-wa" id="waBtn" disabled>💬 שליחת וואטסאפ (<span id="selCount">0</span>)</button>
+      <button class="btn btn-primary" id="addLeadBtn">+ הוספת ליד</button>
+      <div class="count-pill" id="leadCount"></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="selectAll"></th>
+            <th>מקור</th>
+            <th>שם חברה</th>
+            <th>ח.פ</th>
+            <th>איש קשר</th>
+            <th>תפקיד</th>
+            <th>נייד</th>
+            <th>אימייל</th>
+            <th>הערות</th>
+            <th>סטטוס</th>
+            <th>עודכן</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="leadsTableBody">
+          <tr><td colspan="12" class="empty-row">טוען נתונים...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- מודאל הוספה/עריכה -->
+  <div id="leadOverlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="modalTitle">הוספת ליד חדש</h2>
+        <button class="icon-x" id="closeLeadModalBtn">✕</button>
+      </div>
+      <form id="leadForm" class="modal-body">
+        <input type="hidden" id="leadId">
+
+        <div class="field">
+          <label>מקור הליד</label>
+          <input type="text" id="f_source" list="sourceOptions" placeholder="לדוגמה: פייסבוק, גוגל, המלצה, אתר...">
+          <datalist id="sourceOptions">
+            <option value="דף נחיתה">
+            <option value="פייסבוק">
+            <option value="גוגל">
+            <option value="המלצה">
+            <option value="אתר">
+            <option value="לינקדאין">
+            <option value="ידני">
+          </datalist>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label>שם חברה</label>
+            <input type="text" id="f_company">
+          </div>
+          <div>
+            <label>ח.פ</label>
+            <input type="text" id="f_companyId">
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label>שם איש קשר</label>
+            <input type="text" id="f_contactName">
+          </div>
+          <div>
+            <label>תפקיד</label>
+            <input type="text" id="f_role">
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label>נייד</label>
+            <input type="tel" id="f_phone">
+          </div>
+          <div>
+            <label>אימייל</label>
+            <input type="email" id="f_email">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>הערות</label>
+          <textarea id="f_notes" rows="3"></textarea>
+        </div>
+
+        <div class="field">
+          <label>סטטוס</label>
+          <select id="f_status"></select>
+        </div>
+
+        <footer class="modal-actions">
+          <button type="button" id="deleteLeadBtn" class="btn btn-danger hidden">מחיקת ליד</button>
+          <div class="spacer"></div>
+          <button type="button" id="cancelLeadBtn" class="btn btn-plain">ביטול</button>
+          <button type="submit" class="btn btn-primary">שמירה</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- מודאל שליחת וואטסאפ -->
+  <div id="waOverlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>שליחת הודעת וואטסאפ</h2>
+        <button class="icon-x" id="closeWaModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>נמענים נבחרים</label>
+          <div class="recipients-list" id="recipientsList"></div>
+        </div>
+        <div class="field">
+          <label>בחירת תבנית מאושרת</label>
+          <div class="template-choice" id="templateChoice"></div>
+        </div>
+        <div id="waMsg" class="admin-msg"></div>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" id="cancelWaBtn" class="btn btn-plain">ביטול</button>
+        <button type="button" id="sendWaBtn" class="btn btn-wa" style="opacity:1;cursor:pointer">שליחה</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- מודאל רשימת הנרשמים -->
+  <div id="registeredOverlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h2>נרשמים עד כה (<span id="registeredModalCount">0</span>)</h2>
+        <button class="icon-x" id="closeRegisteredModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>שם חברה</th>
+                <th>איש קשר</th>
+                <th>נייד</th>
+                <th>סטטוס</th>
+                <th>עודכן</th>
+              </tr>
+            </thead>
+            <tbody id="registeredTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" id="closeRegisteredBtn" class="btn btn-plain">סגירה</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <?!= include('JavaScript'); ?>
+</body>
+</html>

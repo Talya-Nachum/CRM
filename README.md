@@ -1,1 +1,6 @@
 # CRM
+
+## דפי לידים ייעודיים ללקוחות
+
+- `erez-kedem-academy-leads/` — דף לידים חי עבור ארז קדם אקדמיה (גיליון Google Sheets נפרד + Apps Script).
+- `templates/client-leads-page/` — תבנית לבניית דף כזה ללקוח הבא. להתחיל שם, ולקרוא את `BUILD-GUIDE.md` באותה תיקייה לפני שמתחילים.
