@@ -11,9 +11,9 @@
  */
 
 // --- מיתוג ותוכן ה-header (לערוך כאן בשורה אחת בכל שינוי) ---
-var ACADEMY_START_DATE = '2026-10-01T00:00:00+03:00'; // עדכני כשהתאריך הסופי ייקבע
+var ACADEMY_START_DATE = '2026-10-05T00:00:00+03:00'; // עדכני כשהתאריך הסופי ייקבע
 var PAYMENT_URL = ''; // כתובת דף הסליקה - ריק כרגע, למלא כשיהיה מוכן
-var INFO_URL = ''; // כתובת/לינק למידע על האקדמיה - ריק כרגע, למלא כשהתסריט הפנימי מוכן
+var INFO_URL = 'https://mituv-my.sharepoint.com/:w:/g/personal/talya_mituvforsales_co_il/IQABdIuj-z2ARa0e62zQT_GcASfM8lFLchL1dppcar53EhI?e=xnAbWP';
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט כמו במערכת הראשית ---
 var INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
