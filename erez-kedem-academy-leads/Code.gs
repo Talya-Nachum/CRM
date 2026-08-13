@@ -342,9 +342,28 @@ function getTemplates() {
 
 function getInforuAuthHeader_() {
   var props = PropertiesService.getScriptProperties();
-  var username = props.getProperty('INFORU_USERNAME');
-  var token = props.getProperty('INFORU_TOKEN');
+  // trim() בכוונה - העתקה/הדבקה מתוך טבלת Script Properties בדפדפן נוטה
+  // להוסיף רווח מוביל/נגרר בשקט, שגורם ל-"Authentication failed" באינפוריו
+  // גם כששני הערכים "נראים" נכונים.
+  var username = (props.getProperty('INFORU_USERNAME') || '').trim();
+  var token = (props.getProperty('INFORU_TOKEN') || '').trim();
   return 'Basic ' + Utilities.base64Encode(username + ':' + token);
+}
+
+/**
+ * הרצה ידנית מהעורך (בחירת הפונקציה בתפריט העליון + Run) כדי לבדוק בלי
+ * לחשוף את הסודות עצמם אם יש רווחים חבויים ב-Script Properties שגרמו
+ * ל-"Authentication failed or illegal IP address" מאינפוריו - לפתוח
+ * אחר כך View > Logs (או Executions) כדי לראות את הפלט.
+ */
+function debugInforuCredentials() {
+  var props = PropertiesService.getScriptProperties();
+  var rawUsername = props.getProperty('INFORU_USERNAME') || '';
+  var rawToken = props.getProperty('INFORU_TOKEN') || '';
+  Logger.log('INFORU_USERNAME: אורך=%s, התחיל/הסתיים ברווח=%s, ערך=%s',
+    rawUsername.length, rawUsername !== rawUsername.trim(), rawUsername);
+  Logger.log('INFORU_TOKEN: אורך=%s, התחיל/הסתיים ברווח=%s',
+    rawToken.length, rawToken !== rawToken.trim());
 }
 
 /**
