@@ -8,13 +8,22 @@
 <body>
   <header class="hub">
     <div class="logo-mark">
+      <svg class="mituv-icon" viewBox="0 0 64 64" fill="none">
+        <path d="M32 4 A28 28 0 0 1 58.5 25 L44 25 A14 14 0 0 0 32 18 Z" fill="#159aa8"/>
+        <path d="M58.5 25 A28 28 0 0 1 48 54 L40 42 A14 14 0 0 0 44 25 Z" fill="#1fc2c9"/>
+        <path d="M48 54 A28 28 0 0 1 16 54 L24 42 A14 14 0 0 0 40 42 Z" fill="#f4a828"/>
+        <path d="M16 54 A28 28 0 0 1 5.5 25 L20 25 A14 14 0 0 0 24 42 Z" fill="#ef8a1e"/>
+        <path d="M5.5 25 A28 28 0 0 1 32 4 L32 18 A14 14 0 0 0 20 25 Z" fill="#159aa8"/>
+        <path d="M17 30 L26 40 L47 17" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <span class="logo-divider" aria-hidden="true"></span>
       <svg viewBox="0 0 48 48" fill="none">
         <path d="M24 4 L34 20 H29 L37 32 H30 L36 42 H12 L18 32 H11 L19 20 H14 Z" fill="#ffffff"/>
         <rect x="21.5" y="42" width="5" height="4" fill="#ffffff"/>
       </svg>
       <div class="logo-text">
         <span class="word">KEDEM · האקדמיה הפרקטית לביטוח</span>
-        <span class="tag">ניהול לידים — ארז קדם אקדמיה</span>
+        <span class="tag">ניהול לידים — ארז קדם אקדמיה · בשיתוף מיטוב מכירות</span>
       </div>
     </div>
 
@@ -26,6 +35,11 @@
         <div class="cd-unit"><span class="n" id="cdMins">--</span><span class="u">דקות</span></div>
       </div>
     </div>
+
+    <button class="stat-banner" id="registeredBanner">
+      <span class="stat-n" id="registeredCount">0</span>
+      <span class="stat-u">נרשמו עד כה</span>
+    </button>
 
     <div class="hub-actions">
       <button class="hub-btn gold" id="paymentBtn">מעבר לתשלום</button>
@@ -167,6 +181,35 @@
       <footer class="modal-actions">
         <button type="button" id="cancelWaBtn" class="btn btn-plain">ביטול</button>
         <button type="button" id="sendWaBtn" class="btn btn-wa" style="opacity:1;cursor:pointer">שליחה</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- מודאל רשימת הנרשמים -->
+  <div id="registeredOverlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h2>נרשמים עד כה (<span id="registeredModalCount">0</span>)</h2>
+        <button class="icon-x" id="closeRegisteredModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>שם חברה</th>
+                <th>איש קשר</th>
+                <th>נייד</th>
+                <th>סטטוס</th>
+                <th>עודכן</th>
+              </tr>
+            </thead>
+            <tbody id="registeredTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" id="closeRegisteredBtn" class="btn btn-plain">סגירה</button>
       </footer>
     </div>
   </div>

@@ -6,6 +6,18 @@
   var statusColorMap = {};
   var palette = ['#64748b', '#b8791f', '#0f7a6b', '#2f4a7a', '#7a4fb0', '#b6423a', '#0891b2', '#be185d'];
 
+  // סטטוסים שנחשבים "נרשם בפועל" לצורך הבאנר "כמה נרשמו עד כה" - שני
+  // הסטטוסים היחידים שמייצגים רישום שהושלם (להבדיל מ"בתהליך"/"חדש" וכו')
+  var REGISTERED_STATUSES = ['נרשם לבד', 'נרשם ע"י מיטוב'].map(normalizeStatusText);
+
+  // מנרמלת גרשיים/גרש עברי (״ ׳) וגרשיים מעוצבים לצורת ASCII פשוטה, כדי
+  // שהשוואת סטטוסים לא תישבר בשקט אם מישהו מקליד "ע״י" עם גרשיים עבריים
+  // (הצורה התקנית בעברית) במקום מרכאות רגילות - בדיוק כמו רשימת הסטטוסים
+  // עצמה, שמושווית תמיד אחרי נרמול דומה.
+  function normalizeStatusText(s) {
+    return String(s || '').trim().replace(/[״“”″]/g, '"').replace(/[׳‘’]/g, "'");
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     loadConfig();
     loadStatuses();
@@ -25,6 +37,10 @@
     document.getElementById('closeWaModalBtn').addEventListener('click', closeWaModal);
     document.getElementById('cancelWaBtn').addEventListener('click', closeWaModal);
     document.getElementById('sendWaBtn').addEventListener('click', onSendWhatsApp);
+
+    document.getElementById('registeredBanner').addEventListener('click', openRegisteredModal);
+    document.getElementById('closeRegisteredModalBtn').addEventListener('click', closeRegisteredModal);
+    document.getElementById('closeRegisteredBtn').addEventListener('click', closeRegisteredModal);
   });
 
   /* ---------- config (header: countdown + buttons) ---------- */
@@ -67,7 +83,38 @@
     google.script.run.withSuccessHandler(function (leads) {
       allLeads = leads;
       renderTable();
+      updateRegisteredBanner();
     }).withFailureHandler(showError).getLeads();
+  }
+
+  function registeredLeads() {
+    return allLeads.filter(function (l) { return REGISTERED_STATUSES.indexOf(normalizeStatusText(l.status)) !== -1; });
+  }
+
+  function updateRegisteredBanner() {
+    document.getElementById('registeredCount').textContent = registeredLeads().length;
+  }
+
+  function openRegisteredModal() {
+    var leads = registeredLeads();
+    document.getElementById('registeredModalCount').textContent = leads.length;
+    var body = document.getElementById('registeredTableBody');
+    body.innerHTML = leads.length ? '' : '<tr><td colspan="5" class="empty-row">אין נרשמים עדיין</td></tr>';
+    leads.forEach(function (lead) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + escapeHtml(lead.company) + '</td>' +
+        '<td>' + escapeHtml(lead.contactName) + '</td>' +
+        '<td>' + escapeHtml(lead.phone) + '</td>' +
+        '<td><span class="badge" style="background:' + colorForStatus(lead.status) + '">' + escapeHtml(lead.status) + '</span></td>' +
+        '<td>' + escapeHtml(lead.updatedAt) + '</td>';
+      body.appendChild(tr);
+    });
+    document.getElementById('registeredOverlay').classList.remove('hidden');
+  }
+
+  function closeRegisteredModal() {
+    document.getElementById('registeredOverlay').classList.add('hidden');
   }
 
   function loadStatuses() {
