@@ -2548,6 +2548,29 @@ function debugEdnaPayloadSize() {
 }
 
 /**
+ * השוואה ישירה: "טריפל סי" (1500 רשומות, עובד תקין בדשבורד) מול "טריפל
+ * סי עדנה" (625 רשומות, לא עובד) - כדי לבדוק בעובדות אם משקל התשובה
+ * (KB) של הראשון באמת קטן יותר מהשני, או שההפך הוא הנכון (יותר שורות
+ * אבל פחות תוכן עשיר בכל אחת = משקל כולל דומה/קטן יותר).
+ */
+function debugTripleCPayloadSize() {
+  const start = Date.now();
+  const data = getCampaignData('טריפל סי');
+  const elapsedMs = Date.now() - start;
+  if (!data) {
+    Logger.log('❌ getCampaignData החזירה null עבור "טריפל סי"');
+    return;
+  }
+  const json = JSON.stringify(data);
+  Logger.log('=== טריפל סי (1500 רשומות, עובד) ===');
+  Logger.log('זמן ריצה: ' + elapsedMs + ' מילישניות');
+  Logger.log('מספר שורות: ' + data.rows.length);
+  Logger.log('גודל התשובה (JSON): ' + json.length + ' תווים (~' + Math.round(json.length / 1024) + ' KB)');
+  Logger.log('');
+  Logger.log('להשוואה: "טריפל סי עדנה" (625 רשומות, לא עובד) נמדד קודם על ~521KB.');
+}
+
+/**
  * כלי אבחון: מדמה בדיוק את מה ש-doGet עושה בשביל לינק נציגה - בלי
  * דפדפן, בלי URL, בלי פריסה בכלל, ובלי שום עריכה ידנית של הקוד (לוקחת
  * לבד את הנציגה הראשונה מהטאב "נציגות"). להריץ ישירות, בלי לגעת בכלום.
