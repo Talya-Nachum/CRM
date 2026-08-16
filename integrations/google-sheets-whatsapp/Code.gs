@@ -4913,6 +4913,29 @@ function normalizeSearchText_(s) {
   return String(s || '').trim().toLowerCase();
 }
 
+// מילות תפקיד נפוצות (עברית + אנגלית) - כדי לפצל שאילתה חופשית כמו
+// "CTO אוסם" ל-jobTitle="CTO" + companyKeyword="אוסם", במקום לשלוח את
+// כל המחרוזת כמקשה אחת לשני השדות (מה שאף פעם לא מוצא כלום בפועל, כי
+// ל-API אין חיפוש חופשי - רק התאמה לפי כל שדה בנפרד).
+const SEAMLESS_TITLE_WORDS_ = [
+  'cto', 'ceo', 'cfo', 'coo', 'cmo', 'vp', 'svp', 'evp',
+  'founder', 'co-founder', 'owner', 'president', 'director', 'manager', 'head',
+  'מנכ"ל', 'מנכ״ל', 'מנכל', 'סמנכ"ל', 'סמנכ״ל', 'סמנכל',
+  'מנהל', 'מנהלת', 'בעלים', 'יזם', 'יזמת', 'נשיא', 'ראש', 'סגן'
+];
+
+function splitSeamlessQuery_(q) {
+  const words = q.split(/\s+/).filter(Boolean);
+  const titleWords = [];
+  const restWords = [];
+  words.forEach(function (w) {
+    const norm = normalizeSearchText_(w);
+    if (SEAMLESS_TITLE_WORDS_.indexOf(norm) !== -1) titleWords.push(w);
+    else restWords.push(w);
+  });
+  return { title: titleWords.join(' '), company: restWords.join(' ') };
+}
+
 /**
  * חיפוש מקומי בכל טאבי הקמפיינים לפי שם/חברה - תמיד עובד, לא תלוי
  * בסימלס בכלל. עוצר אחרי 8 תוצאות כדי להישאר מהיר.
@@ -4972,8 +4995,13 @@ function searchSeamless(query) {
     };
   }
 
-  const companiesRes = seamlessFetch_('POST', '/search/companies', { companyName: q, limit: 5 });
-  const contactsRes = seamlessFetch_('POST', '/search/contacts', { companyKeyword: [q], jobTitle: [q], limit: 8 });
+  const parsed = splitSeamlessQuery_(q);
+  const contactFilters = { limit: 8 };
+  if (parsed.title) contactFilters.jobTitle = [parsed.title];
+  if (parsed.company) contactFilters.companyKeyword = [parsed.company];
+
+  const companiesRes = seamlessFetch_('POST', '/search/companies', { companyName: parsed.company || q, limit: 5 });
+  const contactsRes = seamlessFetch_('POST', '/search/contacts', contactFilters);
 
   const seamlessCompanies = companiesRes.ok
     ? extractSeamlessRecords_(companiesRes.data, ['companies', 'results', 'data']).map(mapSeamlessCompany_)
