@@ -4963,9 +4963,16 @@ function translateToEnglish(text) {
   }
 }
 
+// תקרת שורות כוללת (על פני כל טאבי הקמפיינים ביחד) לחיפוש מקומי -
+// בלעדיה, חיפוש על חברה שלא קיימת בכלל אצלנו (למשל שם גלובלי גדול)
+// היה סורק כל שורה בכל קמפיין לפני שהוא מוותר, וזה נמדד בפועל כעשרות
+// שניות. נמדד גם: לקרוא רק את 4 העמודות הדרושות (לא כל השורה - כולל
+// תוכן כבד כמו הערות/תיעוד שיחות) מקטין משמעותית את הזמן.
+const SEARCH_LOCAL_ROW_BUDGET_ = 4000;
+
 /**
  * חיפוש מקומי בכל טאבי הקמפיינים לפי שם/חברה - תמיד עובד, לא תלוי
- * בסימלס בכלל. עוצר אחרי 8 תוצאות כדי להישאר מהיר.
+ * בסימלס בכלל.
  */
 function searchLocalLeads_(query) {
   const q = normalizeSearchText_(query);
@@ -4973,25 +4980,35 @@ function searchLocalLeads_(query) {
   const ss = SpreadsheetApp.openById(SpreadsheetApp.getActiveSpreadsheet().getId());
   const sheets = getCampaignSheets_(ss);
   const results = [];
-  for (let s = 0; s < sheets.length && results.length < 8; s++) {
+  let rowsScanned = 0;
+
+  for (let s = 0; s < sheets.length && results.length < 8 && rowsScanned < SEARCH_LOCAL_ROW_BUDGET_; s++) {
     const sheet = sheets[s];
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) continue;
     const headers = headerRow_(sheet);
     const nameCol = findColumnNormalized_(headers, NAME_HEADER);
     const companyCol = findColumnNormalized_(headers, COMPANY_HEADER);
     const titleCol = findColumnNormalized_(headers, TITLE_HEADER);
     const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
     if (phoneCol === -1) continue;
-    const data = sheet.getDataRange().getValues();
-    for (let i = 1; i < data.length && results.length < 8; i++) {
-      const row = data[i];
-      const name = String(row[nameCol] || '');
-      const company = companyCol !== -1 ? String(row[companyCol] || '') : '';
-      const phone = String(row[phoneCol] || '');
+
+    const numRows = Math.min(lastRow - 1, SEARCH_LOCAL_ROW_BUDGET_ - rowsScanned);
+    const names = nameCol !== -1 ? sheet.getRange(2, nameCol + 1, numRows, 1).getValues() : null;
+    const companies = companyCol !== -1 ? sheet.getRange(2, companyCol + 1, numRows, 1).getValues() : null;
+    const titles = titleCol !== -1 ? sheet.getRange(2, titleCol + 1, numRows, 1).getValues() : null;
+    const phones = sheet.getRange(2, phoneCol + 1, numRows, 1).getValues();
+    rowsScanned += numRows;
+
+    for (let i = 0; i < numRows && results.length < 8; i++) {
+      const phone = String(phones[i][0] || '');
       if (!phone) continue;
+      const name = names ? String(names[i][0] || '') : '';
+      const company = companies ? String(companies[i][0] || '') : '';
       if (normalizeSearchText_(name).indexOf(q) === -1 && normalizeSearchText_(company).indexOf(q) === -1) continue;
       results.push({
         name: name,
-        title: titleCol !== -1 ? String(row[titleCol] || '') : '',
+        title: titles ? String(titles[i][0] || '') : '',
         company: company,
         phone: phone,
         campaign: sheet.getName()
