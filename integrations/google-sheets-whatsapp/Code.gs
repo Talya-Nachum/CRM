@@ -839,7 +839,7 @@ function doPost(e) {
 
     if (payload.Data) {
       handleInforuWebhook_(ss, payload);
-      relayInforuWebhook_(e.postData.contents);
+      relayInforuWebhook_(logSheet, e.postData.contents);
     } else if (payload.pearlId) {
       handleNlpearlWebhook_(ss, payload);
     } else if (payload.data) {
@@ -861,22 +861,23 @@ function doPost(e) {
 
 /**
  * מעבירה עותק גולמי של webhook נכנס מאינפוריו לפרויקט Apps Script נפרד
- * שמשתמש באותו חשבון/מספר וואטסאפ (ר' INFORU_RELAY_URL_ למעלה). נכשלת
- * בשקט - כישלון בהעברה לא אמור לפגוע בטיפול הרגיל בהודעה כאן, שכבר
- * הסתיים לפני שהפונקציה הזו נקראת.
+ * שמשתמש באותו חשבון/מספר וואטסאפ (ר' INFORU_RELAY_URL_ למעלה). כישלון
+ * בהעברה לא מפיל את הטיפול הרגיל בהודעה כאן (שכבר הסתיים לפני שהפונקציה
+ * הזו נקראת) - אבל כן נרשם ל-WebhookLog (קוד תשובה/שגיאה) כדי שיהיה
+ * אפשר לדעת בפועל אם ההעברה הצליחה, בלי לנחש.
  */
-function relayInforuWebhook_(rawBody) {
+function relayInforuWebhook_(logSheet, rawBody) {
   if (!INFORU_RELAY_URL_) return;
   try {
-    UrlFetchApp.fetch(INFORU_RELAY_URL_, {
+    const res = UrlFetchApp.fetch(INFORU_RELAY_URL_, {
       method: 'post',
       contentType: 'application/json',
       payload: rawBody,
       muteHttpExceptions: true
     });
+    logSheet.appendRow([new Date(), 'RELAY: קוד תשובה ' + res.getResponseCode() + ' | ' + res.getContentText().slice(0, 300)]);
   } catch (err) {
-    // לא קריטי - לא רושמים אפילו ל-WebhookLog, כדי לא ליצור רעש על כל
-    // רגע שהפרויקט השני לא זמין.
+    logSheet.appendRow([new Date(), 'RELAY ERROR: ' + err.message]);
   }
 }
 
