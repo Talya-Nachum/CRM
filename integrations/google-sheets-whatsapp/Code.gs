@@ -838,7 +838,16 @@ function doPost(e) {
     const payload = JSON.parse(e.postData.contents);
 
     if (payload.Data) {
-      handleInforuWebhook_(ss, payload);
+      // ה-relay לפרויקט השני לא תלוי בהצלחת הטיפול שלנו - לכן רץ תמיד,
+      // גם אם handleInforuWebhook_ נכשלת (למשל Lock timeout בעומס -
+      // קורה בפועל, כשכמה webhooks מגיעים כמעט בו-זמנית). בלי ה-try/catch
+      // הנפרד הזה, נעילה תפוסה הייתה מונעת גם מהפרויקט השני לקבל הודעה
+      // שבפועל כן הגיעה אלינו בהצלחה (ראינו בפועל ב-WebhookLog).
+      try {
+        handleInforuWebhook_(ss, payload);
+      } catch (innerErr) {
+        logSheet.appendRow([new Date(), 'ERROR: ' + innerErr.message + ' | ' + innerErr.stack]);
+      }
       relayInforuWebhook_(logSheet, e.postData.contents);
     } else if (payload.pearlId) {
       handleNlpearlWebhook_(ss, payload);
