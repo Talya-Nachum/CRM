@@ -22,7 +22,10 @@ var LEADS_SHEET_NAME = 'לידים';
 var STATUSES_SHEET_NAME = 'רשימת סטטוסים';
 var TEMPLATES_SHEET_NAME = 'תבניות';
 
-var DEFAULT_STATUSES = ['חדש', 'בתהליך', 'נרשם לבד', 'נרשם ע"י מיטוב', 'בטיפול ארז', 'לא מעוניין'];
+var DEFAULT_STATUSES = ['חדש', 'בתהליך', 'נרשם לבד', 'נרשם ע"י מיטוב', 'בטיפול ארז', 'לא מעוניין', 'נשלח וואטסאפ'];
+
+// הסטטוס שנקבע אוטומטית לכל ליד שנבחר בשליחת וואטסאפ מוצלחת (ר' sendWhatsApp)
+var WHATSAPP_SENT_STATUS = 'נשלח וואטסאפ';
 
 // שמות תבניות לדוגמה בלבד - להחליף את "מספר תבנית" בטאב "תבניות" במספרים
 // האמיתיים מאינפוריו (אפשר גם לשנות/להוסיף/למחוק שורות שם בלי לגעת בקוד)
@@ -46,7 +49,9 @@ var LEAD_FIELDS = [
   { key: 'email', label: 'אימייל' },
   { key: 'notes', label: 'הערות' },
   { key: 'status', label: 'סטטוס' },
-  { key: 'lastWhatsAppSentAt', label: 'וואטסאפ נשלח לאחרונה' }
+  { key: 'lastWhatsAppSentAt', label: 'וואטסאפ נשלח לאחרונה' },
+  { key: 'replyText', label: 'תשובת ליד' },
+  { key: 'replyAt', label: 'תאריך תשובה' }
 ];
 
 // מיפוי שמות שדות אפשריים שיגיעו מדף הנחיתה (בעברית/אנגלית) לשדות שלנו
@@ -94,6 +99,14 @@ function doPost(e) {
     var payload = parseIncomingPayload_(e);
     logWebhook_(payload);
 
+    // תשובת ליד נכנסת מאינפוריו (וואטסאפ) מגיעה בצורה שונה לגמרי מליד חדש
+    // מדף הנחיתה: { "Data": [ { "Value": "<טלפון>", "Message": "<תשובה>" } ] }
+    // - אותו מבנה בדיוק כמו במערכת הראשית. מזהים לפי זה ומפנים לטיפול נפרד.
+    if (payload && Array.isArray(payload.Data)) {
+      handleInforuReply_(payload.Data);
+      return jsonResponse_({ ok: true });
+    }
+
     var requiredToken = PropertiesService.getScriptProperties().getProperty('WEBHOOK_TOKEN');
     if (requiredToken && payload.token !== requiredToken) {
       return jsonResponse_({ ok: false, error: 'טוקן לא תקין' });
@@ -134,10 +147,10 @@ function ensureSheets_() {
 function ensureSheetsLocked_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
+  var headers = LEAD_FIELDS.map(function (f) { return f.label; });
   var leadsSheet = ss.getSheetByName(LEADS_SHEET_NAME);
   if (!leadsSheet) {
     leadsSheet = ss.insertSheet(LEADS_SHEET_NAME);
-    var headers = LEAD_FIELDS.map(function (f) { return f.label; });
     leadsSheet.getRange(1, 1, 1, headers.length)
       .setValues([headers])
       .setFontWeight('bold')
@@ -145,17 +158,36 @@ function ensureSheetsLocked_() {
       .setFontColor('#ffffff');
     leadsSheet.setFrozenRows(1);
     leadsSheet.autoResizeColumns(1, headers.length);
+  } else if (leadsSheet.getLastColumn() < headers.length) {
+    // הוספת שדות חדשים ל-LEAD_FIELDS (כמו "תשובת ליד") אחרי שהגיליון כבר
+    // קיים בשימוש - משלימה רק את הכותרות החסרות בסוף, בלי לגעת בעמודות
+    // ובנתונים הקיימים.
+    var existingCols = leadsSheet.getLastColumn();
+    var missingHeaders = headers.slice(existingCols);
+    leadsSheet.getRange(1, existingCols + 1, 1, missingHeaders.length)
+      .setValues([missingHeaders])
+      .setFontWeight('bold')
+      .setBackground('#16213a')
+      .setFontColor('#ffffff');
   }
 
   // "רשימת סטטוסים" - את שולטת בה ישירות מהגיליון (להוסיף/להסיר שורות בעמודה A).
   // הדשבורד רק קורא ממנה, אין כפתור עריכה בממשק בכוונה - הגישה לגיליון
-  // עצמו היא ההרשאה היחידה.
+  // עצמו היא ההרשאה היחידה. חריג יחיד: WHATSAPP_SENT_STATUS - סטטוס שהקוד
+  // עצמו קובע אוטומטית אחרי שליחה מוצלחת (ר' sendWhatsApp), אז הוא חייב
+  // להיות ברשימה כדי שיוצג נכון בתפריטים, גם אם הטאב כבר היה קיים לפני
+  // שהתכונה הזו נוספה.
   var statusesSheet = ss.getSheetByName(STATUSES_SHEET_NAME);
   if (!statusesSheet) {
     statusesSheet = ss.insertSheet(STATUSES_SHEET_NAME);
     statusesSheet.getRange(1, 1).setValue('סטטוס').setFontWeight('bold');
     statusesSheet.getRange(2, 1, DEFAULT_STATUSES.length, 1)
       .setValues(DEFAULT_STATUSES.map(function (s) { return [s]; }));
+  } else {
+    var existingStatuses = getStatusesFromSheet_(statusesSheet);
+    if (existingStatuses.indexOf(WHATSAPP_SENT_STATUS) === -1) {
+      statusesSheet.getRange(statusesSheet.getLastRow() + 1, 1).setValue(WHATSAPP_SENT_STATUS);
+    }
   }
 
   var templatesSheet = ss.getSheetByName(TEMPLATES_SHEET_NAME);
@@ -265,7 +297,8 @@ function updateLead(id, leadData) {
 
   var now = new Date();
   LEAD_FIELDS.forEach(function (f, i) {
-    if (f.key === 'id' || f.key === 'createdAt' || f.key === 'lastWhatsAppSentAt') return;
+    if (f.key === 'id' || f.key === 'createdAt' || f.key === 'lastWhatsAppSentAt' ||
+        f.key === 'replyText' || f.key === 'replyAt') return;
     if (f.key === 'updatedAt') {
       sheet.getRange(rowIndex, i + 1).setValue(now);
       return;
@@ -315,7 +348,10 @@ function formatDate_(d) {
 
 function getStatuses() {
   ensureSheets_();
-  var sheet = getStatusesSheet_();
+  return getStatusesFromSheet_(getStatusesSheet_());
+}
+
+function getStatusesFromSheet_(sheet) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
   return sheet.getRange(2, 1, lastRow - 1, 1).getValues()
@@ -423,13 +459,60 @@ function sendWhatsApp(leadIds, templateId) {
   }
 
   var now = new Date();
-  var sentAtCol = LEAD_FIELDS.map(function (f) { return f.key; }).indexOf('lastWhatsAppSentAt') + 1;
+  var sentAtCol = fieldIndex_('lastWhatsAppSentAt') + 1;
+  var statusCol = fieldIndex_('status') + 1;
   leadIds.forEach(function (id) {
     var rowIndex = findLeadRow_(sheet, id);
-    if (rowIndex !== -1) sheet.getRange(rowIndex, sentAtCol).setValue(now);
+    if (rowIndex === -1) return;
+    sheet.getRange(rowIndex, sentAtCol).setValue(now);
+    sheet.getRange(rowIndex, statusCol).setValue(WHATSAPP_SENT_STATUS);
   });
 
   return { sent: recipients.length, skipped: missingPhone };
+}
+
+/**
+ * מטפלת בתשובות נכנסות מוואטסאפ (webhook של אינפוריו) - מאתרת את הליד
+ * לפי מספר טלפון (9 ספרות אחרונות, כדי לא להיתקע על "0" מול "+972" בהתחלה)
+ * וכותבת את התשובה + מועד הקבלה. תשובה חדשה דורסת קודמת בכוונה (לא
+ * מצטברת) - מספיק ל"תיעוד תשובת הלקוח" שהתבקש, בלי היסטוריית שיחה מלאה.
+ */
+function handleInforuReply_(entries) {
+  var sheet = getLeadsSheet_();
+  var replyCol = fieldIndex_('replyText') + 1;
+  var replyAtCol = fieldIndex_('replyAt') + 1;
+  var now = new Date();
+
+  entries.forEach(function (entry) {
+    var phone = entry && entry.Value;
+    var message = entry && entry.Message;
+    if (!phone || !message) return;
+
+    var rowIndex = findLeadRowByPhone_(sheet, phone);
+    if (rowIndex === -1) return;
+
+    sheet.getRange(rowIndex, replyCol).setValue(message);
+    sheet.getRange(rowIndex, replyAtCol).setValue(now);
+  });
+}
+
+function findLeadRowByPhone_(sheet, phone) {
+  var suffix = onlyDigits_(phone).slice(-9);
+  if (!suffix) return -1;
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return -1;
+
+  var phoneCol = fieldIndex_('phone') + 1;
+  var values = sheet.getRange(2, phoneCol, lastRow - 1, 1).getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (onlyDigits_(values[i][0]).slice(-9) === suffix) return i + 2;
+  }
+  return -1;
+}
+
+function onlyDigits_(value) {
+  return String(value || '').replace(/\D/g, '');
 }
 
 /* ============================== Webhook payload parsing ============================== */
