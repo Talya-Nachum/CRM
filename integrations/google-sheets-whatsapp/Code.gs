@@ -39,6 +39,12 @@
 
 // --- אינפוריו (וואטסאפ) ---
 const INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
+// פרויקט Apps Script נפרד שמשתמש **באותו** חשבון/מספר וואטסאפ באינפוריו.
+// לאינפוריו יש רק כתובת יעד אחת להודעות נכנסות - אז במקום לשנות אותה
+// (מה שהיה מפסיק את הפרויקט הזה מלקבל תשובות), הכתובת אצל אינפוריו
+// נשארת מצביעה לכאן, וכל webhook נכנס גם מועבר הלאה (relay) לפרויקט
+// השני. ריק = לא מעבירים כלום (ברירת המחדל המקורית).
+const INFORU_RELAY_URL_ = 'https://script.google.com/macros/s/AKfycbx1uYAKfvDEbsLF3Cbyx7Lprj-TZNa8Ex-XP94GmJ38pB9ye4VNR-Xa5olIYha6v8jw/exec';
 const DEFAULT_TEMPLATE_ID = '267627';
 
 const PHONE_HEADER = 'טלפון נייד';
@@ -833,6 +839,7 @@ function doPost(e) {
 
     if (payload.Data) {
       handleInforuWebhook_(ss, payload);
+      relayInforuWebhook_(e.postData.contents);
     } else if (payload.pearlId) {
       handleNlpearlWebhook_(ss, payload);
     } else if (payload.data) {
@@ -850,6 +857,27 @@ function doPost(e) {
 
   return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * מעבירה עותק גולמי של webhook נכנס מאינפוריו לפרויקט Apps Script נפרד
+ * שמשתמש באותו חשבון/מספר וואטסאפ (ר' INFORU_RELAY_URL_ למעלה). נכשלת
+ * בשקט - כישלון בהעברה לא אמור לפגוע בטיפול הרגיל בהודעה כאן, שכבר
+ * הסתיים לפני שהפונקציה הזו נקראת.
+ */
+function relayInforuWebhook_(rawBody) {
+  if (!INFORU_RELAY_URL_) return;
+  try {
+    UrlFetchApp.fetch(INFORU_RELAY_URL_, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: rawBody,
+      muteHttpExceptions: true
+    });
+  } catch (err) {
+    // לא קריטי - לא רושמים אפילו ל-WebhookLog, כדי לא ליצור רעש על כל
+    // רגע שהפרויקט השני לא זמין.
+  }
 }
 
 /**
