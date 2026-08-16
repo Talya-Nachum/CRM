@@ -194,7 +194,7 @@
     document.getElementById('leadCount').textContent = filtered.length + ' לידים';
 
     if (!filtered.length) {
-      body.innerHTML = '<tr><td colspan="12" class="empty-row">אין לידים להצגה</td></tr>';
+      body.innerHTML = '<tr><td colspan="14" class="empty-row">אין לידים להצגה</td></tr>';
       updateSelectionUi();
       return;
     }
@@ -214,6 +214,8 @@
         '<td>' + escapeHtml(lead.email) + '</td>' +
         '<td>' + escapeHtml(lead.notes) + '</td>' +
         '<td><span class="badge" style="background:' + colorForStatus(lead.status) + '">' + escapeHtml(lead.status) + '</span></td>' +
+        '<td>' + escapeHtml(lead.lastWhatsAppSentAt) + '</td>' +
+        '<td title="' + escapeHtml(lead.replyAt ? 'התקבל: ' + lead.replyAt : '') + '">' + escapeHtml(lead.replyText) + '</td>' +
         '<td>' + escapeHtml(lead.updatedAt) + '</td>' +
         '<td><button type="button" class="row-edit">✎</button></td>';
 
