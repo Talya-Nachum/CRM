@@ -4425,10 +4425,12 @@
             const el = scrollArea.querySelector('[data-reveal-sub="' + sid + '"]');
             if (!el) return;
             const info = revealed[sid];
+            if (info.status === 'pending') return; // עוד לא הסתיים - משאירים "טוען..." כרגע
+            if (info.status === 'failed') { el.outerHTML = 'חשיפת פרטי קשר נכשלה'; return; }
             const bits = [];
             if (info.phone) bits.push('📱 ' + info.phone);
             if (info.email) bits.push('✉️ ' + info.email);
-            el.outerHTML = bits.length ? escapeHtml_(bits.join(' · ')) : 'לא נחשפו פרטי קשר';
+            el.outerHTML = bits.length ? escapeHtml_(bits.join(' · ')) : 'סימלס לא מחזיקה טלפון/אימייל עבור איש קשר זה';
           });
         })
         .withFailureHandler(function () { /* לא קריטי - השורות פשוט נשארות בלי טלפון/אימייל */ })

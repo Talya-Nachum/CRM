@@ -5022,23 +5022,37 @@ function searchSeamless(query) {
   };
 }
 
+const SEAMLESS_RESEARCH_DONE_ = ['completed', 'complete', 'done', 'success', 'finished'];
+const SEAMLESS_RESEARCH_FAILED_ = ['failed', 'error', 'not_found'];
+
 /**
  * חושפת טלפון/אימייל עבור עד 8 תוצאות סימלס לפי searchResultId - קוראת
- * פעם אחת ל-research (עולה קרדיט לכל איש קשר) ואז בודקת עד 3 פעמים אם
- * ההתגלות כבר הסתיימה. לא ממתינה יותר מכמה שניות - מה שלא הספיק,
- * פשוט נשאר בלי טלפון/אימייל בתוצאה, בלי לתקוע את שאר הדשבורד.
+ * פעם אחת ל-research (עולה קרדיט לכל איש קשר) ואז בודקת עד 4 פעמים אם
+ * ההתגלות כבר הסתיימה (עד כ-9 שניות בסה"כ). מחזירה עבור **כל** מזהה
+ * שהתבקש שדה status - 'completed' (אז phone/email הם התוצאה הסופית,
+ * גם אם ריקים - כלומר סימלס פשוט לא מחזיקה את הפרטים האלה לאיש הקשר
+ * הזה), 'pending' (עוד לא הסתיים בזמן שחיכינו) או 'failed'. חשוב
+ * להבחין בין "בדקנו וא ין נתון" ל"לא הספקנו לבדוק" - בלי זה הלקוחה
+ * הייתה רואה "אין פרטי קשר" גם כשבפועל התהליך פשוט עוד לא נגמר.
  */
 function revealSeamlessContacts(searchResultIds) {
   const ids = (searchResultIds || []).slice(0, 8).filter(Boolean);
-  if (!ids.length || !seamlessApiKey_()) return {};
+  if (!ids.length) return {};
+  const pendingResult = {};
+  ids.forEach(function (id) { pendingResult[id] = { phone: '', email: '', status: 'pending' }; });
+  if (!seamlessApiKey_()) return pendingResult;
 
   const researchRes = seamlessFetch_('POST', '/contacts/research', { searchResultIds: ids });
-  if (!researchRes.ok) return {};
+  if (!researchRes.ok) {
+    const failed = {};
+    ids.forEach(function (id) { failed[id] = { phone: '', email: '', status: 'failed' }; });
+    return failed;
+  }
   const requestIds = extractSeamlessRecords_(researchRes.data, ['requestIds', 'request_ids']);
-  if (!requestIds.length) return {};
+  if (!requestIds.length) return pendingResult;
 
   const result = {};
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     const qs = encodeURIComponent(requestIds.join(','));
     const pollRes = seamlessFetch_('GET', '/contacts/research/poll?requestIds=' + qs);
     if (pollRes.ok) {
@@ -5046,15 +5060,19 @@ function revealSeamlessContacts(searchResultIds) {
       records.forEach(function (r) {
         const sid = seamlessPick_(r, ['searchResultId', 'search_result_id', 'id']);
         if (!sid) return;
-        result[sid] = {
-          phone: seamlessPick_(r, ['phone', 'phoneNumber', 'phone_number', 'mobile']),
-          email: seamlessPick_(r, ['email', 'workEmail', 'work_email'])
-        };
+        const phone = seamlessPick_(r, ['phone', 'phoneNumber', 'phone_number', 'mobile']);
+        const email = seamlessPick_(r, ['email', 'workEmail', 'work_email']);
+        const rawStatus = normalizeSearchText_(seamlessPick_(r, ['status', 'state']));
+        let status = 'pending';
+        if (SEAMLESS_RESEARCH_DONE_.indexOf(rawStatus) !== -1 || phone || email) status = 'completed';
+        else if (SEAMLESS_RESEARCH_FAILED_.indexOf(rawStatus) !== -1) status = 'failed';
+        result[sid] = { phone: phone, email: email, status: status };
       });
-      if (ids.every(function (id) { return result[id]; })) break;
+      if (ids.every(function (id) { return result[id] && result[id].status !== 'pending'; })) break;
     }
-    if (attempt < 2) Utilities.sleep(1500);
+    if (attempt < 3) Utilities.sleep(2000);
   }
+  ids.forEach(function (id) { if (!result[id]) result[id] = pendingResult[id]; });
   return result;
 }
 
