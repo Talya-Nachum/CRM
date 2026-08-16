@@ -28,6 +28,7 @@
     loadLeads();
 
     document.getElementById('addLeadBtn').addEventListener('click', openAddModal);
+    document.getElementById('exportExcelBtn').addEventListener('click', onExportExcel);
     document.getElementById('closeLeadModalBtn').addEventListener('click', closeLeadModal);
     document.getElementById('cancelLeadBtn').addEventListener('click', closeLeadModal);
     document.getElementById('leadForm').addEventListener('submit', onSubmitLead);
@@ -187,6 +188,51 @@
       var matchesSearch = !search || haystack.indexOf(search) !== -1;
       return matchesStatus && matchesSearch;
     });
+  }
+
+  /* ---------- export to excel ---------- */
+
+  function onExportExcel() {
+    // מייצא בדיוק את מה שמסונן על המסך כרגע (חיפוש/סינון סטטוס) - לא תמיד
+    // את כל הלידים, כדי שהקובץ יתאים למה שרואים.
+    var leads = filteredLeads();
+    var headers = ['מקור', 'שם חברה', 'ח.פ', 'איש קשר', 'תפקיד', 'נייד', 'אימייל', 'הערות', 'סטטוס', 'תשובת ליד', 'תאריך תשובה', 'תאריך יצירה'];
+    var rows = leads.map(function (lead) {
+      return [
+        lead.source || '', lead.company || '', lead.companyId || '', lead.contactName || '',
+        lead.role || '', lead.phone || '', lead.email || '', lead.notes || '',
+        lead.status || '', lead.replyText || '', lead.replyAt || '', lead.createdAt || ''
+      ];
+    });
+
+    var btn = document.getElementById('exportExcelBtn');
+    var originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'מייצא...';
+
+    google.script.run
+      .withSuccessHandler(function (base64) {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        var binary = atob(base64);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        var blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'לידים - ארז קדם אקדמיה.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        showToast(err.message || 'שגיאה בייצוא לאקסל', true);
+      })
+      .exportLeadsExcel(headers, rows);
   }
 
   function renderTable() {
