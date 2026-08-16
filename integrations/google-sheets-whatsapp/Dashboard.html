@@ -4416,16 +4416,39 @@
       if (idsToReveal.length) revealSeamlessContacts_(idsToReveal);
     }
 
+    function markRevealTimedOut_(ids) {
+      ids.forEach(function (sid) {
+        const el = scrollArea.querySelector('[data-reveal-sub="' + sid + '"]');
+        if (!el) return;
+        el.innerHTML = 'לא הצלחנו לחשוף בזמן - <a href="#" class="seamless-retry-reveal" data-sid="' + escapeHtml_(sid) + '">נסי שוב</a>';
+      });
+    }
+
+    /**
+     * אם google.script.run לא חוזר כלל (לא הצלחה ולא כישלון) תוך 15 שניות -
+     * מחליפים את "טוען פרטי קשר..." בקישור "נסי שוב", כדי שהשורה לא תישאר
+     * תקועה לצמיתות. ראינו בפועל מקרה שבו זה לא חזר גם אחרי דקות ארוכות.
+     */
     function revealSeamlessContacts_(ids) {
       const token = seamlessSearchToken_;
+      let settled = false;
+      const timeoutId = setTimeout(function () {
+        if (settled || token !== seamlessSearchToken_) return;
+        settled = true;
+        markRevealTimedOut_(ids);
+      }, 15000);
+
       google.script.run
         .withSuccessHandler(function (revealed) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
           if (token !== seamlessSearchToken_ || !revealed) return;
           Object.keys(revealed).forEach(function (sid) {
             const el = scrollArea.querySelector('[data-reveal-sub="' + sid + '"]');
             if (!el) return;
             const info = revealed[sid];
-            if (info.status === 'pending') return; // עוד לא הסתיים - משאירים "טוען..." כרגע
+            if (info.status === 'pending') { markRevealTimedOut_([sid]); return; }
             if (info.status === 'failed') { el.outerHTML = 'חשיפת פרטי קשר נכשלה'; return; }
             const bits = [];
             if (info.phone) bits.push('📱 ' + info.phone);
@@ -4433,7 +4456,12 @@
             el.outerHTML = bits.length ? escapeHtml_(bits.join(' · ')) : 'סימלס לא מחזיקה טלפון/אימייל עבור איש קשר זה';
           });
         })
-        .withFailureHandler(function () { /* לא קריטי - השורות פשוט נשארות בלי טלפון/אימייל */ })
+        .withFailureHandler(function () {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          if (token === seamlessSearchToken_) markRevealTimedOut_(ids);
+        })
         .revealSeamlessContacts(ids);
     }
 
@@ -4471,6 +4499,12 @@
       seamlessDebounceTimer_ = setTimeout(function () { runSeamlessSearch_(val); }, 350);
     });
     document.addEventListener('click', function (e) {
+      const retryLink = e.target.closest('.seamless-retry-reveal');
+      if (retryLink) {
+        e.preventDefault();
+        revealSeamlessContacts_([retryLink.dataset.sid]);
+        return;
+      }
       if (!e.target.closest('#seamlessSearchWrap')) closeDropdown_();
     });
   }
