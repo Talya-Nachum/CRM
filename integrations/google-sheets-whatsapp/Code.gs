@@ -5046,7 +5046,11 @@ function searchSeamless(titleQuery, companyQuery) {
 
   const contactFilters = { limit: 10 };
   if (title) contactFilters.jobTitle = [title];
-  if (company) contactFilters.companyKeyword = [company];
+  // companyName (לא companyKeyword) - נבדק בפועל: companyKeyword הוא חיפוש
+  // מילת-מפתח רופף שמחזיר גם תוצאות מחברות לגמרי אחרות אם התפקיד תואם;
+  // companyName הוא ההתאמה המדויקת לחברה, ותואם למה שאתר סימלס עצמו
+  // מציג כשמחפשים לפי שם חברה + תפקיד יחד.
+  if (company) contactFilters.companyName = company;
 
   const contactsRes = seamlessFetch_('POST', '/search/contacts', contactFilters);
   const companiesRes = company
