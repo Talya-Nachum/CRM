@@ -4365,10 +4365,43 @@
       });
     }
 
-    function contactSubText_(c) {
-      const bits = [c.title, c.company].filter(Boolean).join(' - ');
-      return '<span class="seamless-pending" data-reveal-sub="' + escapeHtml_(c.searchResultId || '') + '">' +
-        (bits ? escapeHtml_(bits) + ' · ' : '') + 'טוען פרטי קשר...</span>';
+    // תוצאות אנשי הקשר החדשים מ-Seamless של החיפוש הנוכחי - במצב הזה כדי
+    // שאפשר יהיה למיין אותן מחדש (מי שיש לו נייד/אימייל קודם) ברגע
+    // שפרטי הקשר מתגלים, בלי לחפש מהתחלה.
+    let seamlessCurrentContacts_ = [];
+
+    function contactRowHtml_(c) {
+      const base = [c.title, c.company].filter(Boolean).join(' - ');
+      let subHtml;
+      if (c._revealStatus === 'completed') {
+        const bits = [];
+        if (c.phone) bits.push('📱 ' + escapeHtml_(c.phone));
+        if (c.email) bits.push('✉️ ' + escapeHtml_(c.email));
+        subHtml = (base ? escapeHtml_(base) + ' · ' : '') +
+          (bits.length ? bits.join(' · ') : 'סימלס לא מחזיקה טלפון/אימייל עבור איש קשר זה');
+      } else if (c._revealStatus === 'failed') {
+        subHtml = escapeHtml_(base) + (base ? ' · ' : '') + 'חשיפת פרטי קשר נכשלה';
+      } else if (c._revealStatus === 'timeout') {
+        subHtml = escapeHtml_(base) + (base ? ' · ' : '') +
+          'לא הצלחנו לחשוף בזמן - <a href="#" class="seamless-retry-reveal" data-sid="' + escapeHtml_(c.searchResultId) + '">נסי שוב</a>';
+      } else {
+        subHtml = (base ? escapeHtml_(base) + ' · ' : '') + 'טוען פרטי קשר...';
+      }
+      return '<div class="seamless-dd-row"><div class="seamless-dd-name">' + escapeHtml_(c.name) + '</div>' +
+        '<div class="seamless-dd-sub">' + subHtml + '</div></div>';
+    }
+
+    // מי שיש לו נייד עולה קודם, אחר כך מי שיש לו רק אימייל, ואז כל
+    // השאר (עדיין בתהליך/אין פרטים) - נשארים לפי הסדר המקורי מסימלס.
+    function seamlessContactScore_(c) {
+      if (c.phone) return 2;
+      if (c.email) return 1;
+      return 0;
+    }
+
+    function renderContactsGroup_() {
+      const el = document.getElementById('seamlessNewContactsGroup');
+      if (el) el.innerHTML = seamlessCurrentContacts_.map(contactRowHtml_).join('');
     }
 
     function renderResults_(query, payload) {
@@ -4385,13 +4418,10 @@
         }).join('');
       }
 
-      const newContacts = (payload.seamlessContacts || []).filter(function (c) { return c.name; });
-      if (newContacts.length) {
+      seamlessCurrentContacts_ = (payload.seamlessContacts || []).filter(function (c) { return c.name; });
+      if (seamlessCurrentContacts_.length) {
         html += '<div class="seamless-dd-group">נמצא ב-Seamless · לא במערכת</div>';
-        html += newContacts.map(function (c) {
-          return '<div class="seamless-dd-row"><div class="seamless-dd-name">' + escapeHtml_(c.name) + '</div>' +
-            '<div class="seamless-dd-sub">' + contactSubText_(c) + '</div></div>';
-        }).join('');
+        html += '<div id="seamlessNewContactsGroup">' + seamlessCurrentContacts_.map(contactRowHtml_).join('') + '</div>';
       }
 
       if (payload.seamlessCompanies && payload.seamlessCompanies.length) {
@@ -4412,22 +4442,23 @@
 
       scrollArea.innerHTML = html;
 
-      const idsToReveal = newContacts.map(function (c) { return c.searchResultId; }).filter(Boolean);
+      const idsToReveal = seamlessCurrentContacts_.map(function (c) { return c.searchResultId; }).filter(Boolean);
       if (idsToReveal.length) revealSeamlessContacts_(idsToReveal);
     }
 
     function markRevealTimedOut_(ids) {
-      ids.forEach(function (sid) {
-        const el = scrollArea.querySelector('[data-reveal-sub="' + sid + '"]');
-        if (!el) return;
-        el.innerHTML = 'לא הצלחנו לחשוף בזמן - <a href="#" class="seamless-retry-reveal" data-sid="' + escapeHtml_(sid) + '">נסי שוב</a>';
+      seamlessCurrentContacts_.forEach(function (c) {
+        if (ids.indexOf(c.searchResultId) !== -1 && c._revealStatus !== 'completed') c._revealStatus = 'timeout';
       });
+      renderContactsGroup_();
     }
 
     /**
      * אם google.script.run לא חוזר כלל (לא הצלחה ולא כישלון) תוך 15 שניות -
      * מחליפים את "טוען פרטי קשר..." בקישור "נסי שוב", כדי שהשורה לא תישאר
      * תקועה לצמיתות. ראינו בפועל מקרה שבו זה לא חזר גם אחרי דקות ארוכות.
+     * ברגע שכל הפרטים חוזרים - ממיינים מחדש כדי שמי שיש לו נייד/אימייל
+     * יעלה קודם, במקום להישאר לפי הסדר המקרי שסימלס החזירה.
      */
     function revealSeamlessContacts_(ids) {
       const token = seamlessSearchToken_;
@@ -4444,17 +4475,16 @@
           settled = true;
           clearTimeout(timeoutId);
           if (token !== seamlessSearchToken_ || !revealed) return;
-          Object.keys(revealed).forEach(function (sid) {
-            const el = scrollArea.querySelector('[data-reveal-sub="' + sid + '"]');
-            if (!el) return;
-            const info = revealed[sid];
-            if (info.status === 'pending') { markRevealTimedOut_([sid]); return; }
-            if (info.status === 'failed') { el.outerHTML = 'חשיפת פרטי קשר נכשלה'; return; }
-            const bits = [];
-            if (info.phone) bits.push('📱 ' + info.phone);
-            if (info.email) bits.push('✉️ ' + info.email);
-            el.outerHTML = bits.length ? escapeHtml_(bits.join(' · ')) : 'סימלס לא מחזיקה טלפון/אימייל עבור איש קשר זה';
+          seamlessCurrentContacts_.forEach(function (c) {
+            const info = revealed[c.searchResultId];
+            if (!info || ids.indexOf(c.searchResultId) === -1) return;
+            if (info.status === 'pending') { c._revealStatus = 'timeout'; return; }
+            c.phone = info.phone;
+            c.email = info.email;
+            c._revealStatus = info.status === 'failed' ? 'failed' : 'completed';
           });
+          seamlessCurrentContacts_.sort(function (a, b) { return seamlessContactScore_(b) - seamlessContactScore_(a); });
+          renderContactsGroup_();
         })
         .withFailureHandler(function () {
           if (settled) return;
