@@ -4806,6 +4806,29 @@ function resetPearlLeads(key, pearlId, leadIds) {
 }
 
 /**
+ * מריצים פעם אחת מהעורך כדי לשמור את מפתח ה-API של Seamless.AI. נפתחת
+ * חלונית הזנה בגיליון עצמו (חייבים שהגיליון יהיה פתוח בטאב אחר) - כדי
+ * שהמפתח לא יעבור אף פעם דרך קוד המקור (ולכן גם לא ייכנס להיסטוריית
+ * Git ב-GitHub). Script Properties הרגיל בממשק לא זמין לפרויקט הזה כי
+ * יש בו כבר מעל 50 מאפיינים.
+ */
+function setupSeamlessApiKey() {
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt('מפתח API של Seamless.AI', 'הדביקי כאן את המפתח (API Key):', ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) {
+    ui.alert('בוטל - לא נשמר כלום.');
+    return;
+  }
+  const key = res.getResponseText().trim();
+  if (!key) {
+    ui.alert('לא הוזן מפתח - לא נשמר כלום.');
+    return;
+  }
+  PropertiesService.getScriptProperties().setProperty('SEAMLESS_API_KEY', key);
+  ui.alert('נשמר בהצלחה.');
+}
+
+/**
  * כלי אבחון: מדפיס ללוג את האובייקט הגולמי של הליד הראשון בקמפיין -
  * כדי לראות בדיוק אילו שמות שדות פרלה מחזירה בפועל. להריץ אם משהו
  * במסך מופיע ריק (שם/מספר ניסיונות/תאריך).
