@@ -70,8 +70,9 @@
   /* חיפוש Seamless - תיבה קומפקטית בקצה שורת הכותרת (משמאל ב-RTL) */
   .seamless-search-wrap{position:relative;width:190px}
   .seamless-search-box{display:flex;align-items:center;gap:7px;background:#F8FAFC;
-    border:1px solid var(--border);border-radius:8px;padding:6px 10px}
-  .seamless-search-box:focus-within{border-color:var(--purple)}
+    border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer}
+  .seamless-search-box:hover,.seamless-search-box.open{border-color:var(--purple)}
+  .seamless-search-label{font-size:12.5px;color:var(--muted)}
   .seamless-logo{width:19px;height:19px;border-radius:6px;flex-shrink:0;
     background:linear-gradient(135deg,var(--purple),#5B3FD8);color:#fff;display:flex;
     align-items:center;justify-content:center;font-size:10.5px;font-weight:800}
@@ -79,6 +80,17 @@
   .seamless-search-input{border:none;background:transparent;outline:none;font-size:12.5px;
     color:var(--text);font-family:inherit;width:100%}
   .seamless-search-input::placeholder{color:var(--muted)}
+  .seamless-form{padding:14px 15px 12px;border-bottom:1px solid var(--border)}
+  .seamless-field-input{width:100%;border:1px solid var(--border);background:#F8FAFC;
+    color:var(--text);border-radius:8px;padding:8px 11px;font-size:12.5px;font-family:inherit;margin-bottom:8px}
+  .seamless-field-input:focus{outline:2px solid var(--purple);outline-offset:1px}
+  .seamless-form-actions{display:flex;gap:8px}
+  .seamless-mini-btn{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--muted);
+    border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer}
+  .seamless-mini-btn:hover{background:#F8FAFC}
+  .seamless-mini-btn-primary{background:var(--purple);border-color:transparent;color:#fff}
+  .seamless-mini-btn-primary:hover{filter:brightness(1.05);background:var(--purple)}
+  .seamless-mini-btn[disabled]{opacity:.6;cursor:default}
   .seamless-dropdown{position:absolute;top:calc(100% + 8px);left:0;width:310px;max-width:90vw;
     background:var(--surface);border:1px solid var(--border);border-radius:12px;
     box-shadow:0 14px 34px rgba(16,24,40,.16);overflow:hidden;z-index:60}
@@ -269,12 +281,20 @@
       </span>
       <input type="text" class="search" id="searchInput" placeholder="חיפוש לפי שם או חברה...">
       <div class="seamless-search-wrap" id="seamlessSearchWrap">
-        <div class="seamless-search-box">
+        <div class="seamless-search-box" id="seamlessTriggerBox">
           <span class="seamless-logo">S</span>
           <span class="seamless-search-ic">🔍</span>
-          <input type="text" id="seamlessSearchInput" class="seamless-search-input" placeholder="חיפוש ב-Seamless..." autocomplete="off">
+          <span class="seamless-search-label">חיפוש ב-Seamless...</span>
         </div>
         <div class="seamless-dropdown" id="seamlessDropdown" style="display:none">
+          <div class="seamless-form">
+            <input type="text" id="seamlessFieldTitle" class="seamless-field-input" placeholder="תפקיד (למשל: CIO)" autocomplete="off">
+            <input type="text" id="seamlessFieldCompany" class="seamless-field-input" placeholder="חברה" autocomplete="off">
+            <div class="seamless-form-actions">
+              <button type="button" id="seamlessTranslateBtn" class="seamless-mini-btn">🌐 תרגם לאנגלית</button>
+              <button type="button" id="seamlessSearchBtn" class="seamless-mini-btn seamless-mini-btn-primary">🔍 חיפוש</button>
+            </div>
+          </div>
           <div class="seamless-dd-top-label" id="seamlessDdTopLabel"></div>
           <div class="seamless-dd-scroll" id="seamlessDdScroll"></div>
         </div>
@@ -815,7 +835,6 @@
 
   const SEAMLESS_RECENT_KEY_ = 'seamlessRecentSearches';
   let seamlessSearchToken_ = 0;
-  let seamlessDebounceTimer_ = null;
 
   function seamlessRecentSearches_() {
     try {
@@ -825,10 +844,12 @@
     } catch (err) { return []; }
   }
 
-  function seamlessAddRecentSearch_(q) {
+  function seamlessAddRecentSearch_(entry) {
     try {
-      let list = seamlessRecentSearches_().filter(function (x) { return x !== q; });
-      list.unshift(q);
+      let list = seamlessRecentSearches_().filter(function (x) {
+        return !(x.title === entry.title && x.company === entry.company);
+      });
+      list.unshift(entry);
       localStorage.setItem(SEAMLESS_RECENT_KEY_, JSON.stringify(list.slice(0, 5)));
     } catch (err) { /* localStorage לא זמין - פשוט בלי היסטוריה, לא קריטי */ }
   }
@@ -838,29 +859,38 @@
    * טלפון/אימייל של אנשי קשר מסימלס נחשפים בנפרד אחרי התוצאה הראשונית.
    */
   function setupSeamlessSearch_() {
-    const input = document.getElementById('seamlessSearchInput');
+    const triggerBox = document.getElementById('seamlessTriggerBox');
     const dropdown = document.getElementById('seamlessDropdown');
     const scrollArea = document.getElementById('seamlessDdScroll');
     const topLabel = document.getElementById('seamlessDdTopLabel');
-    if (!input || !dropdown) return;
+    const fieldTitle = document.getElementById('seamlessFieldTitle');
+    const fieldCompany = document.getElementById('seamlessFieldCompany');
+    const translateBtn = document.getElementById('seamlessTranslateBtn');
+    const searchBtn = document.getElementById('seamlessSearchBtn');
+    if (!triggerBox || !dropdown) return;
 
-    function closeDropdown_() { dropdown.style.display = 'none'; }
+    function closeDropdown_() { dropdown.style.display = 'none'; triggerBox.classList.remove('open'); }
+    function openDropdown_() { dropdown.style.display = 'block'; triggerBox.classList.add('open'); }
 
     function renderRecent_() {
       topLabel.textContent = 'חיפושים אחרונים';
       const recent = seamlessRecentSearches_();
       if (!recent.length) {
-        scrollArea.innerHTML = '<div class="seamless-dd-empty">עוד אין חיפושים - התחילי להקליד שם, חברה או תפקיד</div>';
+        scrollArea.innerHTML = '<div class="seamless-dd-empty">עוד אין חיפושים - מלאי תפקיד ו/או חברה למעלה</div>';
         return;
       }
-      scrollArea.innerHTML = recent.map(function (q) {
-        return '<div class="seamless-recent-row" data-q="' + esc(q) + '">' +
-          '<span class="ic">🕓</span><span class="q">' + esc(q) + '</span></div>';
+      scrollArea.innerHTML = recent.map(function (r, i) {
+        const label = [r.title, r.company].filter(Boolean).join(' · ') || '(ריק)';
+        return '<div class="seamless-recent-row" data-i="' + i + '">' +
+          '<span class="ic">🕓</span><span class="q">' + esc(label) + '</span></div>';
       }).join('');
       scrollArea.querySelectorAll('.seamless-recent-row').forEach(function (row) {
         row.addEventListener('click', function () {
-          input.value = row.dataset.q;
-          runSeamlessSearch_(row.dataset.q);
+          const r = recent[Number(row.dataset.i)];
+          if (!r) return;
+          fieldTitle.value = r.title || '';
+          fieldCompany.value = r.company || '';
+          runSeamlessSearch_(r.title || '', r.company || '');
         });
       });
     }
@@ -904,7 +934,7 @@
       if (el) el.innerHTML = seamlessCurrentContacts_.map(contactRowHtml_).join('');
     }
 
-    function renderResults_(query, payload) {
+    function renderResults_(title, company, payload) {
       topLabel.textContent = 'תואמות החיפוש';
       let html = '';
 
@@ -932,7 +962,8 @@
       }
 
       if (!html) {
-        html = '<div class="seamless-dd-empty">אין תוצאות עבור "' + esc(query) + '"</div>';
+        const label = [title, company].filter(Boolean).join(' · ');
+        html = '<div class="seamless-dd-empty">אין תוצאות עבור "' + esc(label) + '"</div>';
       }
       if (payload.seamlessError) {
         html += '<div class="seamless-dd-error">' + esc(payload.seamlessError) + '</div>';
@@ -992,10 +1023,11 @@
         .revealSeamlessContacts(ids);
     }
 
-    function runSeamlessSearch_(query) {
-      const q = query.trim();
-      dropdown.style.display = 'block';
-      if (!q) { renderRecent_(); return; }
+    function runSeamlessSearch_(titleVal, companyVal) {
+      const t = titleVal.trim();
+      const c = companyVal.trim();
+      openDropdown_();
+      if (!t && !c) { renderRecent_(); return; }
 
       seamlessSearchToken_++;
       const token = seamlessSearchToken_;
@@ -1005,25 +1037,52 @@
       google.script.run
         .withSuccessHandler(function (payload) {
           if (token !== seamlessSearchToken_) return;
-          renderResults_(q, payload || {});
-          seamlessAddRecentSearch_(q);
+          renderResults_(t, c, payload || {});
+          seamlessAddRecentSearch_({ title: t, company: c });
         })
         .withFailureHandler(function (err) {
           if (token !== seamlessSearchToken_) return;
           topLabel.textContent = 'תואמות החיפוש';
           scrollArea.innerHTML = '<div class="seamless-dd-error">שגיאה בחיפוש: ' + esc(err && err.message ? err.message : String(err)) + '</div>';
         })
-        .searchSeamless(q);
+        .searchSeamless(t, c);
     }
 
-    input.addEventListener('focus', function () {
-      if (!input.value.trim()) renderRecent_();
-      dropdown.style.display = 'block';
+    /** מתרגמת שדה בודד עברית → אנגלית באמצעות שירות התרגום של גוגל. */
+    function translateField_(field) {
+      const val = field.value.trim();
+      if (!val) return Promise.resolve();
+      return new Promise(function (resolve) {
+        google.script.run
+          .withSuccessHandler(function (translated) {
+            if (translated) field.value = translated;
+            resolve();
+          })
+          .withFailureHandler(resolve)
+          .translateToEnglish(val);
+      });
+    }
+
+    triggerBox.addEventListener('click', function () {
+      if (dropdown.style.display !== 'none') { closeDropdown_(); return; }
+      openDropdown_();
+      if (!fieldTitle.value.trim() && !fieldCompany.value.trim()) renderRecent_();
     });
-    input.addEventListener('input', function () {
-      clearTimeout(seamlessDebounceTimer_);
-      const val = input.value;
-      seamlessDebounceTimer_ = setTimeout(function () { runSeamlessSearch_(val); }, 350);
+    searchBtn.addEventListener('click', function () {
+      runSeamlessSearch_(fieldTitle.value, fieldCompany.value);
+    });
+    [fieldTitle, fieldCompany].forEach(function (f) {
+      f.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); runSeamlessSearch_(fieldTitle.value, fieldCompany.value); }
+      });
+    });
+    translateBtn.addEventListener('click', function () {
+      translateBtn.disabled = true;
+      translateBtn.textContent = 'מתרגם...';
+      Promise.all([translateField_(fieldTitle), translateField_(fieldCompany)]).then(function () {
+        translateBtn.disabled = false;
+        translateBtn.textContent = '🌐 תרגם לאנגלית';
+      });
     });
     document.addEventListener('click', function (e) {
       const retryLink = e.target.closest('.seamless-retry-reveal');

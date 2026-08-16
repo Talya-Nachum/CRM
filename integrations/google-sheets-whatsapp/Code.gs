@@ -4914,27 +4914,24 @@ function normalizeSearchText_(s) {
 }
 
 // מילות תפקיד נפוצות (עברית + אנגלית) - כדי לפצל שאילתה חופשית כמו
-// "CTO אוסם" ל-jobTitle="CTO" + companyKeyword="אוסם", במקום לשלוח את
-// כל המחרוזת כמקשה אחת לשני השדות (מה שאף פעם לא מוצא כלום בפועל, כי
-// ל-API אין חיפוש חופשי - רק התאמה לפי כל שדה בנפרד).
-const SEAMLESS_TITLE_WORDS_ = [
-  'cto', 'ceo', 'cfo', 'coo', 'cmo', 'cio', 'cro', 'ciso', 'cdo', 'cpo', 'cco',
-  'vp', 'svp', 'evp', 'gm',
-  'founder', 'co-founder', 'owner', 'president', 'director', 'manager', 'head', 'chief',
-  'מנכ"ל', 'מנכ״ל', 'מנכל', 'סמנכ"ל', 'סמנכ״ל', 'סמנכל',
-  'מנהל', 'מנהלת', 'בעלים', 'יזם', 'יזמת', 'נשיא', 'ראש', 'סגן'
-];
+// יש למעלה מ-6,000 תפקידים אפשריים ב-Seamless - אי אפשר (וגם לא נכון)
+// לנחש מתוך טקסט חופשי אילו מילים הן תפקיד ואילו הן חברה. לכן החיפוש
+// מקבל שני שדות נפרדים (תפקיד, חברה) ישירות מהדשבורד, בלי שום ניחוש.
 
-function splitSeamlessQuery_(q) {
-  const words = q.split(/\s+/).filter(Boolean);
-  const titleWords = [];
-  const restWords = [];
-  words.forEach(function (w) {
-    const norm = normalizeSearchText_(w);
-    if (SEAMLESS_TITLE_WORDS_.indexOf(norm) !== -1) titleWords.push(w);
-    else restWords.push(w);
-  });
-  return { title: titleWords.join(' '), company: restWords.join(' ') };
+/**
+ * תרגום עברית → אנגלית באמצעות שירות התרגום המובנה של Google Apps
+ * Script (LanguageApp) - בלי מפתח API נוסף. משמש כי מאגר הנתונים של
+ * Seamless הוא באנגלית, והצוות מקליד בעברית. אם התרגום נכשל מכל סיבה,
+ * מחזירים את הטקסט המקורי כדי לא לתקוע את המשתמשת.
+ */
+function translateToEnglish(text) {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  try {
+    return LanguageApp.translate(s, '', 'en');
+  } catch (err) {
+    return s;
+  }
 }
 
 /**
@@ -4976,16 +4973,17 @@ function searchLocalLeads_(query) {
 }
 
 /**
- * קרוי מהדשבורד (google.script.run) כשמקלידים בתיבת חיפוש Seamless.
- * מחפש קודם בין הלידים הקיימים אצלנו (תמיד עובד), ובמקביל שולח לסימלס
- * את אותו טקסט גם כמילת מפתח חברה וגם כתפקיד. טלפון/אימייל לא כלולים
- * כאן - נחשפים בנפרד ב-revealSeamlessContacts כדי לא לעכב את התוצאה.
+ * קרוי מהדשבורד (google.script.run) עם שני שדות נפרדים - תפקיד וחברה -
+ * שהדשבורד עצמו אוסף מהמשתמשת, בלי שום ניחוש בצד השרת. מחפש קודם בין
+ * הלידים הקיימים אצלנו (תמיד עובד, לא תלוי בסימלס). טלפון/אימייל לא
+ * כלולים כאן - נחשפים בנפרד ב-revealSeamlessContacts כדי לא לעכב.
  */
-function searchSeamless(query) {
-  const q = String(query || '').trim();
-  if (!q) return { existingLeads: [], seamlessContacts: [], seamlessCompanies: [], seamlessError: '' };
+function searchSeamless(titleQuery, companyQuery) {
+  const title = String(titleQuery || '').trim();
+  const company = String(companyQuery || '').trim();
+  if (!title && !company) return { existingLeads: [], seamlessContacts: [], seamlessCompanies: [], seamlessError: '' };
 
-  const existingLeads = searchLocalLeads_(q);
+  const existingLeads = searchLocalLeads_(company || title);
 
   if (!seamlessApiKey_()) {
     return {
@@ -4996,23 +4994,24 @@ function searchSeamless(query) {
     };
   }
 
-  const parsed = splitSeamlessQuery_(q);
-  const contactFilters = { limit: 8 };
-  if (parsed.title) contactFilters.jobTitle = [parsed.title];
-  if (parsed.company) contactFilters.companyKeyword = [parsed.company];
+  const contactFilters = { limit: 10 };
+  if (title) contactFilters.jobTitle = [title];
+  if (company) contactFilters.companyKeyword = [company];
 
-  const companiesRes = seamlessFetch_('POST', '/search/companies', { companyName: parsed.company || q, limit: 5 });
   const contactsRes = seamlessFetch_('POST', '/search/contacts', contactFilters);
+  const companiesRes = company
+    ? seamlessFetch_('POST', '/search/companies', { companyName: company, limit: 5 })
+    : { ok: true, data: null };
 
-  const seamlessCompanies = companiesRes.ok
+  const seamlessCompanies = companiesRes.ok && companiesRes.data
     ? extractSeamlessRecords_(companiesRes.data, ['companies', 'results', 'data']).map(mapSeamlessCompany_)
     : [];
   const seamlessContacts = contactsRes.ok
     ? extractSeamlessRecords_(contactsRes.data, ['contacts', 'results', 'data']).map(mapSeamlessContact_)
     : [];
 
-  const seamlessError = (!companiesRes.ok && !contactsRes.ok)
-    ? 'סימלס לא הגיב כרגע (קוד ' + companiesRes.code + ') - נסי שוב עוד רגע'
+  const seamlessError = !contactsRes.ok
+    ? 'סימלס לא הגיבה כרגע (קוד ' + contactsRes.code + ') - נסי שוב עוד רגע'
     : '';
 
   return {
@@ -5027,7 +5026,7 @@ const SEAMLESS_RESEARCH_DONE_ = ['completed', 'complete', 'done', 'success', 'fi
 const SEAMLESS_RESEARCH_FAILED_ = ['failed', 'error', 'not_found'];
 
 /**
- * חושפת טלפון/אימייל עבור עד 8 תוצאות סימלס לפי searchResultId - קוראת
+ * חושפת טלפון/אימייל עבור עד 10 תוצאות סימלס לפי searchResultId - קוראת
  * פעם אחת ל-research (עולה קרדיט לכל איש קשר) ואז בודקת עד 4 פעמים אם
  * ההתגלות כבר הסתיימה (עד כ-9 שניות בסה"כ). מחזירה עבור **כל** מזהה
  * שהתבקש שדה status - 'completed' (אז phone/email הם התוצאה הסופית,
@@ -5037,7 +5036,7 @@ const SEAMLESS_RESEARCH_FAILED_ = ['failed', 'error', 'not_found'];
  * הייתה רואה "אין פרטי קשר" גם כשבפועל התהליך פשוט עוד לא נגמר.
  */
 function revealSeamlessContacts(searchResultIds) {
-  const ids = (searchResultIds || []).slice(0, 8).filter(Boolean);
+  const ids = (searchResultIds || []).slice(0, 10).filter(Boolean);
   if (!ids.length) return {};
   const pendingResult = {};
   ids.forEach(function (id) { pendingResult[id] = { phone: '', email: '', status: 'pending' }; });
