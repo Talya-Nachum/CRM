@@ -4918,8 +4918,9 @@ function normalizeSearchText_(s) {
 // כל המחרוזת כמקשה אחת לשני השדות (מה שאף פעם לא מוצא כלום בפועל, כי
 // ל-API אין חיפוש חופשי - רק התאמה לפי כל שדה בנפרד).
 const SEAMLESS_TITLE_WORDS_ = [
-  'cto', 'ceo', 'cfo', 'coo', 'cmo', 'vp', 'svp', 'evp',
-  'founder', 'co-founder', 'owner', 'president', 'director', 'manager', 'head',
+  'cto', 'ceo', 'cfo', 'coo', 'cmo', 'cio', 'cro', 'ciso', 'cdo', 'cpo', 'cco',
+  'vp', 'svp', 'evp', 'gm',
+  'founder', 'co-founder', 'owner', 'president', 'director', 'manager', 'head', 'chief',
   'מנכ"ל', 'מנכ״ל', 'מנכל', 'סמנכ"ל', 'סמנכ״ל', 'סמנכל',
   'מנהל', 'מנהלת', 'בעלים', 'יזם', 'יזמת', 'נשיא', 'ראש', 'סגן'
 ];
