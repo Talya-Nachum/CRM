@@ -50,7 +50,7 @@ var LEAD_FIELDS = [
   { key: 'notes', label: 'הערות' },
   { key: 'status', label: 'סטטוס' },
   { key: 'lastWhatsAppSentAt', label: 'וואטסאפ נשלח לאחרונה' },
-  { key: 'replyText', label: 'תשובת ליד' },
+  { key: 'replyText', label: 'תשובת וואטסאפ' },
   { key: 'replyAt', label: 'תאריך תשובה' }
 ];
 
