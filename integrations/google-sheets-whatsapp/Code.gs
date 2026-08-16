@@ -4953,14 +4953,18 @@ function normalizeSearchText_(s) {
  * Seamless הוא באנגלית, והצוות מקליד בעברית. אם התרגום נכשל מכל סיבה,
  * מחזירים את הטקסט המקורי כדי לא לתקוע את המשתמשת.
  */
-function translateToEnglish(text) {
+function translateText_(text, targetLang) {
   const s = String(text || '').trim();
   if (!s) return '';
   try {
-    return LanguageApp.translate(s, '', 'en');
+    return LanguageApp.translate(s, '', targetLang);
   } catch (err) {
     return s;
   }
+}
+
+function translateToEnglish(text) {
+  return translateText_(text, 'en');
 }
 
 // תקרת שורות כוללת (על פני כל טאבי הקמפיינים ביחד) לחיפוש מקומי -
@@ -5055,6 +5059,18 @@ function searchSeamless(titleQuery, companyQuery) {
   const seamlessContacts = contactsRes.ok
     ? extractSeamlessRecords_(contactsRes.data, ['contacts', 'results', 'data']).map(mapSeamlessContact_)
     : [];
+
+  // מתרגמת את התפקיד לעברית לתצוגה - חלק מהצוות לא קורא ניסוחי תפקידים
+  // באנגלית בקלות. שם החברה נשאר כמו שהוא (שם פרטי, לא מתרגמים אותו).
+  // מטמון קטן למחרוזת הריצה הזו בלבד - הרבה תוצאות חוזרות על אותו תפקיד.
+  const titleTranslationCache_ = {};
+  seamlessContacts.forEach(function (c) {
+    if (!c.title) return;
+    if (!titleTranslationCache_[c.title]) {
+      titleTranslationCache_[c.title] = translateText_(c.title, 'iw');
+    }
+    c.title = titleTranslationCache_[c.title];
+  });
 
   const seamlessError = !contactsRes.ok
     ? 'סימלס לא הגיבה כרגע (קוד ' + contactsRes.code + ') - נסי שוב עוד רגע'
