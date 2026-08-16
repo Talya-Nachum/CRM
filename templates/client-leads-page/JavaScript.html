@@ -19,12 +19,16 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    syncHeaderHeight();
+    window.addEventListener('resize', syncHeaderHeight);
+
     loadConfig();
     loadStatuses();
     loadTemplates();
     loadLeads();
 
     document.getElementById('addLeadBtn').addEventListener('click', openAddModal);
+    document.getElementById('exportExcelBtn').addEventListener('click', onExportExcel);
     document.getElementById('closeLeadModalBtn').addEventListener('click', closeLeadModal);
     document.getElementById('cancelLeadBtn').addEventListener('click', closeLeadModal);
     document.getElementById('leadForm').addEventListener('submit', onSubmitLead);
@@ -45,6 +49,11 @@
 
   /* ---------- config (header: countdown + buttons) ---------- */
 
+  function syncHeaderHeight() {
+    var header = document.querySelector('header.hub');
+    if (header) document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
+  }
+
   function loadConfig() {
     google.script.run.withSuccessHandler(function (cfg) {
       document.getElementById('clientNameLabel').textContent = cfg.clientName;
@@ -54,6 +63,7 @@
         document.getElementById('countdownBlock').classList.remove('hidden');
         startCountdown(cfg.targetDate);
       }
+      syncHeaderHeight();
 
       var paymentBtn = document.getElementById('paymentBtn');
       var infoBtn = document.getElementById('infoBtn');
@@ -186,6 +196,51 @@
     });
   }
 
+  /* ---------- export to excel ---------- */
+
+  function onExportExcel() {
+    // מייצא בדיוק את מה שמסונן על המסך כרגע (חיפוש/סינון סטטוס) - לא תמיד
+    // את כל הלידים, כדי שהקובץ יתאים למה שרואים.
+    var leads = filteredLeads();
+    var headers = ['מקור', 'שם חברה', 'ח.פ', 'איש קשר', 'תפקיד', 'נייד', 'אימייל', 'הערות', 'סטטוס', 'תשובת ליד', 'תאריך תשובה', 'תאריך יצירה'];
+    var rows = leads.map(function (lead) {
+      return [
+        lead.source || '', lead.company || '', lead.companyId || '', lead.contactName || '',
+        lead.role || '', lead.phone || '', lead.email || '', lead.notes || '',
+        lead.status || '', lead.replyText || '', lead.replyAt || '', lead.createdAt || ''
+      ];
+    });
+
+    var btn = document.getElementById('exportExcelBtn');
+    var originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'מייצא...';
+
+    google.script.run
+      .withSuccessHandler(function (base64) {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        var binary = atob(base64);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        var blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'לידים.xlsx'; // TODO(client): לשקול לשלב את שם הלקוח בשם הקובץ
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        showToast(err.message || 'שגיאה בייצוא לאקסל', true);
+      })
+      .exportLeadsExcel(headers, rows);
+  }
+
   function renderTable() {
     var filtered = filteredLeads();
     var body = document.getElementById('leadsTableBody');
@@ -194,7 +249,7 @@
     document.getElementById('leadCount').textContent = filtered.length + ' לידים';
 
     if (!filtered.length) {
-      body.innerHTML = '<tr><td colspan="14" class="empty-row">אין לידים להצגה</td></tr>';
+      body.innerHTML = '<tr><td colspan="12" class="empty-row">אין לידים להצגה</td></tr>';
       updateSelectionUi();
       return;
     }
@@ -214,9 +269,9 @@
         '<td>' + escapeHtml(lead.email) + '</td>' +
         '<td>' + escapeHtml(lead.notes) + '</td>' +
         '<td><span class="badge" style="background:' + colorForStatus(lead.status) + '">' + escapeHtml(lead.status) + '</span></td>' +
-        '<td>' + escapeHtml(lead.lastWhatsAppSentAt) + '</td>' +
-        '<td title="' + escapeHtml(lead.replyAt ? 'התקבל: ' + lead.replyAt : '') + '">' + escapeHtml(lead.replyText) + '</td>' +
-        '<td>' + escapeHtml(lead.updatedAt) + '</td>' +
+        '<td><div class="reply-cell"><span class="reply-text">' + escapeHtml(lead.replyText) + '</span>' +
+          (lead.replyAt ? '<span class="reply-date">' + escapeHtml(lead.replyAt) + '</span>' : '') +
+          '</div></td>' +
         '<td><button type="button" class="row-edit">✎</button></td>';
 
       tr.querySelector('.row-check').addEventListener('click', function (evt) { evt.stopPropagation(); });

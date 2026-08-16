@@ -468,13 +468,20 @@ function sendWhatsApp(leadIds, templateId) {
     throw new Error('שליחה נכשלה: ' + (result.StatusDescription || 'שגיאה לא ידועה מאינפוריו'));
   }
 
+  // אין עמודה נפרדת לתאריך שליחה - מתועד כשורה בהערות (מתווספת לקיים,
+  // לא דורסת), כדי לא להעמיס עוד עמודה על הטבלה. TODO(client): לוודא שזה
+  // עדיין המבנה שהלקוח רוצה - זו הייתה בקשה מפורשת של ארז קדם, לא בהכרח
+  // ברירת מחדל אוניברסלית.
   var now = new Date();
-  var sentAtCol = fieldIndex_('lastWhatsAppSentAt') + 1;
+  var stamp = formatDate_(now) + ' - נשלח וואטסאפ';
+  var notesCol = fieldIndex_('notes') + 1;
   var statusCol = fieldIndex_('status') + 1;
   leadIds.forEach(function (id) {
     var rowIndex = findLeadRow_(sheet, id);
     if (rowIndex === -1) return;
-    sheet.getRange(rowIndex, sentAtCol).setValue(now);
+    var notesCell = sheet.getRange(rowIndex, notesCol);
+    var currentNotes = String(notesCell.getValue() || '');
+    notesCell.setValue(currentNotes ? (currentNotes + '\n' + stamp) : stamp);
     sheet.getRange(rowIndex, statusCol).setValue(WHATSAPP_SENT_STATUS);
   });
 
@@ -574,4 +581,97 @@ function normalizeKey_(k) {
 
 function jsonResponse_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ============================== ייצוא לאקסל ============================== */
+
+function getOrCreateExportSheet_() {
+  var props = PropertiesService.getScriptProperties();
+  var savedId = props.getProperty('EXPORT_TEMP_SS_ID');
+  if (savedId) {
+    try {
+      return SpreadsheetApp.openById(savedId);
+    } catch (e) {
+      // הקובץ נמחק/לא נגיש - ניצור אחד חדש במקומו.
+    }
+  }
+  var created = SpreadsheetApp.create('ייצוא זמני - תשתית פנימית של הדשבורד (נא לא למחוק)');
+  props.setProperty('EXPORT_TEMP_SS_ID', created.getId());
+  return created;
+}
+
+/**
+ * קובעת כיווניות מימין-לשמאל לגיליון הזמני - גיליון שנוצר עם SpreadsheetApp.create
+ * ברירת המחדל שלו LTR, ואין ל-SpreadsheetApp פונקציה ישירה לשנות זאת. דורש
+ * הפעלת שירות מתקדם בעורך: "שירותים" (Services) ← "+" ← Google Sheets API ← Add.
+ * חשוב: אחרי הוספת השירות חייבים לפרוס גרסה חדשה (Deploy) כדי שהפריסה
+ * הפעילה "תדע" עליו - הוספת השירות לבדה לא מספיקה (ר' BUILD-GUIDE.md).
+ */
+function setSheetRtl_(spreadsheetId, sheetId) {
+  try {
+    Sheets.Spreadsheets.batchUpdate({
+      requests: [{
+        updateSheetProperties: {
+          properties: { sheetId: sheetId, rightToLeft: true },
+          fields: 'rightToLeft'
+        }
+      }]
+    }, spreadsheetId);
+  } catch (e) {
+    throw new Error('כדי שהאקסל ייצא מימין-לשמאל צריך להוסיף שירות בעורך הסקריפטים: ' +
+      'משמאל, ליד "שירותים" (Services) ללחוץ על ה-"+", לבחור "Google Sheets API" וללחוץ הוסף - ' +
+      'ואז לפרוס גרסה חדשה. שגיאה מקורית: ' + e.message);
+  }
+}
+
+/**
+ * בונה קובץ אקסל (xlsx) אמיתי מהשורות שכבר סוננו בדשבורד (headers + rows
+ * מגיעים מהלקוח, כדי שהייצוא יכבד בדיוק את מה שמסונן על המסך) - כותבת
+ * לגיליון זמני (getOrCreateExportSheet_) כתאים אמיתיים ואז מייצאת אותו
+ * ל-xlsx דרך ה-export endpoint של גוגל דוקס עם טוקן ה-OAuth של הסקריפט
+ * עצמו. מחזירה בסיס-64 של קובץ ה-xlsx, שהלקוח הופך ל-Blob ומוריד.
+ */
+function exportLeadsExcel(headers, rows) {
+  var tempSs = getOrCreateExportSheet_();
+  var sheet = tempSs.getSheets()[0];
+  sheet.clear();
+  var existingFilter = sheet.getFilter();
+  if (existingFilter) existingFilter.remove();
+
+  var numCols = headers.length;
+  var numRows = rows.length;
+
+  sheet.getRange(1, 1, 1, numCols).setValues([headers])
+    .setFontWeight('bold').setBackground('#f3f4f6');
+
+  // עמודת הטלפון - גרש מוביל (') מכריח פירוש כטקסט, כדי שמספר טלפון לא
+  // יהפוך ל"כתיב מדעי" באקסל (למשל 972544701930 -> 9.72544E+11).
+  var phoneCol = headers.indexOf('נייד');
+
+  if (numRows > 0) {
+    var values = rows.map(function (row) {
+      return row.map(function (v, idx) {
+        if (idx === phoneCol && v !== '' && v !== null && v !== undefined) {
+          return "'" + String(v);
+        }
+        return v;
+      });
+    });
+    var dataRange = sheet.getRange(2, 1, numRows, numCols);
+    dataRange.setNumberFormat('@');
+    dataRange.setValues(values);
+  }
+
+  sheet.setFrozenRows(1);
+  if (numRows > 0) sheet.getRange(1, 1, numRows + 1, numCols).createFilter();
+  for (var c = 1; c <= numCols; c++) sheet.autoResizeColumn(c);
+  setSheetRtl_(tempSs.getId(), sheet.getSheetId());
+  SpreadsheetApp.flush();
+
+  var fileId = tempSs.getId();
+  var url = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
+  var response = UrlFetchApp.fetch(url, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+  });
+  return Utilities.base64Encode(response.getBlob().getBytes());
 }
