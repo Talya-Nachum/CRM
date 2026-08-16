@@ -4828,6 +4828,208 @@ function setupSeamlessApiKey() {
   ui.alert('נשמר בהצלחה.');
 }
 
+// --- Seamless.AI - חיפוש אנשי קשר וחברות מהדשבורד ---
+// ה-API האמיתי לא מתועד בציבור בצורה נגישה (docs.seamless.ai חסום
+// מהסביבה הזו) - הפרטים למטה (כתובת בסיס, כותרת Token, שמות המסלולים
+// ומבנה הבקשה/תשובה) אומתו דרך ספריית קוד פתוח שעוטפת אותו API בפועל.
+// שני דברים חשובים שכן קיימים ב-API האמיתי, בניגוד למה שאפשר לנחש:
+//   1. חיפוש אנשי קשר הוא לפי קריטריונים (תפקיד/תעשייה/מילת מפתח של
+//      חברה) - אין פרמטר לחיפוש חופשי לפי שם אדם. לכן searchSeamless
+//      שולח את הטקסט שהוקלד גם כ-companyKeyword וגם כ-jobTitle במקביל.
+//   2. טלפון/אימייל לא מגיעים בחיפוש (חינמי) - רק בשלב "research" נפרד
+//      (עולה קרדיט לכל איש קשר), ולכן revealSeamlessContacts רץ בנפרד
+//      אחרי שהתוצאות הראשוניות כבר מוצגות (כמו התמלול בכרטיס ליד).
+const SEAMLESS_BASE_URL_ = 'https://api.seamless.ai/api/client/v1';
+
+function seamlessApiKey_() {
+  return PropertiesService.getScriptProperties().getProperty('SEAMLESS_API_KEY') || '';
+}
+
+function seamlessFetch_(method, path, payload) {
+  const key = seamlessApiKey_();
+  if (!key) return { ok: false, code: 0, data: null, text: 'no_api_key' };
+  const options = {
+    method: method,
+    headers: { Token: key }, // סימלס מאמתת עם כותרת Token רגילה, לא Authorization: Bearer
+    muteHttpExceptions: true
+  };
+  if (payload) {
+    options.contentType = 'application/json';
+    options.payload = JSON.stringify(payload);
+  }
+  let response;
+  try {
+    response = UrlFetchApp.fetch(SEAMLESS_BASE_URL_ + path, options);
+  } catch (err) {
+    return { ok: false, code: 0, data: null, text: String(err) };
+  }
+  const code = response.getResponseCode();
+  const text = response.getContentText();
+  let data = null;
+  try { data = JSON.parse(text); } catch (err) { data = null; }
+  return { ok: code < 300, code: code, data: data, text: text };
+}
+
+function extractSeamlessRecords_(data, keys) {
+  if (!data) return [];
+  for (let i = 0; i < keys.length; i++) {
+    const v = data[keys[i]];
+    if (Array.isArray(v)) return v;
+  }
+  return [];
+}
+
+function seamlessPick_(obj, keys) {
+  for (let i = 0; i < keys.length; i++) {
+    const v = obj[keys[i]];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+    if (typeof v === 'number' && isFinite(v)) return String(v);
+  }
+  return '';
+}
+
+function mapSeamlessContact_(r) {
+  const name = seamlessPick_(r, ['name', 'fullName', 'full_name']) ||
+    [seamlessPick_(r, ['firstName', 'first_name']), seamlessPick_(r, ['lastName', 'last_name'])].filter(Boolean).join(' ');
+  return {
+    searchResultId: seamlessPick_(r, ['searchResultId', 'search_result_id', 'id']),
+    name: name,
+    title: seamlessPick_(r, ['title', 'jobTitle', 'job_title']),
+    company: seamlessPick_(r, ['company', 'companyName', 'company_name']),
+    phone: '',
+    email: ''
+  };
+}
+
+function mapSeamlessCompany_(r) {
+  return {
+    name: seamlessPick_(r, ['name', 'companyName', 'company_name']),
+    domain: seamlessPick_(r, ['domain', 'companyDomain', 'company_domain']),
+    industries: Array.isArray(r.industries) ? r.industries.join(', ') : seamlessPick_(r, ['industry'])
+  };
+}
+
+function normalizeSearchText_(s) {
+  return String(s || '').trim().toLowerCase();
+}
+
+/**
+ * חיפוש מקומי בכל טאבי הקמפיינים לפי שם/חברה - תמיד עובד, לא תלוי
+ * בסימלס בכלל. עוצר אחרי 8 תוצאות כדי להישאר מהיר.
+ */
+function searchLocalLeads_(query) {
+  const q = normalizeSearchText_(query);
+  if (!q) return [];
+  const ss = SpreadsheetApp.openById(SpreadsheetApp.getActiveSpreadsheet().getId());
+  const sheets = getCampaignSheets_(ss);
+  const results = [];
+  for (let s = 0; s < sheets.length && results.length < 8; s++) {
+    const sheet = sheets[s];
+    const headers = headerRow_(sheet);
+    const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+    const companyCol = findColumnNormalized_(headers, COMPANY_HEADER);
+    const titleCol = findColumnNormalized_(headers, TITLE_HEADER);
+    const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+    if (phoneCol === -1) continue;
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length && results.length < 8; i++) {
+      const row = data[i];
+      const name = String(row[nameCol] || '');
+      const company = companyCol !== -1 ? String(row[companyCol] || '') : '';
+      const phone = String(row[phoneCol] || '');
+      if (!phone) continue;
+      if (normalizeSearchText_(name).indexOf(q) === -1 && normalizeSearchText_(company).indexOf(q) === -1) continue;
+      results.push({
+        name: name,
+        title: titleCol !== -1 ? String(row[titleCol] || '') : '',
+        company: company,
+        phone: phone,
+        campaign: sheet.getName()
+      });
+    }
+  }
+  return results;
+}
+
+/**
+ * קרוי מהדשבורד (google.script.run) כשמקלידים בתיבת חיפוש Seamless.
+ * מחפש קודם בין הלידים הקיימים אצלנו (תמיד עובד), ובמקביל שולח לסימלס
+ * את אותו טקסט גם כמילת מפתח חברה וגם כתפקיד. טלפון/אימייל לא כלולים
+ * כאן - נחשפים בנפרד ב-revealSeamlessContacts כדי לא לעכב את התוצאה.
+ */
+function searchSeamless(query) {
+  const q = String(query || '').trim();
+  if (!q) return { existingLeads: [], seamlessContacts: [], seamlessCompanies: [], seamlessError: '' };
+
+  const existingLeads = searchLocalLeads_(q);
+
+  if (!seamlessApiKey_()) {
+    return {
+      existingLeads: existingLeads,
+      seamlessContacts: [],
+      seamlessCompanies: [],
+      seamlessError: 'לא הוגדר מפתח API של Seamless - יש להריץ setupSeamlessApiKey מהעורך'
+    };
+  }
+
+  const companiesRes = seamlessFetch_('POST', '/search/companies', { companyName: q, limit: 5 });
+  const contactsRes = seamlessFetch_('POST', '/search/contacts', { companyKeyword: [q], jobTitle: [q], limit: 8 });
+
+  const seamlessCompanies = companiesRes.ok
+    ? extractSeamlessRecords_(companiesRes.data, ['companies', 'results', 'data']).map(mapSeamlessCompany_)
+    : [];
+  const seamlessContacts = contactsRes.ok
+    ? extractSeamlessRecords_(contactsRes.data, ['contacts', 'results', 'data']).map(mapSeamlessContact_)
+    : [];
+
+  const seamlessError = (!companiesRes.ok && !contactsRes.ok)
+    ? 'סימלס לא הגיב כרגע (קוד ' + companiesRes.code + ') - נסי שוב עוד רגע'
+    : '';
+
+  return {
+    existingLeads: existingLeads,
+    seamlessContacts: seamlessContacts,
+    seamlessCompanies: seamlessCompanies,
+    seamlessError: seamlessError
+  };
+}
+
+/**
+ * חושפת טלפון/אימייל עבור עד 8 תוצאות סימלס לפי searchResultId - קוראת
+ * פעם אחת ל-research (עולה קרדיט לכל איש קשר) ואז בודקת עד 3 פעמים אם
+ * ההתגלות כבר הסתיימה. לא ממתינה יותר מכמה שניות - מה שלא הספיק,
+ * פשוט נשאר בלי טלפון/אימייל בתוצאה, בלי לתקוע את שאר הדשבורד.
+ */
+function revealSeamlessContacts(searchResultIds) {
+  const ids = (searchResultIds || []).slice(0, 8).filter(Boolean);
+  if (!ids.length || !seamlessApiKey_()) return {};
+
+  const researchRes = seamlessFetch_('POST', '/contacts/research', { searchResultIds: ids });
+  if (!researchRes.ok) return {};
+  const requestIds = extractSeamlessRecords_(researchRes.data, ['requestIds', 'request_ids']);
+  if (!requestIds.length) return {};
+
+  const result = {};
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const qs = encodeURIComponent(requestIds.join(','));
+    const pollRes = seamlessFetch_('GET', '/contacts/research/poll?requestIds=' + qs);
+    if (pollRes.ok) {
+      const records = extractSeamlessRecords_(pollRes.data, ['results', 'contacts', 'data']);
+      records.forEach(function (r) {
+        const sid = seamlessPick_(r, ['searchResultId', 'search_result_id', 'id']);
+        if (!sid) return;
+        result[sid] = {
+          phone: seamlessPick_(r, ['phone', 'phoneNumber', 'phone_number', 'mobile']),
+          email: seamlessPick_(r, ['email', 'workEmail', 'work_email'])
+        };
+      });
+      if (ids.every(function (id) { return result[id]; })) break;
+    }
+    if (attempt < 2) Utilities.sleep(1500);
+  }
+  return result;
+}
+
 /**
  * כלי אבחון: מדפיס ללוג את האובייקט הגולמי של הליד הראשון בקמפיין -
  * כדי לראות בדיוק אילו שמות שדות פרלה מחזירה בפועל. להריץ אם משהו

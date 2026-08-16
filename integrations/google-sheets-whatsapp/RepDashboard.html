@@ -67,6 +67,42 @@
           font-size:12.5px;font-family:inherit;color:var(--text)}
   .search:focus-visible{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(17,109,255,.14)}
 
+  /* חיפוש Seamless - תיבה קומפקטית בקצה שורת הכותרת (משמאל ב-RTL) */
+  .seamless-search-wrap{position:relative;width:190px}
+  .seamless-search-box{display:flex;align-items:center;gap:7px;background:#F8FAFC;
+    border:1px solid var(--border);border-radius:8px;padding:6px 10px}
+  .seamless-search-box:focus-within{border-color:var(--purple)}
+  .seamless-logo{width:19px;height:19px;border-radius:6px;flex-shrink:0;
+    background:linear-gradient(135deg,var(--purple),#5B3FD8);color:#fff;display:flex;
+    align-items:center;justify-content:center;font-size:10.5px;font-weight:800}
+  .seamless-search-ic{color:var(--muted);font-size:12px;flex-shrink:0}
+  .seamless-search-input{border:none;background:transparent;outline:none;font-size:12.5px;
+    color:var(--text);font-family:inherit;width:100%}
+  .seamless-search-input::placeholder{color:var(--muted)}
+  .seamless-dropdown{position:absolute;top:calc(100% + 8px);left:0;width:310px;max-width:90vw;
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    box-shadow:0 14px 34px rgba(16,24,40,.16);overflow:hidden;z-index:60}
+  .seamless-dd-top-label{font-size:11px;font-weight:700;color:var(--purple);padding:12px 15px 4px}
+  .seamless-dd-scroll{max-height:340px;overflow-y:auto}
+  .seamless-dd-group{font-size:12px;font-weight:800;color:var(--purple);padding:9px 15px 5px}
+  .seamless-dd-row{display:flex;flex-direction:column;gap:1px;padding:7px 15px;cursor:pointer}
+  .seamless-dd-row:hover{background:rgba(124,92,252,.08)}
+  .seamless-dd-name{font-size:12.5px;font-weight:700;color:var(--text)}
+  .seamless-dd-sub{font-size:11px;color:var(--muted)}
+  .seamless-dd-sub .seamless-pending{opacity:.65}
+  .seamless-dd-company{display:flex;align-items:center;gap:9px;padding:7px 15px;cursor:pointer}
+  .seamless-dd-company:hover{background:rgba(124,92,252,.08)}
+  .seamless-dd-company-ic{width:19px;height:19px;border-radius:5px;flex-shrink:0;
+    background:linear-gradient(135deg,var(--purple),#5B3FD8)}
+  .seamless-dd-company-name{font-size:12.5px;font-weight:600;color:var(--text)}
+  .seamless-dd-foot{padding:10px 15px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted)}
+  .seamless-dd-empty{padding:14px 15px;font-size:11.5px;color:var(--muted);text-align:center}
+  .seamless-dd-error{padding:10px 15px;font-size:11.5px;color:var(--red);background:rgba(240,68,56,.08)}
+  .seamless-recent-row{display:flex;align-items:center;gap:9px;padding:7px 15px;cursor:pointer}
+  .seamless-recent-row:hover{background:rgba(124,92,252,.08)}
+  .seamless-recent-row .ic{color:var(--muted);font-size:12px;opacity:.7}
+  .seamless-recent-row .q{font-size:12px;color:var(--text);flex:1}
+
   /* פופ-אפ צף בפינת המסך - לא חלק מזרימת הדף, כדי שיהיה בולט ומיידי
      כמו התראת מערכת, בלי צליל (בקשה מפורשת - הצליל הקודם הפחיד). */
   .banner{position:fixed;top:16px;left:16px;z-index:50;max-width:320px;display:flex;
@@ -232,6 +268,17 @@
         <button type="button" data-view="done">טופלו <span class="b" id="cntDone" style="background:#C8CDD6">0</span></button>
       </span>
       <input type="text" class="search" id="searchInput" placeholder="חיפוש לפי שם או חברה...">
+      <div class="seamless-search-wrap" id="seamlessSearchWrap">
+        <div class="seamless-search-box">
+          <span class="seamless-logo">S</span>
+          <span class="seamless-search-ic">🔍</span>
+          <input type="text" id="seamlessSearchInput" class="seamless-search-input" placeholder="חיפוש ב-Seamless..." autocomplete="off">
+        </div>
+        <div class="seamless-dropdown" id="seamlessDropdown" style="display:none">
+          <div class="seamless-dd-top-label" id="seamlessDdTopLabel"></div>
+          <div class="seamless-dd-scroll" id="seamlessDdScroll"></div>
+        </div>
+      </div>
     </div>
 
     <div id="errorBox"></div>
@@ -766,6 +813,165 @@
       .getRepAiSummary(REP_KEY, lead.id);
   }
 
+  const SEAMLESS_RECENT_KEY_ = 'seamlessRecentSearches';
+  let seamlessSearchToken_ = 0;
+  let seamlessDebounceTimer_ = null;
+
+  function seamlessRecentSearches_() {
+    try {
+      const raw = localStorage.getItem(SEAMLESS_RECENT_KEY_);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    } catch (err) { return []; }
+  }
+
+  function seamlessAddRecentSearch_(q) {
+    try {
+      let list = seamlessRecentSearches_().filter(function (x) { return x !== q; });
+      list.unshift(q);
+      localStorage.setItem(SEAMLESS_RECENT_KEY_, JSON.stringify(list.slice(0, 5)));
+    } catch (err) { /* localStorage לא זמין - פשוט בלי היסטוריה, לא קריטי */ }
+  }
+
+  /**
+   * חיפוש Seamless בשורת הכותרת - זהה בהתנהגות לגרסה בדשבורד הראשי.
+   * טלפון/אימייל של אנשי קשר מסימלס נחשפים בנפרד אחרי התוצאה הראשונית.
+   */
+  function setupSeamlessSearch_() {
+    const input = document.getElementById('seamlessSearchInput');
+    const dropdown = document.getElementById('seamlessDropdown');
+    const scrollArea = document.getElementById('seamlessDdScroll');
+    const topLabel = document.getElementById('seamlessDdTopLabel');
+    if (!input || !dropdown) return;
+
+    function closeDropdown_() { dropdown.style.display = 'none'; }
+
+    function renderRecent_() {
+      topLabel.textContent = 'חיפושים אחרונים';
+      const recent = seamlessRecentSearches_();
+      if (!recent.length) {
+        scrollArea.innerHTML = '<div class="seamless-dd-empty">עוד אין חיפושים - התחילי להקליד שם, חברה או תפקיד</div>';
+        return;
+      }
+      scrollArea.innerHTML = recent.map(function (q) {
+        return '<div class="seamless-recent-row" data-q="' + esc(q) + '">' +
+          '<span class="ic">🕓</span><span class="q">' + esc(q) + '</span></div>';
+      }).join('');
+      scrollArea.querySelectorAll('.seamless-recent-row').forEach(function (row) {
+        row.addEventListener('click', function () {
+          input.value = row.dataset.q;
+          runSeamlessSearch_(row.dataset.q);
+        });
+      });
+    }
+
+    function contactSubText_(c) {
+      const bits = [c.title, c.company].filter(Boolean).join(' - ');
+      return '<span class="seamless-pending" data-reveal-sub="' + esc(c.searchResultId || '') + '">' +
+        (bits ? esc(bits) + ' · ' : '') + 'טוען פרטי קשר...</span>';
+    }
+
+    function renderResults_(query, payload) {
+      topLabel.textContent = 'תואמות החיפוש';
+      let html = '';
+
+      if (payload.existingLeads && payload.existingLeads.length) {
+        html += '<div class="seamless-dd-group">אנשי קשר במערכת</div>';
+        html += payload.existingLeads.map(function (c) {
+          return '<div class="seamless-dd-row"><div class="seamless-dd-name">' + esc(c.name || c.company || 'ללא שם') + '</div>' +
+            '<div class="seamless-dd-sub">' + esc([c.title, c.company].filter(Boolean).join(' - ')) +
+            ' · קמפיין ' + esc(c.campaign) + '</div></div>';
+        }).join('');
+      }
+
+      const newContacts = (payload.seamlessContacts || []).filter(function (c) { return c.name; });
+      if (newContacts.length) {
+        html += '<div class="seamless-dd-group">נמצא ב-Seamless · לא במערכת</div>';
+        html += newContacts.map(function (c) {
+          return '<div class="seamless-dd-row"><div class="seamless-dd-name">' + esc(c.name) + '</div>' +
+            '<div class="seamless-dd-sub">' + contactSubText_(c) + '</div></div>';
+        }).join('');
+      }
+
+      if (payload.seamlessCompanies && payload.seamlessCompanies.length) {
+        html += '<div class="seamless-dd-group">חברות</div>';
+        html += payload.seamlessCompanies.map(function (co) {
+          return '<div class="seamless-dd-company"><div class="seamless-dd-company-ic"></div>' +
+            '<div class="seamless-dd-company-name">' + esc(co.name || co.domain || '') + '</div></div>';
+        }).join('');
+      }
+
+      if (!html) {
+        html = '<div class="seamless-dd-empty">אין תוצאות עבור "' + esc(query) + '"</div>';
+      }
+      if (payload.seamlessError) {
+        html += '<div class="seamless-dd-error">' + esc(payload.seamlessError) + '</div>';
+      }
+      html += '<div class="seamless-dd-foot">התוצאות הן תיעוד חיפוש בלבד - לא יוצרות או משנות ליד באופן אוטומטי</div>';
+
+      scrollArea.innerHTML = html;
+
+      const idsToReveal = newContacts.map(function (c) { return c.searchResultId; }).filter(Boolean);
+      if (idsToReveal.length) revealSeamlessContacts_(idsToReveal);
+    }
+
+    function revealSeamlessContacts_(ids) {
+      const token = seamlessSearchToken_;
+      google.script.run
+        .withSuccessHandler(function (revealed) {
+          if (token !== seamlessSearchToken_ || !revealed) return;
+          Object.keys(revealed).forEach(function (sid) {
+            const el = scrollArea.querySelector('[data-reveal-sub="' + sid + '"]');
+            if (!el) return;
+            const info = revealed[sid];
+            const bits = [];
+            if (info.phone) bits.push('📱 ' + info.phone);
+            if (info.email) bits.push('✉️ ' + info.email);
+            el.outerHTML = bits.length ? esc(bits.join(' · ')) : 'לא נחשפו פרטי קשר';
+          });
+        })
+        .withFailureHandler(function () { /* לא קריטי - השורות פשוט נשארות בלי טלפון/אימייל */ })
+        .revealSeamlessContacts(ids);
+    }
+
+    function runSeamlessSearch_(query) {
+      const q = query.trim();
+      dropdown.style.display = 'block';
+      if (!q) { renderRecent_(); return; }
+
+      seamlessSearchToken_++;
+      const token = seamlessSearchToken_;
+      topLabel.textContent = 'מחפש...';
+      scrollArea.innerHTML = '';
+
+      google.script.run
+        .withSuccessHandler(function (payload) {
+          if (token !== seamlessSearchToken_) return;
+          renderResults_(q, payload || {});
+          seamlessAddRecentSearch_(q);
+        })
+        .withFailureHandler(function (err) {
+          if (token !== seamlessSearchToken_) return;
+          topLabel.textContent = 'תואמות החיפוש';
+          scrollArea.innerHTML = '<div class="seamless-dd-error">שגיאה בחיפוש: ' + esc(err && err.message ? err.message : String(err)) + '</div>';
+        })
+        .searchSeamless(q);
+    }
+
+    input.addEventListener('focus', function () {
+      if (!input.value.trim()) renderRecent_();
+      dropdown.style.display = 'block';
+    });
+    input.addEventListener('input', function () {
+      clearTimeout(seamlessDebounceTimer_);
+      const val = input.value;
+      seamlessDebounceTimer_ = setTimeout(function () { runSeamlessSearch_(val); }, 350);
+    });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#seamlessSearchWrap')) closeDropdown_();
+    });
+  }
+
   // ---------------- חיווט ----------------
   document.querySelectorAll('.vt button[data-view]').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -791,6 +997,7 @@
 
   // "מחממים" את הצליל בלחיצה/הקשה **אמיתית** הראשונה של הנציגה על הדף -
   setupNotifBtn_();
+  setupSeamlessSearch_();
   load(false);
   setInterval(function () { load(true); }, REFRESH_MS);
 })();
