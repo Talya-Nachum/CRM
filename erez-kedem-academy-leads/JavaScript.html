@@ -19,6 +19,9 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    syncHeaderHeight();
+    window.addEventListener('resize', syncHeaderHeight);
+
     loadConfig();
     loadStatuses();
     loadTemplates();
@@ -45,9 +48,15 @@
 
   /* ---------- config (header: countdown + buttons) ---------- */
 
+  function syncHeaderHeight() {
+    var header = document.querySelector('header.hub');
+    if (header) document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
+  }
+
   function loadConfig() {
     google.script.run.withSuccessHandler(function (cfg) {
       startCountdown(cfg.academyStartDate);
+      syncHeaderHeight();
 
       var paymentBtn = document.getElementById('paymentBtn');
       var infoBtn = document.getElementById('infoBtn');
@@ -188,7 +197,7 @@
     document.getElementById('leadCount').textContent = filtered.length + ' לידים';
 
     if (!filtered.length) {
-      body.innerHTML = '<tr><td colspan="14" class="empty-row">אין לידים להצגה</td></tr>';
+      body.innerHTML = '<tr><td colspan="12" class="empty-row">אין לידים להצגה</td></tr>';
       updateSelectionUi();
       return;
     }
@@ -208,9 +217,9 @@
         '<td>' + escapeHtml(lead.email) + '</td>' +
         '<td>' + escapeHtml(lead.notes) + '</td>' +
         '<td><span class="badge" style="background:' + colorForStatus(lead.status) + '">' + escapeHtml(lead.status) + '</span></td>' +
-        '<td>' + escapeHtml(lead.lastWhatsAppSentAt) + '</td>' +
-        '<td title="' + escapeHtml(lead.replyAt ? 'התקבל: ' + lead.replyAt : '') + '">' + escapeHtml(lead.replyText) + '</td>' +
-        '<td>' + escapeHtml(lead.updatedAt) + '</td>' +
+        '<td><div class="reply-cell"><span class="reply-text">' + escapeHtml(lead.replyText) + '</span>' +
+          (lead.replyAt ? '<span class="reply-date">' + escapeHtml(lead.replyAt) + '</span>' : '') +
+          '</div></td>' +
         '<td><button type="button" class="row-edit">✎</button></td>';
 
       tr.querySelector('.row-check').addEventListener('click', function (evt) { evt.stopPropagation(); });

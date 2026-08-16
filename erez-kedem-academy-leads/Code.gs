@@ -458,13 +458,18 @@ function sendWhatsApp(leadIds, templateId) {
     throw new Error('שליחה נכשלה: ' + (result.StatusDescription || 'שגיאה לא ידועה מאינפוריו'));
   }
 
+  // אין עמודה נפרדת לתאריך שליחה - לבקשת הלקוחה, זה מתועד כשורה בהערות
+  // (מתווספת לקיים, לא דורסת), כדי לא להעמיס עוד עמודה על הטבלה.
   var now = new Date();
-  var sentAtCol = fieldIndex_('lastWhatsAppSentAt') + 1;
+  var stamp = formatDate_(now) + ' - נשלח וואטסאפ';
+  var notesCol = fieldIndex_('notes') + 1;
   var statusCol = fieldIndex_('status') + 1;
   leadIds.forEach(function (id) {
     var rowIndex = findLeadRow_(sheet, id);
     if (rowIndex === -1) return;
-    sheet.getRange(rowIndex, sentAtCol).setValue(now);
+    var notesCell = sheet.getRange(rowIndex, notesCol);
+    var currentNotes = String(notesCell.getValue() || '');
+    notesCell.setValue(currentNotes ? (currentNotes + '\n' + stamp) : stamp);
     sheet.getRange(rowIndex, statusCol).setValue(WHATSAPP_SENT_STATUS);
   });
 
