@@ -1,4 +1,9 @@
-<title>הדסה — פרימיום זכוכית</title>
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>הדסה — המזכירה האישית שלי</title>
 <style>
 @font-face {
   font-family: 'Rubik';
@@ -175,6 +180,7 @@
   .kanban { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   @media (max-width: 560px) { .kanban { grid-template-columns: 1fr; } }
   .kstage { display: flex; flex-direction: column; gap: 10px; }
+  .kcards { display: flex; flex-direction: column; gap: 10px; }
   .kstage-title { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; }
   .kstage-title .sw { width: 7px; height: 7px; border-radius: 50%; background: var(--rose-deep); }
   .kstage.doing .sw { background: var(--lavender); }
@@ -210,6 +216,8 @@
   footer { max-width: 1200px; margin: 0 auto; font-size: 12px; color: var(--ink-faint); text-align: center; line-height: 1.7; padding: 10px 22px 0; }
   footer b { color: var(--ink-soft); }
 </style>
+</head>
+<body>
 
 <div class="topbar">
   <div class="brand"><span class="dot"></span>הדסה <small>| עוזרת אינטליגנטית</small></div>
@@ -245,11 +253,11 @@
         </div>
         <div class="ai-name">הדסה</div>
 
-        <div class="glass-strong bubble">היי טליה! פיניתי לך את אחר הצהריים לעבודה ממוקדת. להזיז את השיחה של 15:00 ל-16:00?</div>
+        <div class="glass-strong bubble" id="bubbleText">היי טליה! טוענת את הלוח שלך…</div>
 
         <div class="glass-strong composer">
-          <input type="text" placeholder="כתבי להדסה…" />
-          <button aria-label="שליחה">➤</button>
+          <input type="text" placeholder="הוספת משימות היא דרך שיחה איתי בצ'אט הרגיל" disabled />
+          <button aria-label="שליחה" disabled>➤</button>
         </div>
       </div>
     </div>
@@ -260,28 +268,15 @@
         <div class="kanban">
           <div class="kstage">
             <div class="kstage-title"><span class="sw"></span>לביצוע</div>
-            <div class="glass-strong kcard">
-              <span class="ktag rose">עדיפות גבוהה</span>
-              <div class="k-title">הצעת מחיר — דוד כהן</div>
-            </div>
-            <div class="glass-strong kcard">
-              <span class="ktag amber">חשבון</span>
-              <div class="k-title">חשבונית 4471</div>
-            </div>
+            <div class="kcards" id="kanbanTodo"></div>
           </div>
           <div class="kstage doing">
             <div class="kstage-title"><span class="sw"></span>בתהליך</div>
-            <div class="glass-strong kcard">
-              <span class="ktag purple">בעבודה</span>
-              <div class="k-title">סדר יום לפגישת צוות</div>
-            </div>
+            <div class="kcards" id="kanbanDoing"></div>
           </div>
           <div class="kstage done">
             <div class="kstage-title"><span class="sw"></span>בוצע</div>
-            <div class="glass-strong kcard">
-              <span class="ktag rose">הושלם</span>
-              <div class="k-title">תיאום פגישה עם רו״ח</div>
-            </div>
+            <div class="kcards" id="kanbanDone"></div>
           </div>
         </div>
       </div>
@@ -290,15 +285,12 @@
     <div class="col">
       <div class="glass panel">
         <div class="panel-title">תזכורות חכמות</div>
-        <div class="rem-row"><span class="r-dot"></span><span>לשלוח הצעת מחיר לדוד כהן</span></div>
-        <div class="rem-row"><span class="r-dot"></span><span>לחזור לספק בנוגע לחשבונית</span></div>
+        <div id="remindersList"></div>
       </div>
 
       <div class="glass panel">
         <div class="panel-title">לוח היום</div>
-        <div class="glass-strong tblock"><span class="t-time num">09:30</span><span class="t-bar g1"></span><span class="t-title">אורלי דיזיין</span></div>
-        <div class="glass-strong tblock"><span class="t-time num">12:00</span><span class="t-bar g2"></span><span class="t-title">פגישת צוות</span></div>
-        <div class="glass-strong tblock"><span class="t-time num">15:30</span><span class="t-bar g3"></span><span class="t-title">Zoom ספק תוכנה</span></div>
+        <div id="timelineList"></div>
       </div>
 
       <div class="glass-strong rec-box">
@@ -309,5 +301,72 @@
     </div>
   </div>
 
-  <footer>הערה טכנית: Tailwind CDN לא יכול לרוץ בתוך Artifact (חסום ע"י מדיניות אבטחה) — אז כתבתי CSS ידני שמשחזר בדיוק את אותה תוצאה חזותית: <b>blush pink + זכוכית עם blur חזק</b>, בדיוק לפי הבקשה.</footer>
+  <footer id="updatedFooter">טוען נתונים…</footer>
 </div>
+
+<script>
+  const tagLabel = { rose: 'עדיפות גבוהה', amber: 'חשבון', purple: 'בעבודה' };
+  const barClass = ['g1', 'g2', 'g3'];
+
+  function renderKanban(col, items) {
+    const el = document.getElementById(col);
+    el.innerHTML = '';
+    items.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'glass-strong kcard';
+      card.innerHTML = `<span class="ktag ${item.tag}">${tagLabel[item.tag] || ''}</span><div class="k-title"></div>`;
+      card.querySelector('.k-title').textContent = item.title;
+      el.appendChild(card);
+    });
+  }
+
+  function renderReminders(items) {
+    const el = document.getElementById('remindersList');
+    el.innerHTML = '';
+    items.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'rem-row';
+      row.innerHTML = `<span class="r-dot"></span><span></span>`;
+      row.querySelector('span:last-child').textContent = item.title;
+      if (item.urgent) row.querySelector('.r-dot').style.background = 'var(--rose-deep)';
+      el.appendChild(row);
+    });
+  }
+
+  function renderTimeline(items) {
+    const el = document.getElementById('timelineList');
+    el.innerHTML = '';
+    items.forEach((item, i) => {
+      const row = document.createElement('div');
+      row.className = 'glass-strong tblock';
+      row.innerHTML = `<span class="t-time num"></span><span class="t-bar ${barClass[i % 3]}"></span><span class="t-title"></span>`;
+      row.querySelector('.t-time').textContent = item.time;
+      row.querySelector('.t-title').textContent = item.title;
+      el.appendChild(row);
+    });
+  }
+
+  fetch('tasks.json?t=' + Date.now())
+    .then(r => r.json())
+    .then(data => {
+      renderKanban('kanbanTodo', data.kanban.todo);
+      renderKanban('kanbanDoing', data.kanban.doing);
+      renderKanban('kanbanDone', data.kanban.done);
+      renderReminders(data.reminders);
+      renderTimeline(data.timeline);
+      const openCount = data.kanban.todo.length + data.kanban.doing.length;
+      document.getElementById('bubbleText').textContent =
+        openCount > 0
+          ? `היי טליה! נשארו ${openCount} דברים פתוחים היום — קחי את זה בקצב שלך.`
+          : `היי טליה! הכל מסודר להיום. איזה כיף.`;
+      const updated = new Date(data.updated);
+      document.getElementById('updatedFooter').textContent =
+        'עודכן לאחרונה: ' + updated.toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' });
+    })
+    .catch(() => {
+      document.getElementById('bubbleText').textContent = 'לא הצלחתי לטעון את הנתונים כרגע.';
+      document.getElementById('updatedFooter').textContent = '';
+    });
+</script>
+</body>
+</html>

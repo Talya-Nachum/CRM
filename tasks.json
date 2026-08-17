@@ -1,0 +1,24 @@
+{
+  "updated": "2026-08-17T09:00:00+03:00",
+  "kanban": {
+    "todo": [
+      { "title": "הצעת מחיר — דוד כהן", "tag": "rose" },
+      { "title": "חשבונית 4471 לספק", "tag": "amber" }
+    ],
+    "doing": [
+      { "title": "סדר יום לפגישת צוות", "tag": "purple" }
+    ],
+    "done": [
+      { "title": "תיאום פגישה עם רו״ח", "tag": "rose" }
+    ]
+  },
+  "reminders": [
+    { "title": "להתקשר בנוגע לחוזה", "urgent": true },
+    { "title": "שיחת מעקב עם לקוחה", "urgent": false }
+  ],
+  "timeline": [
+    { "time": "09:30", "title": "אורלי דיזיין" },
+    { "time": "12:00", "title": "פגישת צוות" },
+    { "time": "15:30", "title": "Zoom ספק תוכנה" }
+  ]
+}
