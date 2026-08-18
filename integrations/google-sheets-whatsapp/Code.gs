@@ -5187,8 +5187,12 @@ function revealSeamlessContacts(searchResultIds) {
       records.forEach(function (r) {
         const sid = seamlessPick_(r, ['searchResultId', 'search_result_id', 'id']);
         if (!sid) return;
-        const phone = seamlessPick_(r, ['phone', 'phoneNumber', 'phone_number', 'mobile']);
-        const email = seamlessPick_(r, ['email', 'workEmail', 'work_email']);
+        // הטלפון/אימייל האמיתיים מקוננים בתוך r.contact (נבדק בפועל מול
+        // Seamless - r.phone/r.email הישירים תמיד ריקים). companyPhone1
+        // ו-email1 הם השדות ה"נבחרים" הראשיים; שאר הווריאציות גיבוי.
+        const contact = r.contact || r;
+        const phone = seamlessPick_(contact, ['companyPhone1', 'contactPhone1', 'phone', 'phoneNumber', 'phone_number', 'mobile', 'companyPhone2', 'companyPhone3']);
+        const email = seamlessPick_(contact, ['email1', 'email', 'workEmail', 'work_email', 'email2', 'personalEmail']);
         const rawStatus = normalizeSearchText_(seamlessPick_(r, ['status', 'state']));
         let status = 'pending';
         if (SEAMLESS_RESEARCH_DONE_.indexOf(rawStatus) !== -1 || phone || email) status = 'completed';
