@@ -995,7 +995,7 @@
         if (settled || token !== seamlessSearchToken_) return;
         settled = true;
         markRevealTimedOut_(ids);
-      }, 15000);
+      }, 25000);
 
       google.script.run
         .withSuccessHandler(function (revealed) {

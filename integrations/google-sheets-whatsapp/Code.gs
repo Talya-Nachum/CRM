@@ -5179,7 +5179,11 @@ function revealSeamlessContacts(searchResultIds) {
   if (!requestIds.length) return pendingResult;
 
   const result = {};
-  for (let attempt = 0; attempt < 4; attempt++) {
+  // המתנה ראשונית לפני הבדיקה הראשונה - נמדד בפועל (debugSeamlessReveal)
+  // שסימלס צריכה כ-2 שניות עיבוד לפני שיש טעם בכלל לבדוק; בלעדיה הבדיקה
+  // הראשונה כמעט תמיד "pending" ופשוט מבזבזת ניסיון.
+  Utilities.sleep(2000);
+  for (let attempt = 0; attempt < 6; attempt++) {
     const qs = encodeURIComponent(requestIds.join(','));
     const pollRes = seamlessFetch_('GET', '/contacts/research/poll?requestIds=' + qs);
     if (pollRes.ok) {
@@ -5201,7 +5205,7 @@ function revealSeamlessContacts(searchResultIds) {
       });
       if (ids.every(function (id) { return result[id] && result[id].status !== 'pending'; })) break;
     }
-    if (attempt < 3) Utilities.sleep(2000);
+    if (attempt < 5) Utilities.sleep(2000);
   }
   ids.forEach(function (id) { if (!result[id]) result[id] = pendingResult[id]; });
   return result;
