@@ -4519,7 +4519,7 @@
         if (settled || token !== seamlessSearchToken_) return;
         settled = true;
         markRevealTimedOut_(ids);
-      }, 25000);
+      }, 30000);
 
       google.script.run
         .withSuccessHandler(function (revealed) {
