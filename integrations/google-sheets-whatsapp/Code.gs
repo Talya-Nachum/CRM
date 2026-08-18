@@ -4866,6 +4866,58 @@ function setupSeamlessApiKey() {
   ui.alert('נשמר בהצלחה.');
 }
 
+/**
+ * להרצה ידנית פעם אחת: מבצעת את שלוש הקריאות בדיוק (search/contacts,
+ * contacts/research, contacts/research/poll) על המקרה הידוע (זהר רייך,
+ * Osem Nestle) וכותבת גוף בקשה + תשובה גולמית של כל אחת לטאב חדש
+ * "SeamlessDebug" - כדי שיהיה טקסט מוכן להעתקה ולשליחה לתמיכת Seamless,
+ * בדיוק כמו שהם ביקשו.
+ */
+function debugSeamlessReveal() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = 'SeamlessDebug';
+  let sheet = ss.getSheetByName(sheetName);
+  if (sheet) ss.deleteSheet(sheet);
+  sheet = ss.insertSheet(sheetName);
+  sheet.appendRow(['שלב', 'גוף הבקשה (Request)', 'תשובה גולמית (Response)']);
+
+  const key = seamlessApiKey_();
+  if (!key) {
+    sheet.appendRow(['שגיאה', 'לא הוגדר מפתח API - יש להריץ setupSeamlessApiKey קודם', '']);
+    return;
+  }
+
+  const contactFilters = { jobTitle: ['Senior quality controller'], companyName: 'Osem Nestle', limit: 10 };
+  const searchRes = seamlessFetch_('POST', '/search/contacts', contactFilters);
+  sheet.appendRow(['1. POST /search/contacts', JSON.stringify(contactFilters), searchRes.text || String(searchRes.code)]);
+
+  const contacts = searchRes.ok
+    ? extractSeamlessRecords_(searchRes.data, ['contacts', 'results', 'data']).map(mapSeamlessContact_)
+    : [];
+  const target = contacts[0];
+  if (!target || !target.searchResultId) {
+    sheet.appendRow(['שגיאה', 'לא נמצא searchResultId בתוצאה - לא ממשיכים ל-research', '']);
+    return;
+  }
+
+  const researchBody = { searchResultIds: [target.searchResultId] };
+  const researchRes = seamlessFetch_('POST', '/contacts/research', researchBody);
+  sheet.appendRow(['2. POST /contacts/research', JSON.stringify(researchBody), researchRes.text || String(researchRes.code)]);
+
+  const requestIds = researchRes.ok ? extractSeamlessRecords_(researchRes.data, ['requestIds', 'request_ids']) : [];
+  if (!requestIds.length) {
+    sheet.appendRow(['שגיאה', 'לא התקבל requestId מ-research - לא ממשיכים ל-poll', '']);
+    return;
+  }
+
+  Utilities.sleep(2000);
+  const qs = encodeURIComponent(requestIds.join(','));
+  const pollRes = seamlessFetch_('GET', '/contacts/research/poll?requestIds=' + qs);
+  sheet.appendRow(['3. GET /contacts/research/poll?requestIds=' + requestIds.join(','), '(GET - אין גוף בקשה)', pollRes.text || String(pollRes.code)]);
+
+  SpreadsheetApp.getUi().alert('סיימתי - כל הבקשות והתשובות בטאב "SeamlessDebug".');
+}
+
 // --- Seamless.AI - חיפוש אנשי קשר וחברות מהדשבורד ---
 // ה-API האמיתי לא מתועד בציבור בצורה נגישה (docs.seamless.ai חסום
 // מהסביבה הזו) - הפרטים למטה (כתובת בסיס, כותרת Token, שמות המסלולים
