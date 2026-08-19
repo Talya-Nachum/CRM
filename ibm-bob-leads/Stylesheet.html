@@ -73,11 +73,17 @@
     font-size: 13.5px; font-weight: 600; border: 1px solid var(--border);
     background: var(--surface); color: var(--muted);
   }
-  .tab-btn:hover { background: var(--paper); }
-  .tab-btn.active { background: var(--navy-800); color: #fff; border-color: var(--navy-800); }
-  .tab-btn.active.capital { background: var(--sec-capital); border-color: var(--sec-capital); }
-  .tab-btn.active.energy { background: var(--sec-energy); border-color: var(--sec-energy); }
-  .tab-btn.active.health { background: var(--sec-health); border-color: var(--sec-health); }
+  /* כל טאב צבוע בצבע הסקטור שלו תמיד (לא רק כשפעיל) - כדי שיהיה ברור
+     מיד איזה באנר שייך לאיזה מסלול ולמנוע בלבול/טעויות בין השלושה. */
+  .tab-btn.capital { border-color: var(--sec-capital); color: var(--sec-capital); }
+  .tab-btn.energy { border-color: var(--sec-energy); color: var(--sec-energy); }
+  .tab-btn.health { border-color: var(--sec-health); color: var(--sec-health); }
+  .tab-btn.capital:hover { background: color-mix(in srgb, var(--sec-capital) 12%, var(--surface)); }
+  .tab-btn.energy:hover { background: color-mix(in srgb, var(--sec-energy) 12%, var(--surface)); }
+  .tab-btn.health:hover { background: color-mix(in srgb, var(--sec-health) 12%, var(--surface)); }
+  .tab-btn.active.capital { background: var(--sec-capital); color: #fff; border-color: var(--sec-capital); }
+  .tab-btn.active.energy { background: var(--sec-energy); color: #fff; border-color: var(--sec-energy); }
+  .tab-btn.active.health { background: var(--sec-health); color: #fff; border-color: var(--sec-health); }
 
   /* --- פס מידע לסקטור הפעיל (תאריך/שעון ספירה/מידע) --- */
   .sector-strip {

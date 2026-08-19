@@ -47,8 +47,13 @@
     google.script.run.withSuccessHandler(function (cfg) {
       document.getElementById('clientNameLabel').textContent = cfg.clientName;
       allSectors = cfg.sectors || [];
+      // אין טאב "הכל" - כל באנר מציג רק את הלידים שלו, אז חייב להיות סקטור
+      // פעיל תמיד; ברירת המחדל היא הראשון ברשימה (SECTORS ב-Code.gs).
+      if (!activeSectorKey && allSectors.length) activeSectorKey = allSectors[0].key;
       renderSectorTabs();
+      updateSectorStrip();
       populateSectorSelect();
+      renderTable();
       syncHeaderHeight();
     }).withFailureHandler(showError).getConfig();
   }
@@ -57,15 +62,14 @@
     return allSectors.filter(function (s) { return s.key === key; })[0] || null;
   }
 
-  /* ---------- טאבים: "הכל" + טאב לכל סקטור ---------- */
+  /* ---------- טאבים: טאב לכל סקטור, בלי "הכל" ---------- */
 
   function renderSectorTabs() {
     var wrap = document.getElementById('sectorTabs');
-    var tabs = ['<button class="tab-btn' + (activeSectorKey === '' ? ' active' : '') + '" data-sector="">הכל</button>'];
-    allSectors.forEach(function (s) {
+    var tabs = allSectors.map(function (s) {
       var count = allLeads.filter(function (l) { return l.sector === s.key; }).length;
       var cls = 'tab-btn ' + s.color + (activeSectorKey === s.key ? ' active' : '');
-      tabs.push('<button class="' + cls + '" data-sector="' + s.key + '">' + s.icon + ' ' + escapeHtml(s.label) + ' (' + count + ')</button>');
+      return '<button class="' + cls + '" data-sector="' + s.key + '">' + s.icon + ' ' + escapeHtml(s.label) + ' (' + count + ')</button>';
     });
     wrap.innerHTML = tabs.join('');
     wrap.querySelectorAll('.tab-btn').forEach(function (btn) {
