@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+  <header class="hub">
+    <div class="logo-mark">
+      <!-- לוגו מיטוב - קבוע לכל הלקוחות, בשיתוף פעולה -->
+      <svg class="mituv-icon" viewBox="0 0 64 64" fill="none">
+        <path d="M32 4 A28 28 0 0 1 58.5 25 L44 25 A14 14 0 0 0 32 18 Z" fill="#159aa8"/>
+        <path d="M58.5 25 A28 28 0 0 1 48 54 L40 42 A14 14 0 0 0 44 25 Z" fill="#1fc2c9"/>
+        <path d="M48 54 A28 28 0 0 1 16 54 L24 42 A14 14 0 0 0 40 42 Z" fill="#f4a828"/>
+        <path d="M16 54 A28 28 0 0 1 5.5 25 L20 25 A14 14 0 0 0 24 42 Z" fill="#ef8a1e"/>
+        <path d="M5.5 25 A28 28 0 0 1 32 4 L32 18 A14 14 0 0 0 20 25 Z" fill="#159aa8"/>
+        <path d="M17 30 L26 40 L47 17" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <span class="logo-divider" aria-hidden="true"></span>
+      <!-- TODO(client): קירוב של לוגו "IBM Bob" (תג נייבי + אייקון רובוט) -
+           לא הקובץ המקורי (אין גישה לתמונות שנשלחות בצ'אט, ר' BUILD-GUIDE.md).
+           אם יש קובץ אמיתי, להחליף ב-<img> או SVG מוטמע. -->
+      <svg class="bob-icon" viewBox="0 0 40 40" fill="none">
+        <rect x="10" y="8" width="20" height="18" rx="4" fill="#3b6fd4"/>
+        <circle cx="16" cy="16" r="2.2" fill="#fff"/>
+        <circle cx="24" cy="16" r="2.2" fill="#fff"/>
+        <rect x="14" y="21" width="12" height="2.4" rx="1.2" fill="#fff"/>
+        <rect x="18" y="2" width="4" height="6" rx="2" fill="#3b6fd4"/>
+      </svg>
+      <div class="logo-text">
+        <span class="word" id="clientNameLabel">IBM BOB</span>
+        <span class="tag">ניהול לידים · בשיתוף מיטוב מכירות</span>
+      </div>
+    </div>
+
+    <div class="sector-banners" id="sectorBanners"></div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input id="searchInput" class="search-input" type="text" placeholder="חיפוש לפי שם, חברה, טלפון או אימייל...">
+      <select id="statusFilter" class="status-filter">
+        <option value="">כל הסטטוסים</option>
+      </select>
+      <select id="sectorFilter" class="status-filter">
+        <option value="">כל הסקטורים</option>
+      </select>
+      <button class="btn btn-wa" id="waBtn" disabled>💬 שליחת וואטסאפ (<span id="selCount">0</span>)</button>
+      <button class="btn btn-primary" id="addLeadBtn">+ הוספת ליד</button>
+      <button class="btn btn-plain" id="exportExcelBtn">📥 ייצוא לאקסל</button>
+      <div class="count-pill" id="leadCount"></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="selectAll"></th>
+            <th>סקטור</th>
+            <th>מקור</th>
+            <th>שם חברה</th>
+            <th>ח.פ</th>
+            <th>איש קשר</th>
+            <th>תפקיד</th>
+            <th>נייד</th>
+            <th>אימייל</th>
+            <th>הערות</th>
+            <th>סטטוס</th>
+            <th>תשובת וואטסאפ</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="leadsTableBody">
+          <tr><td colspan="13" class="empty-row">טוען נתונים...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- מודאל הוספה/עריכה -->
+  <div id="leadOverlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="modalTitle">הוספת ליד חדש</h2>
+        <button class="icon-x" id="closeLeadModalBtn">✕</button>
+      </div>
+      <form id="leadForm" class="modal-body">
+        <input type="hidden" id="leadId">
+
+        <div class="field">
+          <label>סקטור</label>
+          <select id="f_sector"></select>
+        </div>
+
+        <div class="field">
+          <label>מקור הליד</label>
+          <input type="text" id="f_source" list="sourceOptions" placeholder="לדוגמה: פייסבוק, גוגל, המלצה, אתר...">
+          <datalist id="sourceOptions">
+            <option value="דף נחיתה">
+            <option value="פייסבוק">
+            <option value="גוגל">
+            <option value="המלצה">
+            <option value="אתר">
+            <option value="לינקדאין">
+            <option value="ידני">
+          </datalist>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label>שם חברה</label>
+            <input type="text" id="f_company">
+          </div>
+          <div>
+            <label>ח.פ</label>
+            <input type="text" id="f_companyId">
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label>שם איש קשר</label>
+            <input type="text" id="f_contactName">
+          </div>
+          <div>
+            <label>תפקיד</label>
+            <input type="text" id="f_role">
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label>נייד</label>
+            <input type="tel" id="f_phone">
+          </div>
+          <div>
+            <label>אימייל</label>
+            <input type="email" id="f_email">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>הערות</label>
+          <textarea id="f_notes" rows="3"></textarea>
+        </div>
+
+        <div class="field">
+          <label>סטטוס</label>
+          <select id="f_status"></select>
+        </div>
+
+        <footer class="modal-actions">
+          <button type="button" id="deleteLeadBtn" class="btn btn-danger hidden">מחיקת ליד</button>
+          <div class="spacer"></div>
+          <button type="button" id="cancelLeadBtn" class="btn btn-plain">ביטול</button>
+          <button type="submit" class="btn btn-primary">שמירה</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- מודאל שליחת וואטסאפ (מהטבלה הראשית - כל התבניות, לא מסונן) -->
+  <div id="waOverlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>שליחת הודעת וואטסאפ</h2>
+        <button class="icon-x" id="closeWaModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>נמענים נבחרים</label>
+          <div class="recipients-list" id="recipientsList"></div>
+        </div>
+        <div class="field">
+          <label>בחירת תבנית מאושרת</label>
+          <div class="template-choice" id="templateChoice"></div>
+        </div>
+        <div id="waMsg" class="admin-msg"></div>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" id="cancelWaBtn" class="btn btn-plain">ביטול</button>
+        <button type="button" id="sendWaBtn" class="btn btn-wa" style="opacity:1;cursor:pointer">שליחה</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- מודאל סקטור - נפתח בלחיצה על אחד משלושת הבאנרים למעלה -->
+  <div id="sectorOverlay" class="overlay hidden">
+    <div class="modal">
+      <div class="sector-modal-head" id="sectorHead">
+        <div>
+          <h2 id="sectorTitle"></h2>
+          <div class="sub" id="sectorSub"></div>
+          <div class="sector-countdown hidden" id="sectorCountdown">
+            <div class="u"><span class="n" id="secCdDays">--</span><span class="l">ימים</span></div>
+            <div class="u"><span class="n" id="secCdHours">--</span><span class="l">שעות</span></div>
+            <div class="u"><span class="n" id="secCdMins">--</span><span class="l">דקות</span></div>
+          </div>
+        </div>
+        <button class="icon-x" id="closeSectorModalBtn">✕</button>
+      </div>
+      <div class="sector-modal-body">
+        <div class="sector-actions">
+          <button class="btn btn-info" id="sectorInfoBtn">ℹ️ מידע על הכנס</button>
+          <button class="btn btn-wa" id="sectorWaBtn" disabled>💬 שליחת וואטסאפ (<span id="sectorSelCount">0</span>)</button>
+        </div>
+
+        <div class="mini-wrap">
+          <table class="mini-table">
+            <thead>
+              <tr><th><input type="checkbox" id="sectorSelectAll"></th><th>חברה</th><th>איש קשר</th><th>נייד</th><th>סטטוס</th></tr>
+            </thead>
+            <tbody id="sectorTableBody"></tbody>
+          </table>
+        </div>
+
+        <div class="field">
+          <label>תבניות וואטסאפ של הסקטור הזה בלבד</label>
+          <div class="template-choice" id="sectorTemplates"></div>
+        </div>
+        <div id="sectorWaMsg" class="admin-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <?!= include('JavaScript'); ?>
+</body>
+</html>
