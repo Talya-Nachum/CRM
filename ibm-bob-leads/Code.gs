@@ -13,13 +13,13 @@
 
 var CLIENT_NAME = 'IBM BOB';
 
-// כל סקטור = מסלול מקביל בכנס, עם תאריך/מידע/תבניות משלו. TODO(client):
-// למלא date (ISO, לשעון הספירה) ו-infoUrl (לינק למידע על הכנס של הסקטור
-// הזה) לכל אחד מהשלושה כשיהיו מוכנים - אפשר להשאיר ריק בינתיים.
+// כל סקטור = מסלול מקביל בכנס, עם תאריך/מידע/תבניות משלו.
+// שעת health הונחה כ-09:00 (כמו שני הסקטורים האחרים) - לא אושרה במפורש,
+// לעדכן אם שונה.
 var SECTORS = [
-  { key: 'capital', label: 'שוק ההון', icon: '📈', color: 'capital', date: '', infoUrl: '' },
-  { key: 'energy', label: 'אנרגיה', icon: '⚡', color: 'energy', date: '', infoUrl: '' },
-  { key: 'health', label: 'בריאות', icon: '🏥', color: 'health', date: '', infoUrl: '' }
+  { key: 'capital', label: 'שוק ההון', icon: '📈', color: 'capital', date: '2026-09-09T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_finance_fy26/' },
+  { key: 'energy', label: 'אנרגיה', icon: '⚡', color: 'energy', date: '2026-09-16T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_energy_fy26/' },
+  { key: 'health', label: 'בריאות', icon: '🏥', color: 'health', date: '2026-09-15T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_healthcare_fy26/' }
 ];
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---

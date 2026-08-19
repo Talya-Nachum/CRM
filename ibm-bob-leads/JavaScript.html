@@ -92,20 +92,29 @@
     if (!s) { strip.classList.add('hidden'); return; }
 
     strip.classList.remove('hidden');
-    document.getElementById('stripTitle').textContent = s.icon + ' ' + s.label + (s.date ? ' — ' + formatSectorDate_(s.date) : '');
+    document.getElementById('stripTitle').textContent = s.icon + ' ' + s.label;
 
     var cdBlock = document.getElementById('sectorCountdown');
+    var dateBadge = document.getElementById('sectorDateBadge');
     if (s.date) {
       cdBlock.classList.remove('hidden');
+      dateBadge.classList.remove('hidden');
+      document.getElementById('sectorDateText').textContent = formatSectorDateBadge_(s.date);
       startStripCountdown_(s.date);
     } else {
       cdBlock.classList.add('hidden');
+      dateBadge.classList.add('hidden');
     }
   }
 
-  function formatSectorDate_(iso) {
+  function formatSectorDateBadge_(iso) {
     try {
-      return new Date(iso).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      var d = new Date(iso);
+      var weekday = d.toLocaleDateString('he-IL', { weekday: 'short' });
+      var day = String(d.getDate()).padStart(2, '0');
+      var month = String(d.getMonth() + 1).padStart(2, '0');
+      var time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+      return weekday + ' ' + day + '.' + month + '.' + d.getFullYear() + ' · ' + time;
     } catch (e) {
       return iso;
     }

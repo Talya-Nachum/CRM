@@ -93,7 +93,16 @@
     font-variant-numeric: tabular-nums; display: block;
   }
   .sector-countdown .u .l { font-size: 10px; color: var(--muted); }
-  .btn-info { background: var(--gold-100); color: var(--gold-700); border: 1px solid var(--gold-600); margin-inline-start: auto; }
+
+  .strip-right { display: flex; align-items: center; gap: 12px; margin-inline-start: auto; }
+  .date-badge {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--navy-800); color: #fff;
+    padding: 9px 16px; border-radius: 9px;
+    font-size: 14px; font-weight: 700; white-space: nowrap;
+  }
+  .date-badge .cal-ic { font-size: 15px; }
+  .btn-info { background: var(--gold-100); color: var(--gold-700); border: 1px solid var(--gold-600); }
 
   /* --- תגית סקטור בטבלה הראשית --- */
   .sector-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; }
