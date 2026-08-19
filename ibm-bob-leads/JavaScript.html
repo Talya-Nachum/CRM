@@ -4,7 +4,7 @@
   var allTemplates = [];
   var allSectors = [];
   var selectedIds = new Set();
-  var activeSectorKey = ''; // '' = טאב "הכל"
+  var activeSectorKey = ''; // ריק רק עד שה-config נטען; אז מוגדר לסקטור הראשון כברירת מחדל
   var stripCountdownTimer = null;
   var statusColorMap = {};
   var palette = ['#64748b', '#b8791f', '#0f7a6b', '#2f4a7a', '#7a4fb0', '#b6423a', '#0891b2', '#be185d'];
@@ -436,11 +436,8 @@
       .map(function (l) { return l.contactName || l.company || l.phone; });
     list.innerHTML = names.map(function (n) { return '<span>' + escapeHtml(n) + '</span>'; }).join('');
 
-    // בטאב "הכל" (activeSectorKey ריק) מוצעות כל התבניות; בטאב סקטור ספציפי
-    // רק התבניות שמתויגות אליו (או תבניות כלליות בלי תיוג סקטור).
-    var templates = activeSectorKey
-      ? allTemplates.filter(function (t) { return !t.sector || t.sector === activeSectorKey; })
-      : allTemplates;
+    // מוצעות רק התבניות שמתויגות לסקטור הפעיל (או תבניות כלליות בלי תיוג סקטור).
+    var templates = allTemplates.filter(function (t) { return !t.sector || t.sector === activeSectorKey; });
     renderTemplateChoice(document.getElementById('templateChoice'), templates);
 
     document.getElementById('waMsg').textContent = '';
