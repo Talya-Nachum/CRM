@@ -33,18 +33,30 @@
         <span class="tag">ניהול לידים · בשיתוף מיטוב מכירות</span>
       </div>
     </div>
-
-    <div class="sector-banners" id="sectorBanners"></div>
   </header>
 
   <main>
+    <!-- טאבים - "הכל" + טאב לכל סקטור. לחיצה משנה בפועל את מה שמוצג
+         בעמוד (מסננת את הטבלה), בלי שום חלון קופץ. -->
+    <div class="sector-tabs" id="sectorTabs">
+      <button class="tab-btn active" data-sector="">הכל</button>
+    </div>
+
+    <!-- פס מידע שמופיע רק כשטאב סקטור ספציפי פעיל (לא "הכל") -->
+    <div class="sector-strip hidden" id="sectorStrip">
+      <div class="strip-title" id="stripTitle"></div>
+      <div class="sector-countdown hidden" id="sectorCountdown">
+        <div class="u"><span class="n" id="secCdDays">--</span><span class="l">ימים</span></div>
+        <div class="u"><span class="n" id="secCdHours">--</span><span class="l">שעות</span></div>
+        <div class="u"><span class="n" id="secCdMins">--</span><span class="l">דקות</span></div>
+      </div>
+      <button class="btn btn-info" id="sectorInfoBtn">ℹ️ מידע על הכנס</button>
+    </div>
+
     <div class="toolbar">
       <input id="searchInput" class="search-input" type="text" placeholder="חיפוש לפי שם, חברה, טלפון או אימייל...">
       <select id="statusFilter" class="status-filter">
         <option value="">כל הסטטוסים</option>
-      </select>
-      <select id="sectorFilter" class="status-filter">
-        <option value="">כל הסקטורים</option>
       </select>
       <button class="btn btn-wa" id="waBtn" disabled>💬 שליחת וואטסאפ (<span id="selCount">0</span>)</button>
       <button class="btn btn-primary" id="addLeadBtn">+ הוספת ליד</button>
@@ -160,7 +172,7 @@
     </div>
   </div>
 
-  <!-- מודאל שליחת וואטסאפ (מהטבלה הראשית - כל התבניות, לא מסונן) -->
+  <!-- מודאל שליחת וואטסאפ - התבניות מסוננות לפי הטאב הפעיל (או כולן בטאב "הכל") -->
   <div id="waOverlay" class="overlay hidden">
     <div class="modal">
       <div class="modal-head">
@@ -182,45 +194,6 @@
         <button type="button" id="cancelWaBtn" class="btn btn-plain">ביטול</button>
         <button type="button" id="sendWaBtn" class="btn btn-wa" style="opacity:1;cursor:pointer">שליחה</button>
       </footer>
-    </div>
-  </div>
-
-  <!-- מודאל סקטור - נפתח בלחיצה על אחד משלושת הבאנרים למעלה -->
-  <div id="sectorOverlay" class="overlay hidden">
-    <div class="modal">
-      <div class="sector-modal-head" id="sectorHead">
-        <div>
-          <h2 id="sectorTitle"></h2>
-          <div class="sub" id="sectorSub"></div>
-          <div class="sector-countdown hidden" id="sectorCountdown">
-            <div class="u"><span class="n" id="secCdDays">--</span><span class="l">ימים</span></div>
-            <div class="u"><span class="n" id="secCdHours">--</span><span class="l">שעות</span></div>
-            <div class="u"><span class="n" id="secCdMins">--</span><span class="l">דקות</span></div>
-          </div>
-        </div>
-        <button class="icon-x" id="closeSectorModalBtn">✕</button>
-      </div>
-      <div class="sector-modal-body">
-        <div class="sector-actions">
-          <button class="btn btn-info" id="sectorInfoBtn">ℹ️ מידע על הכנס</button>
-          <button class="btn btn-wa" id="sectorWaBtn" disabled>💬 שליחת וואטסאפ (<span id="sectorSelCount">0</span>)</button>
-        </div>
-
-        <div class="mini-wrap">
-          <table class="mini-table">
-            <thead>
-              <tr><th><input type="checkbox" id="sectorSelectAll"></th><th>חברה</th><th>איש קשר</th><th>נייד</th><th>סטטוס</th></tr>
-            </thead>
-            <tbody id="sectorTableBody"></tbody>
-          </table>
-        </div>
-
-        <div class="field">
-          <label>תבניות וואטסאפ של הסקטור הזה בלבד</label>
-          <div class="template-choice" id="sectorTemplates"></div>
-        </div>
-        <div id="sectorWaMsg" class="admin-msg"></div>
-      </div>
     </div>
   </div>
 

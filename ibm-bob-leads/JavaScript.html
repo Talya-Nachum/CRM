@@ -4,9 +4,8 @@
   var allTemplates = [];
   var allSectors = [];
   var selectedIds = new Set();
-  var sectorSelectedIds = new Set();
-  var currentSectorKey = null;
-  var sectorCountdownTimer = null;
+  var activeSectorKey = ''; // '' = טאב "הכל"
+  var stripCountdownTimer = null;
   var statusColorMap = {};
   var palette = ['#64748b', '#b8791f', '#0f7a6b', '#2f4a7a', '#7a4fb0', '#b6423a', '#0891b2', '#be185d'];
 
@@ -27,7 +26,6 @@
     document.getElementById('deleteLeadBtn').addEventListener('click', onDeleteLead);
     document.getElementById('searchInput').addEventListener('input', renderTable);
     document.getElementById('statusFilter').addEventListener('change', renderTable);
-    document.getElementById('sectorFilter').addEventListener('change', renderTable);
     document.getElementById('selectAll').addEventListener('change', onSelectAll);
 
     document.getElementById('waBtn').addEventListener('click', openWaModal);
@@ -35,13 +33,10 @@
     document.getElementById('cancelWaBtn').addEventListener('click', closeWaModal);
     document.getElementById('sendWaBtn').addEventListener('click', onSendWhatsApp);
 
-    document.getElementById('closeSectorModalBtn').addEventListener('click', closeSectorModal);
-    document.getElementById('sectorSelectAll').addEventListener('change', onSectorSelectAll);
     document.getElementById('sectorInfoBtn').addEventListener('click', onSectorInfoClick);
-    document.getElementById('sectorWaBtn').addEventListener('click', onSendSectorWhatsApp);
   });
 
-  /* ---------- config (header: logo + 3 sector banners) ---------- */
+  /* ---------- config (header logo + tabs) ---------- */
 
   function syncHeaderHeight() {
     var header = document.querySelector('header.hub');
@@ -52,8 +47,8 @@
     google.script.run.withSuccessHandler(function (cfg) {
       document.getElementById('clientNameLabel').textContent = cfg.clientName;
       allSectors = cfg.sectors || [];
-      renderSectorBanners();
-      populateSectorSelects();
+      renderSectorTabs();
+      populateSectorSelect();
       syncHeaderHeight();
     }).withFailureHandler(showError).getConfig();
   }
@@ -62,28 +57,78 @@
     return allSectors.filter(function (s) { return s.key === key; })[0] || null;
   }
 
-  function renderSectorBanners() {
-    var wrap = document.getElementById('sectorBanners');
-    wrap.innerHTML = allSectors.map(function (s) {
+  /* ---------- טאבים: "הכל" + טאב לכל סקטור ---------- */
+
+  function renderSectorTabs() {
+    var wrap = document.getElementById('sectorTabs');
+    var tabs = ['<button class="tab-btn' + (activeSectorKey === '' ? ' active' : '') + '" data-sector="">הכל</button>'];
+    allSectors.forEach(function (s) {
       var count = allLeads.filter(function (l) { return l.sector === s.key; }).length;
-      return '<button class="sector-btn ' + s.color + '" data-sector="' + s.key + '">' +
-        '<span class="sec-n">' + count + '</span><span class="sec-u">' + s.icon + ' ' + escapeHtml(s.label) + '</span>' +
-        '</button>';
-    }).join('');
-    wrap.querySelectorAll('.sector-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () { openSectorModal(btn.dataset.sector); });
+      var cls = 'tab-btn ' + s.color + (activeSectorKey === s.key ? ' active' : '');
+      tabs.push('<button class="' + cls + '" data-sector="' + s.key + '">' + s.icon + ' ' + escapeHtml(s.label) + ' (' + count + ')</button>');
+    });
+    wrap.innerHTML = tabs.join('');
+    wrap.querySelectorAll('.tab-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { setActiveSector(btn.dataset.sector); });
     });
   }
 
-  function populateSectorSelects() {
-    var filter = document.getElementById('sectorFilter');
-    filter.innerHTML = '<option value="">כל הסקטורים</option>';
-    allSectors.forEach(function (s) {
-      var opt = document.createElement('option');
-      opt.value = s.key; opt.textContent = s.icon + ' ' + s.label;
-      filter.appendChild(opt);
-    });
+  function setActiveSector(key) {
+    activeSectorKey = key;
+    renderSectorTabs();
+    updateSectorStrip();
+    renderTable();
+  }
 
+  function updateSectorStrip() {
+    var strip = document.getElementById('sectorStrip');
+    if (stripCountdownTimer) { clearInterval(stripCountdownTimer); stripCountdownTimer = null; }
+
+    if (!activeSectorKey) {
+      strip.classList.add('hidden');
+      return;
+    }
+    var s = sectorByKey(activeSectorKey);
+    if (!s) { strip.classList.add('hidden'); return; }
+
+    strip.classList.remove('hidden');
+    document.getElementById('stripTitle').textContent = s.icon + ' ' + s.label + (s.date ? ' — ' + formatSectorDate_(s.date) : '');
+
+    var cdBlock = document.getElementById('sectorCountdown');
+    if (s.date) {
+      cdBlock.classList.remove('hidden');
+      startStripCountdown_(s.date);
+    } else {
+      cdBlock.classList.add('hidden');
+    }
+  }
+
+  function formatSectorDate_(iso) {
+    try {
+      return new Date(iso).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    } catch (e) {
+      return iso;
+    }
+  }
+
+  function startStripCountdown_(targetIso) {
+    function tick() {
+      var diff = Math.max(0, new Date(targetIso).getTime() - Date.now());
+      document.getElementById('secCdDays').textContent = Math.floor(diff / 86400000);
+      document.getElementById('secCdHours').textContent = String(Math.floor((diff % 86400000) / 3600000)).padStart(2, '0');
+      document.getElementById('secCdMins').textContent = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
+    }
+    tick();
+    stripCountdownTimer = setInterval(tick, 30000);
+  }
+
+  function onSectorInfoClick() {
+    var s = sectorByKey(activeSectorKey);
+    if (s && s.infoUrl) window.open(s.infoUrl, '_blank');
+    else showToast('דף המידע לסקטור הזה עדיין לא חובר', true);
+  }
+
+  function populateSectorSelect() {
     var formSelect = document.getElementById('f_sector');
     formSelect.innerHTML = '<option value="">לא משויך</option>';
     allSectors.forEach(function (s) {
@@ -99,7 +144,7 @@
     google.script.run.withSuccessHandler(function (leads) {
       allLeads = leads;
       renderTable();
-      renderSectorBanners();
+      renderSectorTabs();
     }).withFailureHandler(showError).getLeads();
   }
 
@@ -156,11 +201,10 @@
   function filteredLeads() {
     var search = document.getElementById('searchInput').value.trim().toLowerCase();
     var statusFilter = document.getElementById('statusFilter').value;
-    var sectorFilter = document.getElementById('sectorFilter').value;
 
     return allLeads.filter(function (lead) {
       var matchesStatus = !statusFilter || lead.status === statusFilter;
-      var matchesSector = !sectorFilter || lead.sector === sectorFilter;
+      var matchesSector = !activeSectorKey || lead.sector === activeSectorKey;
       var haystack = [lead.company, lead.contactName, lead.phone, lead.email, lead.notes]
         .join(' ').toLowerCase();
       var matchesSearch = !search || haystack.indexOf(search) !== -1;
@@ -177,7 +221,7 @@
   /* ---------- export to excel ---------- */
 
   function onExportExcel() {
-    // מייצא בדיוק את מה שמסונן על המסך כרגע (חיפוש/סטטוס/סקטור).
+    // מייצא בדיוק את מה שמסונן על המסך כרגע (חיפוש/סטטוס/טאב סקטור פעיל).
     var leads = filteredLeads();
     var headers = ['סקטור', 'מקור', 'שם חברה', 'ח.פ', 'איש קשר', 'תפקיד', 'נייד', 'אימייל', 'הערות', 'סטטוס', 'תשובת וואטסאפ', 'תאריך תשובה', 'תאריך יצירה'];
     var rows = leads.map(function (lead) {
@@ -295,6 +339,8 @@
     document.getElementById('leadId').value = '';
     document.getElementById('deleteLeadBtn').classList.add('hidden');
     if (allStatuses.length) document.getElementById('f_status').value = allStatuses[0];
+    // אם הוספה נעשית מתוך טאב סקטור ספציפי - משייכים את הליד החדש אליו אוטומטית.
+    document.getElementById('f_sector').value = activeSectorKey || '';
     document.getElementById('leadOverlay').classList.remove('hidden');
   }
 
@@ -368,7 +414,7 @@
     }).withFailureHandler(showError).deleteLead(id);
   }
 
-  /* ---------- whatsapp modal (מהטבלה הראשית - כל התבניות) ---------- */
+  /* ---------- whatsapp modal - התבניות מסוננות לפי הטאב הפעיל ---------- */
 
   function openWaModal() {
     var list = document.getElementById('recipientsList');
@@ -377,7 +423,12 @@
       .map(function (l) { return l.contactName || l.company || l.phone; });
     list.innerHTML = names.map(function (n) { return '<span>' + escapeHtml(n) + '</span>'; }).join('');
 
-    renderTemplateChoice(document.getElementById('templateChoice'), allTemplates);
+    // בטאב "הכל" (activeSectorKey ריק) מוצעות כל התבניות; בטאב סקטור ספציפי
+    // רק התבניות שמתויגות אליו (או תבניות כלליות בלי תיוג סקטור).
+    var templates = activeSectorKey
+      ? allTemplates.filter(function (t) { return !t.sector || t.sector === activeSectorKey; })
+      : allTemplates;
+    renderTemplateChoice(document.getElementById('templateChoice'), templates);
 
     document.getElementById('waMsg').textContent = '';
     document.getElementById('waOverlay').classList.remove('hidden');
@@ -396,7 +447,7 @@
     templates.forEach(function (t, i) {
       var label = document.createElement('label');
       label.className = 'tpl-option' + (i === 0 ? ' checked' : '');
-      label.innerHTML = '<input type="radio" name="' + container.id + 'Radio" value="' + escapeHtml(t.templateId) + '" ' + (i === 0 ? 'checked' : '') + '> ' + escapeHtml(t.name);
+      label.innerHTML = '<input type="radio" name="tpl" value="' + escapeHtml(t.templateId) + '" ' + (i === 0 ? 'checked' : '') + '> ' + escapeHtml(t.name);
       label.querySelector('input').addEventListener('change', function () {
         container.querySelectorAll('.tpl-option').forEach(function (el) { el.classList.remove('checked'); });
         label.classList.add('checked');
@@ -406,7 +457,7 @@
   }
 
   function onSendWhatsApp() {
-    var selected = document.querySelector('input[name="templateChoiceRadio"]:checked');
+    var selected = document.querySelector('input[name="tpl"]:checked');
     var msg = document.getElementById('waMsg');
     if (!selected) { msg.textContent = 'יש לבחור תבנית'; return; }
 
@@ -429,141 +480,6 @@
         msg.textContent = err.message || 'שגיאה בשליחה';
       })
       .sendWhatsApp([...selectedIds], selected.value);
-  }
-
-  /* ---------- מודאל סקטור (נפתח מהבאנר) ---------- */
-
-  function openSectorModal(key) {
-    var s = sectorByKey(key);
-    if (!s) return;
-    currentSectorKey = key;
-    sectorSelectedIds = new Set();
-
-    var head = document.getElementById('sectorHead');
-    head.className = 'sector-modal-head ' + s.color;
-    document.getElementById('sectorTitle').textContent = s.icon + ' ' + s.label + ' — IBM BOB';
-    document.getElementById('sectorSub').textContent = s.date ? formatSectorDate_(s.date) : 'התאריך עוד לא נקבע';
-
-    if (sectorCountdownTimer) clearInterval(sectorCountdownTimer);
-    var cdBlock = document.getElementById('sectorCountdown');
-    if (s.date) {
-      cdBlock.classList.remove('hidden');
-      startSectorCountdown_(s.date);
-    } else {
-      cdBlock.classList.add('hidden');
-    }
-
-    renderSectorTable();
-    renderTemplateChoice(document.getElementById('sectorTemplates'), allTemplates.filter(function (t) {
-      return !t.sector || t.sector === key;
-    }));
-    document.getElementById('sectorSelectAll').checked = false;
-    document.getElementById('sectorWaMsg').textContent = '';
-    updateSectorSelectionUi();
-
-    document.getElementById('sectorOverlay').classList.remove('hidden');
-  }
-
-  function formatSectorDate_(iso) {
-    try {
-      var d = new Date(iso);
-      return d.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    } catch (e) {
-      return iso;
-    }
-  }
-
-  function startSectorCountdown_(targetIso) {
-    function tick() {
-      var target = new Date(targetIso).getTime();
-      var diff = Math.max(0, target - Date.now());
-      document.getElementById('secCdDays').textContent = Math.floor(diff / 86400000);
-      document.getElementById('secCdHours').textContent = String(Math.floor((diff % 86400000) / 3600000)).padStart(2, '0');
-      document.getElementById('secCdMins').textContent = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
-    }
-    tick();
-    sectorCountdownTimer = setInterval(tick, 30000);
-  }
-
-  function closeSectorModal() {
-    document.getElementById('sectorOverlay').classList.add('hidden');
-    if (sectorCountdownTimer) { clearInterval(sectorCountdownTimer); sectorCountdownTimer = null; }
-  }
-
-  function sectorLeads_() {
-    return allLeads.filter(function (l) { return l.sector === currentSectorKey; });
-  }
-
-  function renderSectorTable() {
-    var body = document.getElementById('sectorTableBody');
-    var leads = sectorLeads_();
-    if (!leads.length) {
-      body.innerHTML = '<tr><td colspan="5" class="empty-row">אין לידים בסקטור זה עדיין</td></tr>';
-      return;
-    }
-    body.innerHTML = leads.map(function (l) {
-      var checked = sectorSelectedIds.has(l.id) ? 'checked' : '';
-      return '<tr>' +
-        '<td><input type="checkbox" class="sector-row-check" data-id="' + l.id + '" ' + checked + '></td>' +
-        '<td>' + escapeHtml(l.company) + '</td>' +
-        '<td>' + escapeHtml(l.contactName) + '</td>' +
-        '<td>' + escapeHtml(l.phone) + '</td>' +
-        '<td><span class="badge" style="background:' + colorForStatus(l.status) + '">' + escapeHtml(l.status) + '</span></td>' +
-        '</tr>';
-    }).join('');
-    body.querySelectorAll('.sector-row-check').forEach(function (cb) {
-      cb.addEventListener('change', function () {
-        if (cb.checked) sectorSelectedIds.add(cb.dataset.id); else sectorSelectedIds.delete(cb.dataset.id);
-        updateSectorSelectionUi();
-      });
-    });
-  }
-
-  function onSectorSelectAll(evt) {
-    var checked = evt.target.checked;
-    sectorLeads_().forEach(function (l) {
-      if (checked) sectorSelectedIds.add(l.id); else sectorSelectedIds.delete(l.id);
-    });
-    renderSectorTable();
-    updateSectorSelectionUi();
-  }
-
-  function updateSectorSelectionUi() {
-    document.getElementById('sectorSelCount').textContent = sectorSelectedIds.size;
-    document.getElementById('sectorWaBtn').disabled = sectorSelectedIds.size === 0;
-  }
-
-  function onSectorInfoClick() {
-    var s = sectorByKey(currentSectorKey);
-    if (s && s.infoUrl) window.open(s.infoUrl, '_blank');
-    else showToast('דף המידע לסקטור הזה עדיין לא חובר', true);
-  }
-
-  function onSendSectorWhatsApp() {
-    var selected = document.querySelector('input[name="sectorTemplatesRadio"]:checked');
-    var msg = document.getElementById('sectorWaMsg');
-    if (!selected) { msg.textContent = 'יש לבחור תבנית'; return; }
-
-    var btn = document.getElementById('sectorWaBtn');
-    btn.disabled = true;
-    msg.style.color = '';
-    msg.textContent = 'שולח...';
-
-    google.script.run
-      .withSuccessHandler(function (result) {
-        msg.textContent = '';
-        loadLeads();
-        renderSectorTable();
-        sectorSelectedIds.clear();
-        updateSectorSelectionUi();
-        showToast('נשלח ל-' + result.sent + ' נמענים' + (result.skipped.length ? (', דילוג על ' + result.skipped.length + ' ללא טלפון') : ''));
-      })
-      .withFailureHandler(function (err) {
-        btn.disabled = false;
-        msg.style.color = '#a3312a';
-        msg.textContent = err.message || 'שגיאה בשליחה';
-      })
-      .sendWhatsApp([...sectorSelectedIds], selected.value);
   }
 
   /* ---------- ui helpers ---------- */
