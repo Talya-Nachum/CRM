@@ -14,8 +14,7 @@
 var CLIENT_NAME = 'IBM BOB';
 
 // כל סקטור = מסלול מקביל בכנס, עם תאריך/מידע/תבניות משלו.
-// שעת health הונחה כ-09:00 (כמו שני הסקטורים האחרים) - לא אושרה במפורש,
-// לעדכן אם שונה.
+// כל שלושת המסלולים 09:00-13:00 (שעת הסיום לא מוצגת בדשבורד, רק ההתחלה).
 var SECTORS = [
   { key: 'capital', label: 'שוק ההון', icon: '📈', color: 'capital', date: '2026-09-09T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_finance_fy26/' },
   { key: 'energy', label: 'אנרגיה', icon: '⚡', color: 'energy', date: '2026-09-16T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_energy_fy26/' },
