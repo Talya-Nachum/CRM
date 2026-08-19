@@ -73,17 +73,16 @@
     font-size: 19px; font-weight: 700; border: 2px solid var(--border);
     background: var(--surface); color: var(--muted);
   }
-  /* כל טאב צבוע בצבע הסקטור שלו תמיד (לא רק כשפעיל) - כדי שיהיה ברור
-     מיד איזה באנר שייך לאיזה מסלול ולמנוע בלבול/טעויות בין השלושה. */
-  .tab-btn.capital { border-color: var(--sec-capital); color: var(--sec-capital); }
-  .tab-btn.energy { border-color: var(--sec-energy); color: var(--sec-energy); }
-  .tab-btn.health { border-color: var(--sec-health); color: var(--sec-health); }
-  .tab-btn.capital:hover { background: color-mix(in srgb, var(--sec-capital) 12%, var(--surface)); }
-  .tab-btn.energy:hover { background: color-mix(in srgb, var(--sec-energy) 12%, var(--surface)); }
-  .tab-btn.health:hover { background: color-mix(in srgb, var(--sec-health) 12%, var(--surface)); }
-  .tab-btn.active.capital { background: var(--sec-capital); color: #fff; border-color: var(--sec-capital); box-shadow: 0 6px 16px -4px rgba(47,95,168,0.5); }
-  .tab-btn.active.energy { background: var(--sec-energy); color: #fff; border-color: var(--sec-energy); box-shadow: 0 6px 16px -4px rgba(217,130,43,0.5); }
-  .tab-btn.active.health { background: var(--sec-health); color: #fff; border-color: var(--sec-health); box-shadow: 0 6px 16px -4px rgba(21,154,138,0.5); }
+  /* כל טאב תמיד מלא בצבע הסקטור שלו (אותו סגנון בדיוק לשלושתם - רק הצבע
+     משתנה) - כדי שיהיה ברור מיד איזה באנר שייך לאיזה מסלול. הפעיל מודגש
+     ע"י אטימות מלאה + צל, לא ע"י שינוי סגנון (לא מסגרת מול מילוי). */
+  .tab-btn.capital { background: var(--sec-capital); border-color: var(--sec-capital); color: #fff; opacity: 0.55; }
+  .tab-btn.energy { background: var(--sec-energy); border-color: var(--sec-energy); color: #fff; opacity: 0.55; }
+  .tab-btn.health { background: var(--sec-health); border-color: var(--sec-health); color: #fff; opacity: 0.55; }
+  .tab-btn.capital:hover, .tab-btn.energy:hover, .tab-btn.health:hover { opacity: 0.8; }
+  .tab-btn.active.capital { opacity: 1; box-shadow: 0 6px 16px -4px rgba(47,95,168,0.5); }
+  .tab-btn.active.energy { opacity: 1; box-shadow: 0 6px 16px -4px rgba(217,130,43,0.5); }
+  .tab-btn.active.health { opacity: 1; box-shadow: 0 6px 16px -4px rgba(21,154,138,0.5); }
 
   /* --- פס מידע לסקטור הפעיל (תאריך/שעון ספירה/מידע) --- */
   .sector-strip {
