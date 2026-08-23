@@ -44,7 +44,13 @@ const INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp'
 // (מה שהיה מפסיק את הפרויקט הזה מלקבל תשובות), הכתובת אצל אינפוריו
 // נשארת מצביעה לכאן, וכל webhook נכנס גם מועבר הלאה (relay) לפרויקט
 // השני. ריק = לא מעבירים כלום (ברירת המחדל המקורית).
-const INFORU_RELAY_URL_ = 'https://script.google.com/macros/s/AKfycbx1uYAKfvDEbsLF3Cbyx7Lprj-TZNa8Ex-XP94GmJ38pB9ye4VNR-Xa5olIYha6v8jw/exec';
+// כל הפרויקטים כאן חולקים אותו חשבון/מספר וואטסאפ עם המערכת הראשית -
+// לאינפוריו יש רק כתובת יעד אחת אפשרית, אז מעבירים עותק גולמי מכאן
+// הלאה לכל אחד מהם (ר' relayInforuWebhook_ למטה).
+const INFORU_RELAY_URLS_ = [
+  'https://script.google.com/macros/s/AKfycbx1uYAKfvDEbsLF3Cbyx7Lprj-TZNa8Ex-XP94GmJ38pB9ye4VNR-Xa5olIYha6v8jw/exec', // ארז קדם אקדמיה
+  'https://script.google.com/macros/s/AKfycbyPIEAbTbwoxLbjtKs_V3czxUs8C6Ia80dZdLKmtNb2eElCtNNXSidx8otCdjiCyllJ/exec'  // IBM Bob
+];
 const DEFAULT_TEMPLATE_ID = '267627';
 
 const PHONE_HEADER = 'טלפון נייד';
@@ -869,25 +875,27 @@ function doPost(e) {
 }
 
 /**
- * מעבירה עותק גולמי של webhook נכנס מאינפוריו לפרויקט Apps Script נפרד
- * שמשתמש באותו חשבון/מספר וואטסאפ (ר' INFORU_RELAY_URL_ למעלה). כישלון
+ * מעבירה עותק גולמי של webhook נכנס מאינפוריו לכל הפרויקטים הנפרדים
+ * שמשתמשים באותו חשבון/מספר וואטסאפ (ר' INFORU_RELAY_URLS_ למעלה).
+ * כל כתובת מועברת בנפרד - כישלון באחת לא עוצר את ההעברה לאחרות. כישלון
  * בהעברה לא מפיל את הטיפול הרגיל בהודעה כאן (שכבר הסתיים לפני שהפונקציה
  * הזו נקראת) - אבל כן נרשם ל-WebhookLog (קוד תשובה/שגיאה) כדי שיהיה
  * אפשר לדעת בפועל אם ההעברה הצליחה, בלי לנחש.
  */
 function relayInforuWebhook_(logSheet, rawBody) {
-  if (!INFORU_RELAY_URL_) return;
-  try {
-    const res = UrlFetchApp.fetch(INFORU_RELAY_URL_, {
-      method: 'post',
-      contentType: 'application/json',
-      payload: rawBody,
-      muteHttpExceptions: true
-    });
-    logSheet.appendRow([new Date(), 'RELAY: קוד תשובה ' + res.getResponseCode() + ' | ' + res.getContentText().slice(0, 300)]);
-  } catch (err) {
-    logSheet.appendRow([new Date(), 'RELAY ERROR: ' + err.message]);
-  }
+  INFORU_RELAY_URLS_.forEach(function (url) {
+    try {
+      const res = UrlFetchApp.fetch(url, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: rawBody,
+        muteHttpExceptions: true
+      });
+      logSheet.appendRow([new Date(), 'RELAY (' + url.slice(-12) + '): קוד תשובה ' + res.getResponseCode() + ' | ' + res.getContentText().slice(0, 300)]);
+    } catch (err) {
+      logSheet.appendRow([new Date(), 'RELAY ERROR (' + url.slice(-12) + '): ' + err.message]);
+    }
+  });
 }
 
 /**
