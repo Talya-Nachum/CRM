@@ -19,7 +19,8 @@ Mituv builds a separate Google Sheets + Apps Script "leads page" for individual 
    - She is not technical and gets confused by jargon in Google's English UI — give her the exact Hebrew label she'll see (e.g. "הגדרות הפרויקט" not "Project Settings").
    - Sending files for her to download does not work well — double-clicking an `.html` file opens it as a rendered (blank-looking) page, not as text, and this has caused repeated confusion. **Paste full file contents directly into chat as code blocks** she can select and copy from — this is the delivery method that actually worked, prefer it over file attachments for code she needs to paste into the Apps Script editor.
    - Spell out the difference between "New deployment" (creates a new URL) and "Manage deployments → pencil → New version" (updates the existing URL) every time you mention redeploying — she has hit the stale-URL trap before.
-6. **Commit and push the new client folder** to the assigned branch once she's approved the working result, same as any other change in this repo.
+6. **If the project shares the Inforu account with the main CRM, get the WhatsApp-reply relay wired immediately** — as soon as the first `/exec` URL exists, tell her to ask the main CRM's Claude session to add it as a relay destination (BUILD-GUIDE.md §"חיבור ה-Webhook..."). Don't wait for her to discover it's missing by testing a reply and finding no `WebhookLog` tab at all — this happened for real with IBM BOB (weeks of silent non-delivery) and is now a required step at deploy time, not a debugging fallback.
+7. **Commit and push the new client folder** to the assigned branch once she's approved the working result, same as any other change in this repo.
 
 ## Fixing or extending an existing client page
 
