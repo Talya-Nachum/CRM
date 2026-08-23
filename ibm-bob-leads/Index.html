@@ -201,6 +201,37 @@
     </div>
   </div>
 
+  <!-- מודאל שיחת פרלה - תמלול כבועות דיבור, סטטוס/תגית/סיכום/הקלטה -->
+  <div id="pearlOverlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h2>🤖 שיחת פרלה — <span id="pearlLeadName"></span></h2>
+        <button class="icon-x" id="closePearlModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="pearl-meta">
+          <span class="badge" id="pearlStatusBadge"></span>
+          <span class="pearl-meta-item" id="pearlTagItem"></span>
+          <span class="pearl-meta-item" id="pearlDateItem"></span>
+          <span class="pearl-meta-item" id="pearlDurationItem"></span>
+          <span class="pearl-meta-item" id="pearlSentimentItem"></span>
+        </div>
+        <audio controls id="pearlAudioPlayer" class="pearl-audio hidden"></audio>
+        <div class="field" id="pearlSummaryWrap">
+          <label>סיכום שיחה</label>
+          <div id="pearlSummaryText"></div>
+        </div>
+        <div class="pearl-transcript-panel">
+          <div class="pearl-transcript-title">☎️ תמלול מלא של השיחה</div>
+          <div class="pearl-bubbles" id="pearlBubbles"></div>
+        </div>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" id="closePearlBtn2" class="btn btn-plain">סגירה</button>
+      </footer>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <?!= include('JavaScript'); ?>

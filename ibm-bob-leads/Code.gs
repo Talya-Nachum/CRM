@@ -15,10 +15,13 @@ var CLIENT_NAME = 'IBM BOB';
 
 // כל סקטור = מסלול מקביל בכנס, עם תאריך/מידע/תבניות משלו.
 // כל שלושת המסלולים 09:00-13:00 (שעת הסיום לא מוצגת בדשבורד, רק ההתחלה).
+// outboundId - מזהה קמפיין החיוג בפרלה (NLPearl) לסקטור הזה. לא משמש
+// לחיוג (זה נשאר פעולה ידנית מהמסך של פרלה) - רק לכלי האבחון debugPearlLead
+// למטה. TODO(client): למלא לכל סקטור כשיהיה זמין.
 var SECTORS = [
-  { key: 'capital', label: 'שוק ההון', icon: '📈', color: 'capital', date: '2026-09-09T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_finance_fy26/' },
-  { key: 'energy', label: 'אנרגיה', icon: '⚡', color: 'energy', date: '2026-09-16T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_energy_fy26/' },
-  { key: 'health', label: 'בריאות', icon: '🏥', color: 'health', date: '2026-09-15T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_healthcare_fy26/' }
+  { key: 'capital', label: 'שוק ההון', icon: '📈', color: 'capital', date: '2026-09-09T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_finance_fy26/', outboundId: '' },
+  { key: 'energy', label: 'אנרגיה', icon: '⚡', color: 'energy', date: '2026-09-16T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_energy_fy26/', outboundId: '' },
+  { key: 'health', label: 'בריאות', icon: '🏥', color: 'health', date: '2026-09-15T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_healthcare_fy26/', outboundId: '' }
 ];
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---
@@ -65,7 +68,17 @@ var LEAD_FIELDS = [
   { key: 'status', label: 'סטטוס' },
   { key: 'lastWhatsAppSentAt', label: 'וואטסאפ נשלח לאחרונה' },
   { key: 'replyText', label: 'תשובת ליד' },
-  { key: 'replyAt', label: 'תאריך תשובה' }
+  { key: 'replyAt', label: 'תאריך תשובה' },
+  // שדות פרלה (NLPearl, חיוג אוטומטי) - מתועדים אוטומטית מ-webhook, לא
+  // דרך טופס הוספה/עריכה. תמיד בסוף הרשימה בכוונה (ר' הערה ב-ensureSheetsLocked_
+  // על migration של עמודות - הוספה באמצע הייתה שוברת גיליונות קיימים).
+  { key: 'pearlTag', label: 'תגית פרלה' },
+  { key: 'pearlSummary', label: 'סיכום שיחה' },
+  { key: 'pearlTranscript', label: 'תמלול שיחה' },
+  { key: 'pearlCallDate', label: 'תאריך שיחה' },
+  { key: 'pearlDuration', label: 'משך שיחה' },
+  { key: 'pearlSentiment', label: 'רגש שיחה' },
+  { key: 'pearlRecording', label: 'הקלטת שיחה' }
 ];
 
 // מיפוי שמות שדות אפשריים שיגיעו מדף הנחיתה (בעברית/אנגלית) לשדות שלנו
@@ -158,6 +171,14 @@ function doPost(e) {
     ensureSheets_();
     var payload = parseIncomingPayload_(e);
     logWebhook_(payload);
+
+    // webhook מפרלה (NLPearl, חיוג אוטומטי) - payload.pearlId קיים תמיד
+    // בבקשות מפרלה, זו הדרך לזהות אותן מול webhooks אחרים שמגיעים לאותו
+    // doPost. נבדק לפני הכל, כי לפרלה יש צורה משלה שלא תואמת לאף ענף אחר.
+    if (payload && payload.pearlId) {
+      handlePearlWebhook_(payload);
+      return jsonResponse_({ ok: true });
+    }
 
     // תשובת ליד נכנסת מאינפוריו (וואטסאפ) מגיעה בצורה שונה לגמרי מליד חדש
     // מדף הנחיתה: { "Data": [ { "Value": "<טלפון>", "Message": "<תשובה>" } ] }
@@ -407,7 +428,10 @@ function updateLead(id, leadData) {
   var now = new Date();
   LEAD_FIELDS.forEach(function (f, i) {
     if (f.key === 'id' || f.key === 'createdAt' || f.key === 'lastWhatsAppSentAt' ||
-        f.key === 'replyText' || f.key === 'replyAt') return;
+        f.key === 'replyText' || f.key === 'replyAt' ||
+        f.key === 'pearlTag' || f.key === 'pearlSummary' || f.key === 'pearlTranscript' ||
+        f.key === 'pearlCallDate' || f.key === 'pearlDuration' || f.key === 'pearlSentiment' ||
+        f.key === 'pearlRecording') return;
     if (f.key === 'updatedAt') {
       sheet.getRange(rowIndex, i + 1).setValue(now);
       return;
@@ -645,6 +669,165 @@ function ensureStatusExists_(status) {
   if (existing.indexOf(status) === -1) {
     sheet.getRange(sheet.getLastRow() + 1, 1).setValue(status);
   }
+}
+
+/* ============================== פרלה (NLPearl - חיוג אוטומטי) ============================== */
+
+/**
+ * מטפלת בכל אירועי ה-webhook שמגיעים מ-NLPearl. לא שולחים לידים לחיוג
+ * מפה בכלל - זה נשאר פעולה ידנית מהמסך של פרלה; כאן רק מתעדים תוצאות.
+ *
+ * שני סוגי אירועים שונים לגמרי:
+ *  - payload.to קיים = אירוע תוצאת שיחה (סיכום/תמלול/תגית/הקלטה). התגית
+ *    (payload.tags) היא המקור האמין ביותר לסטטוס - אם יש תגית היא הופכת
+ *    להיות הסטטוס של הליד ישירות, בדיוק כמו כפתורי וואטסאפ (ר' handleInforuReply_).
+ *  - אין payload.to = אירוע סטטוס-מערכת (בתור/אין מענה/מספר שגוי וכו') לפי
+ *    payload.status (קוד מספרי, ר' pearlStatusLabel_). גם זה מעדכן את
+ *    הסטטוס של הליד, כדי שהסטטוס תמיד "יעקוב" אחרי פרלה - חוץ מקודי
+ *    100/110 שלא מבדילים בין תוצאות אמיתיות ולכן לא משמשים בכוונה.
+ */
+function handlePearlWebhook_(payload) {
+  var sheet = getLeadsSheet_();
+  var phone = payload.to || payload.phoneNumber;
+  if (!phone) return;
+
+  var rowIndex = findLeadRowByPhone_(sheet, phone);
+  if (rowIndex === -1) return;
+
+  var statusCol = fieldIndex_('status') + 1;
+
+  if (payload.to) {
+    var tag = extractPearlTag_(payload);
+    if (tag) {
+      ensureStatusExists_(tag);
+      sheet.getRange(rowIndex, statusCol).setValue(tag);
+      sheet.getRange(rowIndex, fieldIndex_('pearlTag') + 1).setValue(tag);
+    }
+
+    if (payload.summary) {
+      // מצטבר (לא דורס) - זו הייתה בקשה מפורשת, בשונה מתשובת וואטסאפ שדורסת.
+      var summaryCol = fieldIndex_('pearlSummary') + 1;
+      var summaryCell = sheet.getRange(rowIndex, summaryCol);
+      var stamp = formatDate_(new Date()) + ' - ' + String(payload.summary).trim();
+      var currentSummary = String(summaryCell.getValue() || '');
+      summaryCell.setValue(currentSummary ? (currentSummary + '\n' + stamp) : stamp);
+    }
+
+    var transcriptText = pearlTranscriptText_(payload.transcript);
+    if (transcriptText) {
+      sheet.getRange(rowIndex, fieldIndex_('pearlTranscript') + 1).setValue(transcriptText);
+    }
+
+    var callDate = payload.startTime ? new Date(payload.startTime) : new Date();
+    sheet.getRange(rowIndex, fieldIndex_('pearlCallDate') + 1).setValue(callDate);
+
+    if (payload.duration !== undefined && payload.duration !== null && payload.duration !== '') {
+      sheet.getRange(rowIndex, fieldIndex_('pearlDuration') + 1).setValue(formatDurationSeconds_(payload.duration));
+    }
+    if (payload.overallSentiment) {
+      sheet.getRange(rowIndex, fieldIndex_('pearlSentiment') + 1).setValue(String(payload.overallSentiment));
+    }
+    if (payload.recording) {
+      sheet.getRange(rowIndex, fieldIndex_('pearlRecording') + 1).setValue(String(payload.recording));
+    }
+  } else if (payload.status !== undefined) {
+    var label = pearlStatusLabel_(payload.status);
+    if (label) {
+      ensureStatusExists_(label);
+      sheet.getRange(rowIndex, statusCol).setValue(label);
+    }
+  }
+}
+
+function extractPearlTag_(payload) {
+  var tags = payload && payload.tags;
+  if (!tags) return '';
+  if (Array.isArray(tags)) return String(tags[0] || '').trim();
+  return String(tags).trim();
+}
+
+/**
+ * ממירה payload.transcript (מערך turns, לא מחרוזת!) לטקסט קריא בפורמט
+ * "פרלה: ...\nליד: ..." - זה הפורמט שמסך השיחה בדשבורד (JavaScript.html,
+ * pearlBubblesHtml_) יודע להפוך לבועות דיבור. שמות השדות בכל turn (מי
+ * דיבר/מה נאמר) לא מתועדים רשמית ועלולים להיות שונים בגרסת ה-API - אם
+ * שדה מגיע ריק, להריץ debugPearlLead ולבדוק payload.transcript הגולמי
+ * ב-Logger לפני שמניחים שהשמות למטה נכונים.
+ */
+function pearlTranscriptText_(raw) {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw.trim();
+  if (!Array.isArray(raw)) return '';
+  return raw.map(function (turn) {
+    if (typeof turn === 'string') return turn;
+    var who = String(pearlFirst_(turn, ['role', 'speaker', 'from', 'participant']) || '').toLowerCase();
+    var text = String(pearlFirst_(turn, ['content', 'text', 'message', 'transcript']) || '').trim();
+    if (!text) return '';
+    var label = (who.indexOf('agent') !== -1 || who.indexOf('assistant') !== -1 ||
+      who.indexOf('bot') !== -1 || who.indexOf('pearl') !== -1) ? 'פרלה' : 'ליד';
+    return label + ': ' + text;
+  }).filter(Boolean).join('\n');
+}
+
+function pearlFirst_(obj, keys) {
+  for (var i = 0; i < keys.length; i++) {
+    if (obj && obj[keys[i]] !== undefined && obj[keys[i]] !== null && obj[keys[i]] !== '') return obj[keys[i]];
+  }
+  return '';
+}
+
+function formatDurationSeconds_(totalSeconds) {
+  var sec = Math.round(Number(totalSeconds) || 0);
+  var m = Math.floor(sec / 60);
+  var s = sec % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+/**
+ * מיפוי קוד סטטוס מספרי (אירוע סטטוס-מערכת, בלי payload.to) לתווית
+ * בעברית. קודים 1/10/20/40/300 כולם "בתור/מחייג/ינוסה שוב" - מאוחדים
+ * לתווית אחת כי הניואנס הטכני לא רלוונטי ללקוחה. קודים 100/110 ("הצליח"/
+ * "לא הצליח") בכוונה לא בשימוש - הם לא מבדילים בין "ניתק לי" ל"ביקש
+ * שנחזור מחר"; לזה יש את התגית/הסיכום מאירוע payload.to.
+ */
+function pearlStatusLabel_(code) {
+  var n = Number(code);
+  if ([1, 10, 20, 40, 300].indexOf(n) !== -1) return 'ממתין לשיחה';
+  if (n === 30) return 'מספר שגוי';
+  if ([70, 130, 150].indexOf(n) !== -1) return 'אין מענה';
+  if (n === 220) return 'לא לפנות';
+  if (n === 500) return 'שגיאת מערכת בפרלה';
+  return '';
+}
+
+function getNlpearlAuthHeader_() {
+  var props = PropertiesService.getScriptProperties();
+  var accountId = (props.getProperty('NLPEARL_ACCOUNT_ID') || '').trim();
+  var secretKey = (props.getProperty('NLPEARL_SECRET_KEY') || '').trim();
+  return 'Bearer ' + accountId + ':' + secretKey;
+}
+
+// TODO(client): לשנות לפי הסקטור שרוצים לבדוק, ואז להריץ debugPearlLead מהעורך.
+var SECTOR_KEY_FOR_DEBUG = 'capital';
+
+/**
+ * כלי אבחון - מריצים ידנית מהעורך (בחירת debugPearlLead בתפריט העליון +
+ * Run, אחר כך View > Logs). מדפיס את ה-JSON הגולמי מפרלה לסקטור שנבחר
+ * למעלה - הכלי הראשון להריץ אם שדה כלשהו מגיע ריק מה-webhook, כדי לראות
+ * את השמות האמיתיים של השדות בגרסת ה-API במקום לנחש. דורש NLPEARL_ACCOUNT_ID
+ * ו-NLPEARL_SECRET_KEY ב-Script Properties, ו-outboundId מוגדר לסקטור ב-SECTORS.
+ */
+function debugPearlLead() {
+  var sector = SECTORS.filter(function (s) { return s.key === SECTOR_KEY_FOR_DEBUG; })[0];
+  if (!sector || !sector.outboundId) {
+    Logger.log('אין outboundId מוגדר לסקטור ' + SECTOR_KEY_FOR_DEBUG + ' ב-SECTORS');
+    return;
+  }
+  var response = UrlFetchApp.fetch('https://api.nlpearl.ai/v2/Outbound/' + sector.outboundId + '/Leads', {
+    headers: { Authorization: getNlpearlAuthHeader_() },
+    muteHttpExceptions: true
+  });
+  Logger.log(response.getContentText());
 }
 
 function findLeadRowByPhone_(sheet, phone) {

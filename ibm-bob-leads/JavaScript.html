@@ -37,7 +37,93 @@
     document.getElementById('sendWaBtn').addEventListener('click', onSendWhatsApp);
 
     document.getElementById('sectorInfoBtn').addEventListener('click', onSectorInfoClick);
+
+    document.getElementById('closePearlModalBtn').addEventListener('click', closePearlModal);
+    document.getElementById('closePearlBtn2').addEventListener('click', closePearlModal);
   });
+
+  /* ---------- מודאל שיחת פרלה ---------- */
+
+  function hasPearlData_(lead) {
+    return !!(lead.pearlCallDate || lead.pearlTag || lead.pearlSummary || lead.pearlTranscript);
+  }
+
+  function openPearlModal(lead) {
+    document.getElementById('pearlLeadName').textContent = lead.contactName || lead.company || '';
+
+    // הבאדג' מציג את הסטטוס הראשי של הליד (עמודת "סטטוס") - הוא מתעדכן
+    // אוטומטית לפי פרלה בצד השרת, אז זה תמיד אותו סטטוס בדיוק, לא ערך נפרד.
+    var statusBadge = document.getElementById('pearlStatusBadge');
+    if (lead.status) {
+      statusBadge.textContent = lead.status;
+      statusBadge.style.background = colorForStatus(lead.status);
+      statusBadge.classList.remove('hidden');
+    } else {
+      statusBadge.classList.add('hidden');
+    }
+
+    setPearlMetaItem_('pearlTagItem', lead.pearlTag ? '🏷️ ' + lead.pearlTag : '');
+    setPearlMetaItem_('pearlDateItem', lead.pearlCallDate ? '🗓️ ' + lead.pearlCallDate : '');
+    setPearlMetaItem_('pearlDurationItem', lead.pearlDuration ? '⏱️ ' + lead.pearlDuration : '');
+    setPearlMetaItem_('pearlSentimentItem', lead.pearlSentiment ? '🙂 ' + lead.pearlSentiment : '');
+
+    var audioPlayer = document.getElementById('pearlAudioPlayer');
+    if (lead.pearlRecording) {
+      audioPlayer.src = lead.pearlRecording;
+      audioPlayer.classList.remove('hidden');
+    } else {
+      audioPlayer.removeAttribute('src');
+      audioPlayer.classList.add('hidden');
+    }
+
+    var summaryWrap = document.getElementById('pearlSummaryWrap');
+    if (lead.pearlSummary) {
+      document.getElementById('pearlSummaryText').textContent = lead.pearlSummary;
+      summaryWrap.classList.remove('hidden');
+    } else {
+      summaryWrap.classList.add('hidden');
+    }
+
+    document.getElementById('pearlBubbles').innerHTML = pearlBubblesHtml_(lead.pearlTranscript);
+
+    document.getElementById('pearlOverlay').classList.remove('hidden');
+  }
+
+  function closePearlModal() {
+    document.getElementById('pearlOverlay').classList.add('hidden');
+  }
+
+  function setPearlMetaItem_(id, text) {
+    var el = document.getElementById(id);
+    if (text) { el.textContent = text; el.classList.remove('hidden'); }
+    else { el.classList.add('hidden'); }
+  }
+
+  // מפרקת טקסט תמלול בפורמט "פרלה: ...\nליד: ..." (כמו שנכתב מ-Code.gs)
+  // לבועות דיבור - פרלה בצד ימין (לבן, אווטאר אפור), ליד בצד שמאל (ירוק,
+  // אווטאר ירוק) - בדיוק כמו במערכת הראשית.
+  function pearlBubblesHtml_(raw) {
+    var text = String(raw || '').trim();
+    if (!text) return '<div class="admin-msg">אין תמלול זמין</div>';
+
+    return text.split('\n').map(function (line) {
+      var idx = line.indexOf(':');
+      if (idx === -1) return '';
+      var who = line.slice(0, idx).trim();
+      var msg = line.slice(idx + 1).trim();
+      if (!msg) return '';
+      var isPearl = who.indexOf('פרלה') !== -1;
+      var side = isPearl ? 'pearl' : 'lead';
+      var avatarLetter = isPearl ? 'פ' : 'ל';
+      var label = isPearl ? 'פרלה 📞' : 'ליד';
+      var avatarHtml = '<div class="pearl-avatar ' + side + '">' + avatarLetter + '</div>';
+      var msgHtml = '<div class="pearl-msg"><div class="pearl-msg-label">' + escapeHtml(label) + '</div>' +
+        '<div class="pearl-bubble ' + side + '">' + escapeHtml(msg) + '</div></div>';
+      return '<div class="pearl-row ' + side + '">' +
+        (isPearl ? avatarHtml + msgHtml : msgHtml + avatarHtml) +
+        '</div>';
+    }).filter(Boolean).join('');
+  }
 
   /* ---------- config (header logo + tabs) ---------- */
 
@@ -311,12 +397,22 @@
         '<td><div class="reply-cell"><span class="reply-text">' + escapeHtml(lead.replyText) + '</span>' +
           (lead.replyAt ? '<span class="reply-date">' + escapeHtml(lead.replyAt) + '</span>' : '') +
           '</div></td>' +
-        '<td><button type="button" class="row-edit">✎</button></td>';
+        '<td>' +
+          (hasPearlData_(lead) ? '<button type="button" class="row-pearl" title="שיחת פרלה">🤖</button>' : '') +
+          '<button type="button" class="row-edit">✎</button>' +
+        '</td>';
 
       tr.querySelector('.row-check').addEventListener('click', function (evt) { evt.stopPropagation(); });
       tr.querySelector('.row-check').addEventListener('change', function (evt) {
         toggleSelect(lead.id, evt.target.checked);
       });
+      var pearlBtn = tr.querySelector('.row-pearl');
+      if (pearlBtn) {
+        pearlBtn.addEventListener('click', function (evt) {
+          evt.stopPropagation();
+          openPearlModal(lead);
+        });
+      }
       tr.addEventListener('click', function () { openEditModal(lead); });
       body.appendChild(tr);
     });
