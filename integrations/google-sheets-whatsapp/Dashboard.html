@@ -1797,6 +1797,16 @@
   }
 
   .crm-modal-card { max-width: 420px; }
+  .lm-edit-card { max-width: 480px; }
+  .lm-edit-history {
+    max-height: 220px; overflow-y: auto; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; margin: 6px 0 4px; font-size: 12.5px; line-height: 1.55;
+  }
+  .lm-edit-history:empty { display: none; }
+  .lm-edit-history .sec { white-space: pre-wrap; margin-bottom: 10px; }
+  .lm-edit-history .sec:last-child { margin-bottom: 0; }
+  .lm-edit-history .sec b { display: block; font-size: 11px; color: var(--text-muted); font-weight: 700; margin-bottom: 2px; }
+  .lm-edit-history .sec .dt { color: var(--text-muted); font-size: 10.5px; font-weight: 600; }
 
   .modal-sub {
     font-size: 12.5px;
@@ -2124,9 +2134,12 @@
 <!-- מסך מזי: עריכת סטטוס+הערה ידנית להקצאה כלשהי (פתוחה או סגורה),
      בלי צורך בקוד אישי של נציגה - adminUpdateAssignment ב-Code.gs. -->
 <div class="modal-overlay" id="lmEditModal">
-  <div class="modal-card crm-modal-card">
+  <div class="modal-card crm-modal-card lm-edit-card">
     <h3>✏️ עדכון סטטוס והערה</h3>
     <div class="modal-sub" id="lmEditContact"></div>
+    <!-- כל התיעוד המלא - לצפייה בלבד, כדי שלא יהיה צריך לפתוח עוד מסך.
+         נבנה ב-openLmEditModal_, ריק/מוסתר אם אין מה להציג. -->
+    <div class="lm-edit-history" id="lmEditHistory"></div>
     <div class="rep-picker" id="lmEditStatusPicker"></div>
     <label class="modal-label" for="lmEditNote">הערה</label>
     <textarea class="modal-input" id="lmEditNote" rows="3" placeholder="מה קרה בליד הזה?"></textarea>
@@ -2538,13 +2551,14 @@
         if (it.isDone) { chipCls = (it.status === 'תואמה פגישה') ? 'scheduled' : (it.status === 'לא מעוניין' ? 'bad' : 'open'); chipText = it.status || 'טופל'; }
 
         const todayBadge = today ? '<span class="lm-today-badge">🆕 היום</span>' : '';
-        // הטקסט **המלא**, לא קטוע - בקשה מפורשת של הלקוחה ("אני רואה רק
-        // חלק מהטקסט"). את"ה השיחה שהועברה בזמן ההקצאה (snapshot) ואת
-        // ההערה שהנציגה כתבה בסיום - שני דברים נפרדים, לא אחד דורס אחד.
-        const noteParts = [];
-        if (it.snapshot) noteParts.push('<div class="lm-note-text"><b>השיחה שהועברה:</b><br>' + escapeHtml_(it.snapshot) + '</div>');
-        if (it.repNote) noteParts.push('<div class="lm-note-text"><b>הערת הנציגה:</b><br>' + escapeHtml_(it.repNote) + '</div>');
-        const noteHtml = noteParts.length ? noteParts.join('<hr class="lm-note-sep">') : '<div class="lm-note-text empty">—</div>';
+        // תצוגה מקדימה קצרה בלבד בשורה עצמה (בקשה מפורשת - שורה גבוהה
+        // עם טקסט מלא "לא נוח") - הטקסט המלא (שיחה שהועברה + הערת
+        // טליה + הערת נציגה + תאריך) נפתח בלחיצה, ר' openLmEditModal_.
+        const previewSource = it.repNote || it.snapshot || '';
+        const noteHtml = previewSource
+          ? '<div class="lm-note-text lm-note-preview">' + escapeHtml_(previewSource.split('\n')[0].slice(0, 60)) +
+            ((previewSource.length > 60 || previewSource.indexOf('\n') !== -1) ? '…' : '') + '</div>'
+          : '<div class="lm-note-text empty">—</div>';
 
         const timerHtml = it.isDone
           ? '<div class="lm-timer done">✓ נסגר</div>'
@@ -2558,7 +2572,7 @@
           '<td>' + escapeHtml_(it.campaign) + '<br><span style="color:var(--text-muted)">' + escapeHtml_(it.repName) + '</span></td>' +
           '<td><span class="lm-chip ' + chipCls + '">' + escapeHtml_(chipText) + '</span></td>' +
           '<td>' + timerHtml + '</td>' +
-          '<td>' + noteHtml + '</td>' +
+          '<td class="lm-note-cell" style="cursor:pointer" title="לחיצה - לצפייה בכל התיעוד">' + noteHtml + '</td>' +
           '<td><div class="lm-actions">' +
             '<button type="button" class="lm-icon-btn lm-edit-btn" title="עדכון סטטוס והערה">✏️</button>' +
             reassignBtn +
@@ -2605,9 +2619,9 @@
       });
     });
 
-    body.querySelectorAll('.lm-edit-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const tr = btn.closest('tr.lm-row');
+    body.querySelectorAll('.lm-edit-btn, .lm-note-cell').forEach(function (el) {
+      el.addEventListener('click', function () {
+        const tr = el.closest('tr.lm-row');
         const it = data.rows[Number(tr.getAttribute('data-idx'))];
         if (it) openLmEditModal_(it);
       });
@@ -2633,6 +2647,7 @@
     lmEditChosenStatus_ = it.status || '';
     const modal = document.getElementById('lmEditModal');
     const contactEl = document.getElementById('lmEditContact');
+    const historyEl = document.getElementById('lmEditHistory');
     const pickerEl = document.getElementById('lmEditStatusPicker');
     const noteEl = document.getElementById('lmEditNote');
     const errorEl = document.getElementById('lmEditError');
@@ -2640,6 +2655,14 @@
     contactEl.textContent = [it.name, it.company, it.repName].filter(Boolean).join(' · ');
     noteEl.value = it.repNote || '';
     errorEl.textContent = '';
+
+    // כל התיעוד לצפייה: השיחה שהועברה בזמן ההקצאה, הערה שטליה כתבה
+    // לנציגה (אם הייתה), והערת הסיכום של הנציגה + מתי היא נכתבה.
+    const historyParts = [];
+    if (it.snapshot) historyParts.push('<div class="sec"><b>השיחה שהועברה</b>' + escapeHtml_(it.snapshot) + '</div>');
+    if (it.noteToRep) historyParts.push('<div class="sec"><b>הערה מטליה לנציגה</b>' + escapeHtml_(it.noteToRep) + '</div>');
+    if (it.repNote) historyParts.push('<div class="sec"><b>הערת הנציגה' + (it.doneAt ? ' <span class="dt">· ' + escapeHtml_(it.doneAt) + '</span>' : '') + '</b>' + escapeHtml_(it.repNote) + '</div>');
+    historyEl.innerHTML = historyParts.join('');
 
     const statuses = (lmData_ && lmData_.quickStatuses) ? lmData_.quickStatuses.slice() : [];
     if (it.status && statuses.indexOf(it.status) === -1) statuses.unshift(it.status);
