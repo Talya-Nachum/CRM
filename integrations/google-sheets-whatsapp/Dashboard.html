@@ -739,7 +739,9 @@
   }
   .lm-icon-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
   .lm-note-text { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; white-space: pre-wrap; }
+  .lm-note-text b { display: block; color: var(--text); font-weight: 700; margin-bottom: 1px; }
   .lm-note-text.empty { color: var(--border); }
+  .lm-note-sep { border: none; border-top: 1px dashed var(--border); margin: 6px 0; }
   .lm-empty { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 13px; }
 
   /* פס שיעור התגובה - הצעה של הלקוחה, במקום גרף העוגה. */
@@ -2536,10 +2538,13 @@
         if (it.isDone) { chipCls = (it.status === 'תואמה פגישה') ? 'scheduled' : (it.status === 'לא מעוניין' ? 'bad' : 'open'); chipText = it.status || 'טופל'; }
 
         const todayBadge = today ? '<span class="lm-today-badge">🆕 היום</span>' : '';
-        const noteText = it.repNote || it.snapshot || '';
-        const noteHtml = noteText
-          ? '<div class="lm-note-text">' + escapeHtml_(noteText.slice(0, 90)) + (noteText.length > 90 ? '…' : '') + '</div>'
-          : '<div class="lm-note-text empty">—</div>';
+        // הטקסט **המלא**, לא קטוע - בקשה מפורשת של הלקוחה ("אני רואה רק
+        // חלק מהטקסט"). את"ה השיחה שהועברה בזמן ההקצאה (snapshot) ואת
+        // ההערה שהנציגה כתבה בסיום - שני דברים נפרדים, לא אחד דורס אחד.
+        const noteParts = [];
+        if (it.snapshot) noteParts.push('<div class="lm-note-text"><b>השיחה שהועברה:</b><br>' + escapeHtml_(it.snapshot) + '</div>');
+        if (it.repNote) noteParts.push('<div class="lm-note-text"><b>הערת הנציגה:</b><br>' + escapeHtml_(it.repNote) + '</div>');
+        const noteHtml = noteParts.length ? noteParts.join('<hr class="lm-note-sep">') : '<div class="lm-note-text empty">—</div>';
 
         const timerHtml = it.isDone
           ? '<div class="lm-timer done">✓ נסגר</div>'
@@ -4159,7 +4164,10 @@
     el.innerHTML = transcriptLines.map(function (line) {
       const isPearl = line.indexOf('פרלה:') === 0;
       const isLead = line.indexOf('הליד:') === 0;
-      const dir = isPearl ? 'in' : 'out';
+      // פרלה מדברת בשם הצוות שלנו - "out" (ימין), בדיוק כמו יומן ההערות
+      // המאוחד (.detail-bub.pearl/.team שני אלה align-self:flex-end/ימין).
+      // היה הפוך בטעות - זה מה שגרם לבועה של פרלה להופיע בצד השמאלי.
+      const dir = isPearl ? 'out' : 'in';
       const who = isPearl ? '📞 פרלה' : (isLead ? 'הליד' : '');
       const initialsCh = isPearl ? 'פ' : 'ל';
       const text = line.replace(/^(פרלה|הליד):\s*/, '');
