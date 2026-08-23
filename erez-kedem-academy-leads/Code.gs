@@ -478,60 +478,27 @@ function sendWhatsApp(leadIds, templateId) {
 
 /**
  * מטפלת בתשובות נכנסות מוואטסאפ (webhook של אינפוריו) - מאתרת את הליד
- * לפי מספר טלפון (9 ספרות אחרונות, כדי לא להיתקע על "0" מול "+972" בהתחלה).
- * שני סוגי תשובה שונים לגמרי:
- *  - לחיצה על כפתור בתבנית: אינפוריו שולחת את טקסט הכפתור בתוך
- *    AdditionalInfo (JSON) במפתח ButtonPayload. הטקסט הזה הופך להיות
- *    הסטטוס של הליד ישירות (לא נכתב ל"תשובת וואטסאפ") - בלי טבלת מיפוי
- *    בכוונה, כי טקסט הכפתור משתנה מעת לעת עם עדכוני תבנית; שואבים אותו
- *    כמו שהוא ומוסיפים לרשימת הסטטוסים אוטומטית אם הוא חדש.
- *  - טקסט חופשי אמיתי שהלקוח הקליד: נכתב ל"תשובת ליד" + מועד הקבלה,
- *    בדיוק כמו קודם. תשובה חדשה דורסת קודמת בכוונה (לא מצטברת) - מספיק
- *    ל"תיעוד תשובת הלקוח" שהתבקש, בלי היסטוריית שיחה מלאה.
+ * לפי מספר טלפון (9 ספרות אחרונות, כדי לא להיתקע על "0" מול "+972" בהתחלה)
+ * וכותבת את התשובה + מועד הקבלה. תשובה חדשה דורסת קודמת בכוונה (לא
+ * מצטברת) - מספיק ל"תיעוד תשובת הלקוח" שהתבקש, בלי היסטוריית שיחה מלאה.
  */
 function handleInforuReply_(entries) {
   var sheet = getLeadsSheet_();
   var replyCol = fieldIndex_('replyText') + 1;
   var replyAtCol = fieldIndex_('replyAt') + 1;
-  var statusCol = fieldIndex_('status') + 1;
   var now = new Date();
 
   entries.forEach(function (entry) {
     var phone = entry && entry.Value;
-    if (!phone) return;
+    var message = entry && entry.Message;
+    if (!phone || !message) return;
 
     var rowIndex = findLeadRowByPhone_(sheet, phone);
     if (rowIndex === -1) return;
 
-    var buttonPayload = extractButtonPayload_(entry);
-    if (buttonPayload) {
-      ensureStatusExists_(buttonPayload);
-      sheet.getRange(rowIndex, statusCol).setValue(buttonPayload);
-      return;
-    }
-
-    var message = entry && entry.Message;
-    if (!message) return;
     sheet.getRange(rowIndex, replyCol).setValue(message);
     sheet.getRange(rowIndex, replyAtCol).setValue(now);
   });
-}
-
-function extractButtonPayload_(entry) {
-  try {
-    var info = JSON.parse((entry && entry.AdditionalInfo) || '{}');
-    return String(info.ButtonPayload || '').trim();
-  } catch (e) {
-    return '';
-  }
-}
-
-function ensureStatusExists_(status) {
-  var sheet = getStatusesSheet_();
-  var existing = getStatusesFromSheet_(sheet);
-  if (existing.indexOf(status) === -1) {
-    sheet.getRange(sheet.getLastRow() + 1, 1).setValue(status);
-  }
 }
 
 function findLeadRowByPhone_(sheet, phone) {
