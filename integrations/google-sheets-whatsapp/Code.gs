@@ -3219,6 +3219,8 @@ function adminUpdateAssignment(assignmentId, statusText, noteText) {
   if (!statusText) throw new Error('יש לבחור סטטוס');
   if (!String(noteText || '').trim()) throw new Error('יש לכתוב הערה');
 
+  const keepOpen = REP_KEEP_OPEN_STATUSES_.indexOf(statusText) !== -1;
+
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -3239,14 +3241,14 @@ function adminUpdateAssignment(assignmentId, statusText, noteText) {
 
       const rowIndex = i + 2;
       const repName = String(row[repCol] || '');
-      data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
+      if (!keepOpen) data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
       data.sheet.getRange(rowIndex, statusCol + 1).setValue(statusText);
       data.sheet.getRange(rowIndex, noteCol + 1).setValue(noteText || '');
       data.sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
 
       addStatusIfMissing_(statusText);
       writeBackRepStatus_(String(row[campCol]), String(row[phoneCol]), repName, statusText, noteText);
-      return { success: true };
+      return { success: true, keepOpen: keepOpen };
     }
     throw new Error('ההקצאה לא נמצאה');
   } finally {
@@ -3505,6 +3507,13 @@ function getRepAssignmentsForAdmin(repName) {
  * בטאב הקמפיין ("סטטוס איש קשר") + נרשם ביומן ההערות - כך שאצל הלקוחה
  * זה מופיע בדשבורד ובאקסל בלי שתצטרך לעשות כלום.
  */
+// שני סטטוסים "לא סופיים" - בחירה בהם לא סוגרת את ההקצאה, כי המשמעות
+// המילולית שלהם היא "עוד לא סיימתי" (בניגוד ל"תואמה פגישה"/"לא מעוניין"/
+// "סגור פניה"). בקשה מפורשת של הלקוחה: היה סותר את עצמו שנציגה "מסיימת
+// לטפל" בליד שהסטטוס שלו אומר שהוא עדיין בתהליך. הליד נשאר פתוח אצל
+// הנציגה (עם מונה הזמן ממשיך לרוץ), רק הסטטוס/הערה מתעדכנים.
+const REP_KEEP_OPEN_STATUSES_ = ['בתהליך', 'בתהליך עתידי'];
+
 function completeAssignment(repKey, assignmentId, statusText, noteText) {
   const rep = repByKey_(repKey);
   if (!rep) throw new Error('לינק לא מזוהה');
@@ -3512,6 +3521,8 @@ function completeAssignment(repKey, assignmentId, statusText, noteText) {
   // הערה הפכה לשדה חובה בכל סטטוס (בקשה מפורשת) - נבדק גם בצד השרת,
   // לא רק בטופס, כדי שאי אפשר יהיה לעקוף את זה.
   if (!String(noteText || '').trim()) throw new Error('יש לכתוב הערה לפני סיום הטיפול');
+
+  const keepOpen = REP_KEEP_OPEN_STATUSES_.indexOf(statusText) !== -1;
 
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -3536,7 +3547,7 @@ function completeAssignment(repKey, assignmentId, statusText, noteText) {
       if (isDoneValue_(row[doneCol])) return { success: true, alreadyDone: true };
 
       const rowIndex = i + 2;
-      data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
+      if (!keepOpen) data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
       data.sheet.getRange(rowIndex, statusCol + 1).setValue(statusText);
       data.sheet.getRange(rowIndex, noteCol + 1).setValue(noteText || '');
       data.sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
@@ -3552,6 +3563,7 @@ function completeAssignment(repKey, assignmentId, statusText, noteText) {
       writeBackRepStatus_(String(row[campCol]), String(row[phoneCol]), rep.name, statusText, noteText);
       return {
         success: true,
+        keepOpen: keepOpen,
         celebrate: normalizeLabel_(statusText) === normalizeLabel_(REP_CELEBRATE_STATUS_),
         // "לא מעוניין" בלבד מציג לנציגה שהליד חוזר לבדיקה נוספת - כל
         // סטטוס אחר (כולל "סגור פניה"/"בתהליך עתידי") נסגר בשקט.

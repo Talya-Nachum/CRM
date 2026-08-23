@@ -653,22 +653,34 @@
   }
 
   // ---------------- סיום טיפול ----------------
+  // סטטוסים "לא סופיים" - נשארים פתוחים אצל הנציגה (ר' REP_KEEP_OPEN_STATUSES_
+  // ב-Code.gs). חייב להיות תואם מילה-במילה לרשימה שם.
+  const KEEP_OPEN_STATUSES = ['בתהליך', 'בתהליך עתידי'];
+
   function openDoneModal(id) {
     activeLead = findLead(id);
     if (!activeLead) return;
-    chosenStatus = '';
-    document.getElementById('doneTitle').textContent = '✓ סיימת לטפל ב' + activeLead.name + '?';
+    // אם כבר יש סטטוס קודם (למשל "בתהליך" מעדכון אחרון) - נטען אותו
+    // מוכן, כדי שהנציגה תוכל לעדכן במקום להתחיל מאפס בכל פעם.
+    chosenStatus = activeLead.status || '';
+    document.getElementById('doneTitle').textContent = chosenStatus
+      ? 'עדכון סטטוס - ' + activeLead.name
+      : '✓ סיימת לטפל ב' + activeLead.name + '?';
     document.getElementById('doneSub').textContent =
       [activeLead.company, activeLead.campaign].filter(Boolean).join(' · ') +
-      ' · בחרי מה קרה, וזה יתעדכן אצל טליה אוטומטית';
-    document.getElementById('doneNote').value = '';
+      ' · בחרי מה קרה, וזה יתעדכן אצל טליה אוטומטית. סטטוס "בתהליך"/"בתהליך עתידי" ' +
+      'משאיר את הליד פתוח אצלך - אפשר לחזור ולעדכן שוב בהמשך.';
+    document.getElementById('doneNote').value = activeLead.note || '';
     document.getElementById('doneErr').textContent = '';
     document.getElementById('doneConfirm').disabled = false;
+    document.getElementById('doneConfirm').textContent =
+      KEEP_OPEN_STATUSES.indexOf(chosenStatus) !== -1 ? 'שמירה' : 'אישור וסיום';
 
     const opts = document.getElementById('statusOpts');
     const icons = { 'תואמה פגישה': '📅', 'בתהליך': '⏳', 'בתהליך עתידי': '🗓️', 'לא מעוניין': '🚫', 'סגור פניה': '🔒' };
     opts.innerHTML = (data.quickStatuses || []).map(function (s) {
-      return '<button type="button" data-status="' + esc(s) + '">' +
+      return '<button type="button" data-status="' + esc(s) + '"' +
+        (s === chosenStatus ? ' class="sel"' : '') + '>' +
         (icons[s] ? icons[s] + ' ' : '') + esc(s) + '</button>';
     }).join('') + '<button type="button" class="other" id="showFullList">אחר... (כל רשימת הסטטוסים)</button>';
 
@@ -676,7 +688,7 @@
     sel.classList.remove('show');
     sel.innerHTML = '<option value="">בחרי סטטוס מהרשימה המלאה...</option>' +
       (data.statusList || []).map(function (s) {
-        return '<option value="' + esc(s) + '">' + esc(s) + '</option>';
+        return '<option value="' + esc(s) + '"' + (s === chosenStatus ? ' selected' : '') + '>' + esc(s) + '</option>';
       }).join('');
 
     opts.querySelectorAll('button[data-status]').forEach(function (btn) {
@@ -685,6 +697,8 @@
         sel.value = '';
         opts.querySelectorAll('button').forEach(function (b) { b.classList.remove('sel'); });
         btn.classList.add('sel');
+        document.getElementById('doneConfirm').textContent =
+          KEEP_OPEN_STATUSES.indexOf(chosenStatus) !== -1 ? 'שמירה' : 'אישור וסיום';
       });
     });
     document.getElementById('showFullList').addEventListener('click', function () {
@@ -694,6 +708,8 @@
     sel.addEventListener('change', function () {
       chosenStatus = sel.value;
       opts.querySelectorAll('button').forEach(function (b) { b.classList.remove('sel'); });
+      document.getElementById('doneConfirm').textContent =
+        KEEP_OPEN_STATUSES.indexOf(chosenStatus) !== -1 ? 'שמירה' : 'אישור וסיום';
     });
 
     document.getElementById('doneModal').classList.add('show');
@@ -719,14 +735,14 @@
 
     google.script.run
       .withSuccessHandler(function (res) {
-        btn.textContent = 'אישור וסיום';
+        btn.textContent = KEEP_OPEN_STATUSES.indexOf(status) !== -1 ? 'שמירה' : 'אישור וסיום';
         document.getElementById('doneModal').classList.remove('show');
         celebrate(res, lead, status);
         load(true);
       })
       .withFailureHandler(function (err) {
         btn.disabled = false;
-        btn.textContent = 'אישור וסיום';
+        btn.textContent = KEEP_OPEN_STATUSES.indexOf(status) !== -1 ? 'שמירה' : 'אישור וסיום';
         document.getElementById('doneErr').textContent = (err && err.message) ? err.message : err;
       })
       .completeAssignment(REP_KEY, lead.id, status, note);
