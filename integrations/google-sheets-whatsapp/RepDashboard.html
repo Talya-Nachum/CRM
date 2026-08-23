@@ -347,9 +347,10 @@
   const REP_KEY = '<?!= (typeof repKey !== "undefined" ? repKey : "") ?>';
   const NEW_LEAD_MINUTES = 120;      // ליד שהוקצה בשעתיים האחרונות מסומן "חדש"
   const REFRESH_MS = 60000;          // בדיקה אחת לדקה אם הגיע ליד חדש
-  // חייב להיות תואם ל-ASSIGNMENT_TIMEOUT_MS_ ב-Code.gs - שם נעשית ההחזרה
-  // בפועל. כאן זה רק לתצוגה (שעון חול).
-  const ASSIGNMENT_TIMEOUT_MS = 9 * 60 * 60 * 1000;
+  // סף להדגשה חזותית בלבד (בלי סגירה אוטומטית - בוטלה לבקשת הלקוחה):
+  // ליד שפתוח מעל 9 שעות מקבל צבע אדום במונה, כדי שיבלוט וכדאי לבדוק
+  // אותו, אבל הוא נשאר פתוח עד שהנציגה בעצמה מסמנת "סיימתי לטפל".
+  const NINE_HOURS_MS = 9 * 60 * 60 * 1000;
 
   let data = null;
   let view = 'open';
@@ -398,21 +399,24 @@
     return (Date.now() - lead.assignedAtMs) < NEW_LEAD_MINUTES * 60 * 1000;
   }
 
+  /** hh:mm:ss (או mm:ss אם פחות משעה) - כמו בכל שאר הדשבורד. */
+  function fmtElapsed_(ms) {
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
+    const pad = function (n) { return String(n).padStart(2, '0'); };
+    return h > 0 ? (h + ':' + pad(m) + ':' + pad(s)) : (pad(m) + ':' + pad(s));
+  }
+
   /**
-   * "שעון חול": כמה זמן נותר עד שהליד חוזר לבד למיטוב (9 שעות רצופות
-   * מההעברה). מציגה שעות ודקות עגולות, עם צבע שמתחדד ככל שהזמן אוזל -
-   * ירוק (מעל 4 שעות) → כתום (עד שעה) → אדום (פחות משעה/עבר הזמן).
+   * מונה זמן חי - כמה זמן הליד פתוח אצל הנציגה (לא כמה זמן נותר עד
+   * שהוא "חוזר" - זה כבר לא קיים). ירוק כרגיל, אדום מעל 9 שעות כדי
+   * שיבלוט - בלי שום השפעה על מה שקורה בפועל לליד.
    */
   function timerInfo_(lead) {
     if (!lead.assignedAtMs) return null;
-    const remaining = ASSIGNMENT_TIMEOUT_MS - (Date.now() - lead.assignedAtMs);
-    if (remaining <= 0) return { cls: 'late', text: '⏳ הזמן עבר' };
-    const totalMin = Math.ceil(remaining / 60000);
-    const h = Math.floor(totalMin / 60);
-    const m = totalMin % 60;
-    const text = '⏳ ' + (h > 0 ? h + 'ש ' : '') + m + 'ד\' נותרו';
-    const cls = remaining > 4 * 60 * 60 * 1000 ? 'ok' : (remaining > 60 * 60 * 1000 ? 'warn' : 'late');
-    return { cls: cls, text: text };
+    const elapsed = Date.now() - lead.assignedAtMs;
+    const cls = elapsed >= NINE_HOURS_MS ? 'late' : 'ok';
+    return { cls: cls, ms: lead.assignedAtMs };
   }
 
   function showError(msg) {
@@ -592,7 +596,7 @@
       // דרך שרביט ה-AI (מעובד), לא כטקסט גולמי על הכרטיס.
       return '<div class="lead' + (isFresh(l) ? ' fresh' : '') + '">' +
         (isFresh(l) ? '<div class="newtag">חדש</div>' : '') +
-        (timer ? '<div class="timer ' + timer.cls + '">' + timer.text + '</div>' : '') +
+        (timer ? '<div class="timer ' + timer.cls + '" data-ms="' + timer.ms + '">⏱️ <span class="v">--:--</span></div>' : '') +
         '<div class="co">' + esc(l.company) + '</div>' +
         '<div class="nm">' + esc(l.name) + '</div>' +
         (l.campaign ? '<span class="camp">' + esc(l.campaign) + '</span>' : '') +
@@ -1118,10 +1122,23 @@
     el.addEventListener('click', function (e) { if (e.target === el) el.classList.remove('show'); });
   });
 
+  /** מריץ פעם בשנייה - מעדכן את כל מוני הזמן החיים על הכרטיסים, בלי
+   * לרנדר מחדש את כל הרשימה (כדי לא להפריע לגלילה/אינטראקציה). */
+  function tickOpenTimers_() {
+    document.querySelectorAll('.lead .timer[data-ms]').forEach(function (el) {
+      const elapsed = Date.now() - Number(el.getAttribute('data-ms'));
+      const v = el.querySelector('.v');
+      if (v) v.textContent = fmtElapsed_(elapsed);
+      el.classList.toggle('late', elapsed >= NINE_HOURS_MS);
+      el.classList.toggle('ok', elapsed < NINE_HOURS_MS);
+    });
+  }
+
   // "מחממים" את הצליל בלחיצה/הקשה **אמיתית** הראשונה של הנציגה על הדף -
   setupNotifBtn_();
   setupSeamlessSearch_();
   load(false);
   setInterval(function () { load(true); }, REFRESH_MS);
+  setInterval(tickOpenTimers_, 1000);
 })();
 </script>

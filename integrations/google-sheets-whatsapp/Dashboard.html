@@ -593,6 +593,10 @@
     grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.4fr);
     gap: 10px;
   }
+  /* הבאנרים החזותיים הוסרו לבקשת הלקוחה - ה-section עצמו נשאר קיים
+     (ר' ההערה ליד ה-HTML) רק בשביל חישוב פילוח חבוי, אז מכווצים אותו
+     לגמרי כדי שלא יישאר רווח ריק במקום שהבאנר תפס. */
+  .stats.stats-hidden { display: none; }
 
   /* --- שורת "משימות להיום" (הייתה בסרגל הצד, עלתה לראש המסך) --- */
   .tasks {
@@ -663,12 +667,6 @@
   .lm-top h1 { margin: 0; font-size: 17px; font-weight: 800; }
   .lm-sub { font-size: 12.5px; color: var(--text-muted); margin-bottom: 16px; }
   .lm-body { }
-  .lm-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-  .lm-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; }
-  .lm-stat .n { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .lm-stat .l { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
-  .lm-stat.good .n { color: var(--good); }
-  .lm-stat.bad .n { color: var(--bad); }
   .lm-board { margin-bottom: 14px; }
   .lm-board h4 { margin: 0 0 8px; font-size: 13.5px; font-weight: 800; }
   .lm-board-row {
@@ -680,30 +678,68 @@
   .lm-board-row .cnt { font-weight: 800; font-variant-numeric: tabular-nums; }
   .lm-board-row .bar { height: 6px; border-radius: 4px; background: var(--accent); }
   .lm-board-row .bar-track { flex: 2; height: 6px; border-radius: 4px; background: var(--surface-3, #EDF0F5); overflow: hidden; }
+
+  /* טאבים לפי נציגה - "כל הצוות" + נציגה לכל אחת, עם ספירה. לחיצה
+     מסננת את הטבלה בצד הלקוח בלבד (אין קריאת שרת נוספת). */
+  .lm-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+  .lm-tab {
+    display: flex; align-items: center; gap: 7px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 13px 6px 8px; font-size: 12.5px; font-weight: 700; color: var(--text-muted);
+    cursor: pointer; font-family: inherit;
+  }
+  .lm-tab:hover { border-color: var(--accent); color: var(--text); }
+  .lm-tab.on { background: var(--text); border-color: var(--text); color: var(--bg-solid); }
+  .lm-tab .c {
+    background: var(--surface-2); color: var(--text-muted); font-size: 10.5px; font-weight: 800;
+    border-radius: 999px; padding: 1px 7px; font-variant-numeric: tabular-nums;
+  }
+  .lm-tab.on .c { background: rgba(255,255,255,.2); color: inherit; }
+
   .lm-table-wrap { overflow-x: auto; }
-  table.lm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.lm-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12.5px; min-width: 880px; }
   table.lm-table th {
     position: sticky; top: 0; background: var(--surface); text-align: right; padding: 8px 9px;
     font-size: 11px; color: var(--text-muted); font-weight: 700; border-bottom: 1px solid var(--border); white-space: nowrap;
   }
+  th.lm-col-lead { width: 23%; } th.lm-col-camp { width: 16%; } th.lm-col-status { width: 15%; }
+  th.lm-col-timer { width: 15%; } th.lm-col-note { width: 20%; } th.lm-col-actions { width: 80px; }
   table.lm-table td { padding: 8px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  tr.lm-row { cursor: pointer; }
   tr.lm-row:hover { background: var(--surface-2); }
-  tr.lm-row.expired { background: var(--bad-soft); }
+  tr.lm-row.today { box-shadow: inset 3px 0 0 var(--accent); }
   tr.lm-row.loading { cursor: wait; opacity: 0.6; }
+  .lm-today-badge {
+    display: inline-flex; align-items: center; gap: 3px; background: var(--accent-soft); color: var(--accent);
+    font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px; margin-inline-start: 5px;
+  }
   .lm-chip {
     display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
     background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap;
   }
   .lm-chip.scheduled { background: var(--good-soft); border-color: var(--good); color: var(--good); }
-  .lm-chip.expired { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+  .lm-chip.bad { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
   .lm-chip.open { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-  .lm-detail {
-    display: none; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 12px; margin-top: 4px; font-size: 12.5px; white-space: pre-wrap; line-height: 1.6;
+
+  /* מונה זמן חי - כמה זמן הליד פתוח אצל הנציגה. אין סגירה אוטומטית
+     יותר אחרי 9 שעות (בקשה מפורשת), רק סימון חזותי כתוב שמעורר תשומת
+     לב. מתעדכן ע"י tickLmTimers_ כל שנייה כל עוד המסך פתוח. */
+  .lm-timer {
+    font-variant-numeric: tabular-nums; font-weight: 700; font-size: 12.5px;
+    display: flex; align-items: center; gap: 5px;
   }
-  .lm-detail.open { display: block; }
-  .lm-detail b { color: var(--text-muted); font-weight: 700; }
+  .lm-timer.long { color: var(--bad); }
+  .lm-timer-sub { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+  .lm-timer.long + .lm-timer-sub, .lm-timer-sub.warn { color: var(--bad); font-weight: 700; }
+  .lm-timer.done { color: var(--text-muted); font-weight: 600; }
+
+  .lm-actions { display: flex; gap: 5px; }
+  .lm-icon-btn {
+    width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 12.5px;
+    color: var(--text-muted); font-family: inherit; padding: 0;
+  }
+  .lm-icon-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .lm-note-text { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; white-space: pre-wrap; }
+  .lm-note-text.empty { color: var(--border); }
   .lm-empty { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 13px; }
 
   /* פס שיעור התגובה - הצעה של הלקוחה, במקום גרף העוגה. */
@@ -1870,8 +1906,11 @@
     </div>
   </header>
 
-  <section class="stats" id="stats"></section>
-  <section class="tasks" id="tasksRow"></section>
+  <!-- באנרי הסטטיסטיקה הוצאו מהתצוגה לבקשת הלקוחה (לא הועילו בפועל).
+       ה-section עצמו נשאר קיים בכוונה - הוא עדיין מחזיק תא חבוי
+       (display:none) עם חישוב פילוח התגובות (legend/donut) ששאר הסינון
+       בדף (activeCategoryFilter) עדיין תלוי בו. ר' renderCampaign. -->
+  <section class="stats stats-hidden" id="stats"></section>
 
   <div class="card table-card">
     <div class="table-toolbar">
@@ -2073,9 +2112,43 @@
       <button class="detail-back" type="button" id="leadMgmtCloseBtn">→ חזרה לדשבורד</button>
       <h1>📋 כל הלידים שהועברו לצוות</h1>
     </div>
-    <div class="lm-sub">כל ליד שהועבר לנציגה, מכל הקמפיינים - כולל מה שכבר טופל וכל מה שחזר אלינו אחרי 9 שעות. לחיצה על שורה פותחת את הפרטים המלאים.</div>
+    <div class="lm-sub">כל ליד שהועבר לנציגה, מכל הקמפיינים - כולל מה שכבר טופל. לחיצה על שם פותחת את הכרטיס המלא; ✏️ עורך סטטוס והערה, ↔️ מעביר לנציגה אחרת.</div>
     <div class="lm-body" id="lmBody">
       <div class="lm-empty">טוען...</div>
+    </div>
+  </div>
+</div>
+
+<!-- מסך מזי: עריכת סטטוס+הערה ידנית להקצאה כלשהי (פתוחה או סגורה),
+     בלי צורך בקוד אישי של נציגה - adminUpdateAssignment ב-Code.gs. -->
+<div class="modal-overlay" id="lmEditModal">
+  <div class="modal-card crm-modal-card">
+    <h3>✏️ עדכון סטטוס והערה</h3>
+    <div class="modal-sub" id="lmEditContact"></div>
+    <div class="rep-picker" id="lmEditStatusPicker"></div>
+    <label class="modal-label" for="lmEditNote">הערה</label>
+    <textarea class="modal-input" id="lmEditNote" rows="3" placeholder="מה קרה בליד הזה?"></textarea>
+    <div class="modal-error" id="lmEditError"></div>
+    <div class="modal-actions">
+      <button class="btn" id="lmEditCancelBtn" type="button">ביטול</button>
+      <button class="btn btn-accent" id="lmEditConfirmBtn" type="button">שמירה</button>
+    </div>
+  </div>
+</div>
+
+<!-- מסך מזי: העברת ליד פתוח לנציגה אחרת - תמונת מצב חדשה, לא גרירת
+     ההקצאה הישנה (adminReassignLead ב-Code.gs). -->
+<div class="modal-overlay" id="lmReassignModal">
+  <div class="modal-card crm-modal-card">
+    <h3>↔️ העברה לנציגה אחרת</h3>
+    <div class="modal-sub" id="lmReassignContact"></div>
+    <p class="modal-hint">ההקצאה הנוכחית תיסגר בשקט (בלי לכתוב סטטוס לקמפיין), ותיפתח הקצאה
+      חדשה לנציגה שתבחרי עם התיעוד העדכני ביותר מהקמפיין.</p>
+    <div class="rep-picker" id="lmReassignPicker"></div>
+    <div class="modal-error" id="lmReassignError"></div>
+    <div class="modal-actions">
+      <button class="btn" id="lmReassignCancelBtn" type="button">ביטול</button>
+      <button class="btn btn-accent" id="lmReassignConfirmBtn" type="button">העבר ליד</button>
     </div>
   </div>
 </div>
@@ -2353,18 +2426,23 @@
 
   /**
    * מסך "כל הלידים" - נטען לפי דרישה בלבד (getLeadManagementData ב-Code.gs)
-   * כשלוחצים על האריח בסרגל הצד, לא חלק מרענון הדשבורד הרגיל. מציג
-   * סטטיסטיקה + לוח מובילות (מי תיאמה הכי הרבה) + טבלה של כל ההקצאות
-   * (פתוחות/טופלו/פגו תוקף) עם לחיצה על שורה שפותחת את הפרטים המלאים
-   * (התיעוד שהועבר בזמן ההקצאה + מה שהנציגה כתבה).
+   * כשלוחצים על האריח בסרגל הצד, לא חלק מרענון הדשבורד הרגיל. מציג לוח
+   * מובילות (מי תיאמה הכי הרבה) + טאבים לפי נציגה + טבלה של כל ההקצאות,
+   * עם מונה זמן חי לכל הקצאה פתוחה (בלי סגירה אוטומטית אחרי 9 שעות -
+   * בוטלה לבקשת הלקוחה, רק סימון חזותי) ופעולות עריכה/העברה ישירות
+   * מהשורה, בלי לצאת מהמסך.
    */
   let lmData_ = null;
+  let lmActiveRep_ = 'all';
+  let lmTimerHandle_ = null;
+  const LM_NINE_HOURS_MS_ = 9 * 60 * 60 * 1000;
 
   function openLeadMgmt_() {
     const modal = document.getElementById('leadMgmtModal');
     const body = document.getElementById('lmBody');
     modal.classList.add('show');
     body.innerHTML = '<div class="lm-empty">טוען...</div>';
+    lmActiveRep_ = 'all';
     google.script.run
       .withSuccessHandler(function (data) {
         lmData_ = data;
@@ -2376,19 +2454,50 @@
       .getLeadManagementData();
   }
 
+  function closeLeadMgmt_() {
+    document.getElementById('leadMgmtModal').classList.remove('show');
+    if (lmTimerHandle_) { clearInterval(lmTimerHandle_); lmTimerHandle_ = null; }
+  }
+
+  function isLmToday_(ms) {
+    if (!ms) return false;
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    return ms >= midnight.getTime();
+  }
+
+  function lmFmtDuration_(ms) {
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
+    const pad = function (n) { return String(n).padStart(2, '0'); };
+    return h > 0 ? (h + ':' + pad(m) + ':' + pad(s)) : (pad(m) + ':' + pad(s));
+  }
+
+  /** מריץ פעם בשנייה כל עוד המסך פתוח - מעדכן את כל מוני הזמן החיים בטבלה. */
+  function lmTickTimers_() {
+    document.querySelectorAll('.lm-timer[data-ms]').forEach(function (el) {
+      const startMs = Number(el.getAttribute('data-ms'));
+      const elapsed = Date.now() - startMs;
+      const valEl = el.querySelector('.v');
+      if (valEl) valEl.textContent = lmFmtDuration_(elapsed);
+      const subEl = el.parentElement ? el.parentElement.querySelector('.lm-timer-sub') : null;
+      if (elapsed >= LM_NINE_HOURS_MS_) {
+        el.classList.add('long');
+        if (subEl) { subEl.textContent = 'מעל 9 שעות - כדאי לבדוק'; subEl.classList.add('warn'); }
+      } else {
+        el.classList.remove('long');
+        if (subEl) { subEl.textContent = ''; subEl.classList.remove('warn'); }
+      }
+    });
+  }
+
   function renderLeadMgmtScreen_(data) {
     const body = document.getElementById('lmBody');
+    if (lmTimerHandle_) { clearInterval(lmTimerHandle_); lmTimerHandle_ = null; }
     if (!data || !data.rows || !data.rows.length) {
       body.innerHTML = '<div class="lm-empty">עדיין לא הועברו לידים לצוות.</div>';
       return;
     }
-
-    const statsHtml = '<div class="lm-stats">' +
-      '<div class="lm-stat"><div class="n">' + data.total + '</div><div class="l">סה"כ הועברו</div></div>' +
-      '<div class="lm-stat good"><div class="n">' + data.scheduled + '</div><div class="l">תואמה פגישה</div></div>' +
-      '<div class="lm-stat"><div class="n">' + data.exhausted + '</div><div class="l">טופלו - לא תואם</div></div>' +
-      '<div class="lm-stat bad"><div class="n">' + data.expiredCount + '</div><div class="l">חזרו אחרי 9 שעות</div></div>' +
-      '</div>';
 
     let boardHtml = '';
     if (data.leaderboard && data.leaderboard.length) {
@@ -2402,39 +2511,78 @@
         }).join('') + '</div>';
     }
 
+    // טאבים: "כל הצוות" + כל נציגה מוכרת (גם מי שאין לה כרגע ליד), עם
+    // ספירה לפי מה שבפועל יש ב-rows.
+    const repCounts = {};
+    data.rows.forEach(function (it) { repCounts[it.repName] = (repCounts[it.repName] || 0) + 1; });
+    const repList = (data.repNames && data.repNames.length) ? data.repNames : Object.keys(repCounts);
+    const tabsHtml = '<div class="lm-tabs">' +
+      '<button type="button" class="lm-tab' + (lmActiveRep_ === 'all' ? ' on' : '') + '" data-rep="all">כל הצוות<span class="c">' + data.rows.length + '</span></button>' +
+      repList.map(function (name) {
+        return '<button type="button" class="lm-tab' + (lmActiveRep_ === name ? ' on' : '') + '" data-rep="' + escapeHtml_(name) + '">' +
+          escapeHtml_(name) + '<span class="c">' + (repCounts[name] || 0) + '</span></button>';
+      }).join('') + '</div>';
+
     const tableHtml = '<div class="lm-table-wrap"><table class="lm-table"><thead><tr>' +
-      '<th>שם / חברה</th><th>טלפון</th><th>קמפיין</th><th>נציגה</th><th>סטטוס</th><th>הועבר</th>' +
+      '<th class="lm-col-lead">ליד</th><th class="lm-col-camp">קמפיין · נציגה</th>' +
+      '<th class="lm-col-status">סטטוס</th><th class="lm-col-timer">זמן פתוח</th>' +
+      '<th class="lm-col-note">הערה</th><th class="lm-col-actions">פעולות</th>' +
       '</tr></thead><tbody>' +
       data.rows.map(function (it, i) {
-        let chipCls = 'open', chipText = it.status || 'פתוח';
-        if (it.isExpired) { chipCls = 'expired'; chipText = 'חזר אחרי 9 שעות'; }
-        else if (it.isDone) { chipCls = (it.status === 'תואמה פגישה') ? 'scheduled' : 'open'; chipText = it.status || 'טופל'; }
+        if (lmActiveRep_ !== 'all' && it.repName !== lmActiveRep_) return '';
 
-        return '<tr class="lm-row' + (it.isExpired ? ' expired' : '') + '" data-idx="' + i + '">' +
-          '<td><b>' + escapeHtml_(it.name || '(ללא שם)') + '</b>' + (it.company ? '<br><span style="color:var(--text-muted)">' + escapeHtml_(it.company) + '</span>' : '') + '</td>' +
-          '<td>' + escapeHtml_(it.phone) + '</td>' +
-          '<td>' + escapeHtml_(it.campaign) + '</td>' +
-          '<td>' + escapeHtml_(it.repName) + '</td>' +
+        const today = isLmToday_(it.assignedAtMs);
+        let chipCls = 'open', chipText = it.status || 'פתוח אצל הנציגה';
+        if (it.isDone) { chipCls = (it.status === 'תואמה פגישה') ? 'scheduled' : (it.status === 'לא מעוניין' ? 'bad' : 'open'); chipText = it.status || 'טופל'; }
+
+        const todayBadge = today ? '<span class="lm-today-badge">🆕 היום</span>' : '';
+        const noteText = it.repNote || it.snapshot || '';
+        const noteHtml = noteText
+          ? '<div class="lm-note-text">' + escapeHtml_(noteText.slice(0, 90)) + (noteText.length > 90 ? '…' : '') + '</div>'
+          : '<div class="lm-note-text empty">—</div>';
+
+        const timerHtml = it.isDone
+          ? '<div class="lm-timer done">✓ נסגר</div>'
+          : '<div class="lm-timer" data-ms="' + it.assignedAtMs + '"><span class="v">--:--</span></div><div class="lm-timer-sub"></div>';
+
+        const reassignBtn = it.isDone ? '' : '<button type="button" class="lm-icon-btn lm-reassign-btn" title="העברה לנציגה אחרת">↔️</button>';
+
+        return '<tr class="lm-row' + (today ? ' today' : '') + '" data-idx="' + i + '">' +
+          '<td><b class="lm-open-detail" style="cursor:pointer">' + escapeHtml_(it.name || '(ללא שם)') + '</b>' + todayBadge +
+            (it.company ? '<br><span style="color:var(--text-muted)">' + escapeHtml_(it.company) + '</span>' : '') + '</td>' +
+          '<td>' + escapeHtml_(it.campaign) + '<br><span style="color:var(--text-muted)">' + escapeHtml_(it.repName) + '</span></td>' +
           '<td><span class="lm-chip ' + chipCls + '">' + escapeHtml_(chipText) + '</span></td>' +
-          '<td>' + escapeHtml_(it.assignedAt) + '</td>' +
+          '<td>' + timerHtml + '</td>' +
+          '<td>' + noteHtml + '</td>' +
+          '<td><div class="lm-actions">' +
+            '<button type="button" class="lm-icon-btn lm-edit-btn" title="עדכון סטטוס והערה">✏️</button>' +
+            reassignBtn +
+          '</div></td>' +
           '</tr>';
       }).join('') + '</tbody></table></div>';
 
-    body.innerHTML = statsHtml + boardHtml + tableHtml;
+    body.innerHTML = boardHtml + tabsHtml + tableHtml;
 
-    // לחיצה על שורה פותחת את **אותו** מסך פרטי איש קשר שיש היום בדשבורד
-    // הראשי (הערה + שינוי סטטוס + העברה לנציגה) - לא מסך נפרד. אם הליד
-    // כבר בטאב הקמפיין הטעון כרגע - פותחים מיד בלי קריאה נוספת לשרת
-    // (זה מה שהיה איטי - כל לחיצה טענה מחדש את כל הקמפיין). אחרת עוברים
-    // לטאב שלו קודם, עם חיווי טעינה ברור על השורה עצמה כדי שלא ייראה תקוע.
-    body.querySelectorAll('tr.lm-row').forEach(function (tr) {
-      tr.addEventListener('click', function () {
-        if (tr.classList.contains('loading')) return;
+    body.querySelectorAll('.lm-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        lmActiveRep_ = btn.getAttribute('data-rep');
+        renderLeadMgmtScreen_(data);
+      });
+    });
+
+    // לחיצה על השם פותחת את **אותו** מסך פרטי איש קשר שיש היום בדשבורד
+    // הראשי (הערה + שינוי סטטוס + העברה לנציגה + סיכום AI) - לא מסך
+    // נפרד. אם הליד כבר בטאב הקמפיין הטעון כרגע - פותחים מיד בלי קריאה
+    // נוספת לשרת (זה מה שהיה איטי - כל לחיצה טענה מחדש את כל הקמפיין).
+    body.querySelectorAll('.lm-open-detail').forEach(function (nameEl) {
+      nameEl.addEventListener('click', function () {
+        const tr = nameEl.closest('tr.lm-row');
+        if (!tr || tr.classList.contains('loading')) return;
         const it = data.rows[Number(tr.getAttribute('data-idx'))];
         if (!it) return;
 
         function openDetail() {
-          document.getElementById('leadMgmtModal').classList.remove('show');
+          closeLeadMgmt_();
           const tabBtn = document.querySelector('.tab[data-tab="' + it.campaign.replace(/"/g, '\\"') + '"]');
           if (tabBtn) {
             document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
@@ -2447,10 +2595,163 @@
         if (currentTabName === it.campaign && currentData) { openDetail(); return; }
 
         tr.classList.add('loading');
-        const firstCell = tr.querySelector('td');
-        if (firstCell) firstCell.innerHTML = '<b>⏳ טוען את ' + escapeHtml_(it.campaign) + '...</b>';
+        nameEl.textContent = '⏳ טוען את ' + it.campaign + '...';
         loadCampaign(it.campaign, false, openDetail);
       });
+    });
+
+    body.querySelectorAll('.lm-edit-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const tr = btn.closest('tr.lm-row');
+        const it = data.rows[Number(tr.getAttribute('data-idx'))];
+        if (it) openLmEditModal_(it);
+      });
+    });
+    body.querySelectorAll('.lm-reassign-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const tr = btn.closest('tr.lm-row');
+        const it = data.rows[Number(tr.getAttribute('data-idx'))];
+        if (it) openLmReassignModal_(it);
+      });
+    });
+
+    lmTickTimers_();
+    lmTimerHandle_ = setInterval(lmTickTimers_, 1000);
+  }
+
+  /* ---------- מסך מזי: עריכת סטטוס+הערה (adminUpdateAssignment) ---------- */
+  let lmEditTarget_ = null;
+  let lmEditChosenStatus_ = '';
+
+  function openLmEditModal_(it) {
+    lmEditTarget_ = it;
+    lmEditChosenStatus_ = it.status || '';
+    const modal = document.getElementById('lmEditModal');
+    const contactEl = document.getElementById('lmEditContact');
+    const pickerEl = document.getElementById('lmEditStatusPicker');
+    const noteEl = document.getElementById('lmEditNote');
+    const errorEl = document.getElementById('lmEditError');
+
+    contactEl.textContent = [it.name, it.company, it.repName].filter(Boolean).join(' · ');
+    noteEl.value = it.repNote || '';
+    errorEl.textContent = '';
+
+    const statuses = (lmData_ && lmData_.quickStatuses) ? lmData_.quickStatuses.slice() : [];
+    if (it.status && statuses.indexOf(it.status) === -1) statuses.unshift(it.status);
+    pickerEl.innerHTML = statuses.map(function (s) {
+      return '<button type="button" data-status="' + escapeHtml_(s) + '"' +
+        (s === lmEditChosenStatus_ ? ' class="sel"' : '') + '>' + escapeHtml_(s) + '</button>';
+    }).join('');
+    pickerEl.querySelectorAll('button[data-status]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        lmEditChosenStatus_ = b.getAttribute('data-status');
+        pickerEl.querySelectorAll('button').forEach(function (x) { x.classList.remove('sel'); });
+        b.classList.add('sel');
+      });
+    });
+
+    modal.classList.add('show');
+  }
+
+  function setupLmEditModal_() {
+    const modal = document.getElementById('lmEditModal');
+    const closeBtn = document.getElementById('lmEditCancelBtn');
+    const confirmBtn = document.getElementById('lmEditConfirmBtn');
+    const errorEl = document.getElementById('lmEditError');
+    const noteEl = document.getElementById('lmEditNote');
+    if (!modal) return;
+
+    function close() { modal.classList.remove('show'); }
+    closeBtn.addEventListener('click', close);
+    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+
+    confirmBtn.addEventListener('click', function () {
+      if (!lmEditChosenStatus_) { errorEl.textContent = 'יש לבחור סטטוס'; return; }
+      if (!noteEl.value.trim()) { errorEl.textContent = 'יש לכתוב הערה'; return; }
+      if (!lmEditTarget_) return;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'שומר...';
+      google.script.run
+        .withSuccessHandler(function () {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'שמירה';
+          close();
+          showSavedToast_('✓ עודכן');
+          openLeadMgmt_();
+        })
+        .withFailureHandler(function (err) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'שמירה';
+          errorEl.textContent = (err && err.message) ? err.message : String(err);
+        })
+        .adminUpdateAssignment(lmEditTarget_.id, lmEditChosenStatus_, noteEl.value);
+    });
+  }
+
+  /* ---------- מסך מזי: העברה לנציגה אחרת (adminReassignLead) ---------- */
+  let lmReassignTarget_ = null;
+  let lmReassignChosenRep_ = '';
+
+  function openLmReassignModal_(it) {
+    lmReassignTarget_ = it;
+    lmReassignChosenRep_ = '';
+    const modal = document.getElementById('lmReassignModal');
+    const contactEl = document.getElementById('lmReassignContact');
+    const pickerEl = document.getElementById('lmReassignPicker');
+    const errorEl = document.getElementById('lmReassignError');
+
+    contactEl.textContent = [it.name, it.company].filter(Boolean).join(' · ') + ' - כרגע אצל ' + it.repName;
+    errorEl.textContent = '';
+
+    const reps = ((lmData_ && lmData_.repNames) || []).filter(function (n) { return n !== it.repName; });
+    if (!reps.length) {
+      pickerEl.innerHTML = '<div class="focus-empty">אין נציגה אחרת להעביר אליה.</div>';
+    } else {
+      pickerEl.innerHTML = reps.map(function (n) {
+        return '<button type="button" data-rep="' + escapeHtml_(n) + '">👤 ' + escapeHtml_(n) + '</button>';
+      }).join('');
+      pickerEl.querySelectorAll('button[data-rep]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          lmReassignChosenRep_ = b.getAttribute('data-rep');
+          pickerEl.querySelectorAll('button').forEach(function (x) { x.classList.remove('sel'); });
+          b.classList.add('sel');
+        });
+      });
+    }
+
+    modal.classList.add('show');
+  }
+
+  function setupLmReassignModal_() {
+    const modal = document.getElementById('lmReassignModal');
+    const closeBtn = document.getElementById('lmReassignCancelBtn');
+    const confirmBtn = document.getElementById('lmReassignConfirmBtn');
+    const errorEl = document.getElementById('lmReassignError');
+    if (!modal) return;
+
+    function close() { modal.classList.remove('show'); }
+    closeBtn.addEventListener('click', close);
+    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+
+    confirmBtn.addEventListener('click', function () {
+      if (!lmReassignChosenRep_) { errorEl.textContent = 'יש לבחור נציגה'; return; }
+      if (!lmReassignTarget_) return;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'מעביר...';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'העבר ליד';
+          close();
+          showSavedToast_('✓ הליד הועבר ל' + (res && res.rep ? res.rep : lmReassignChosenRep_));
+          openLeadMgmt_();
+        })
+        .withFailureHandler(function (err) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'העבר ליד';
+          errorEl.textContent = (err && err.message) ? err.message : String(err);
+        })
+        .adminReassignLead(lmReassignTarget_.id, lmReassignChosenRep_);
     });
   }
 
@@ -2460,8 +2761,10 @@
     const closeBtn = document.getElementById('leadMgmtCloseBtn');
     if (!tile || !modal) return;
     tile.addEventListener('click', openLeadMgmt_);
-    closeBtn.addEventListener('click', function () { modal.classList.remove('show'); });
-    modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.remove('show'); });
+    closeBtn.addEventListener('click', closeLeadMgmt_);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeLeadMgmt_(); });
+    setupLmEditModal_();
+    setupLmReassignModal_();
   }
 
   function focusDef_(key) {
@@ -2626,8 +2929,9 @@
           '<span>' + data.replies + ' מתוך ' + data.sent + ' שנשלחו</span></div>' +
         '<div class="rate-bar"><i style="width:' + Math.max(0, Math.min(100, replyRate)) + '%"></i></div>' +
       '</div>';
-    document.getElementById('stats').innerHTML = statsHtml + rateTileHtml;
-    setupKpiClicks_();
+    // הבאנרים החזותיים הוסרו לבקשת הלקוחה - statsHtml/rateTileHtml
+    // ממשיכים להיבנות למעלה (זול, ולא שווה לפרק את הקוד) אבל לא מוצגים.
+    document.getElementById('stats').innerHTML = '';
 
     // גרף הפילוח ירד מהמסך הראשי (החליף אותו פס שיעור התגובה), אבל
     // הלוגיקה נשארת - הלג'נד מוסתר ומשמש רק לחישוב הקטגוריות לסינון.

@@ -2983,65 +2983,19 @@ function isDoneValue_(v) {
   return s === normalizeLabel_('כן') || s === 'true' || s === 'yes';
 }
 
-// ליד שמוקצה לנציגה ולא טופל תוך 9 שעות רצופות (לא שעות עבודה - זמן
-// שעון רגיל) חוזר לבד למיטוב, כדי שאף ליד לא "יתקע" אצל נציגה בלי
-// שאיש שם לב. בקשה מפורשת של הלקוחה.
-const ASSIGNMENT_TIMEOUT_MS_ = 9 * 60 * 60 * 1000;
-const ASSIGN_EXPIRED_STATUS_ = 'פג תוקף - חזר למיטוב';
-
-/**
- * "מרפאה" הקצאות שנתקעו: כל הקצאה פתוחה (טופל != כן) שעברו עליה יותר
- * מ-9 שעות מרגע ההעברה נסגרת אוטומטית עם סימון ייעודי (ASSIGN_EXPIRED_STATUS_)
- * - כך שהליד נעלם מהדשבורד של הנציגה (openAssignmentFor_ לא רואה אותו
- * יותר כפתוח) וחוזר להיות זמין להעברה מחדש, בלי לגעת בסטטוס האמיתי
- * של הליד בטאב הקמפיין (בכוונה **לא** כמו completeAssignment - זו לא
- * "החלטה" של הנציגה, אין למה לכתוב חזרה). נקראת בתחילת כל טעינה
- * (getCampaignData/getRepData) - "מרפאה בזמן קריאה", לא דורשת טריגר
- * מותקן בנפרד.
- */
-function expireStaleAssignments_() {
-  const lock = LockService.getScriptLock();
-  // לא waitLock ארוך: כמה דשבורדים (ראשי + כל נציגה) קוראים לפונקציה הזו
-  // בכל רענון (כל 30-60 שניות), וכולם מתחרים על אותה נעילה סקריפט-רחבה.
-  // אם הנעילה תפוסה - מדלגים על הבדיקה הפעם במקום להפיל את כל הקריאה
-  // (getRepData/getCampaignData/getLeadManagementData) עם שגיאת timeout;
-  // היא תתעדכן ממילא בקריאה הבאה של מישהו אחר.
-  if (!lock.tryLock(3000)) return;
-  try {
-    const data = assignRows_();
-    if (!data.values.length) return;
-    const dateCol = assignCol_(data.headers, 'תאריך הקצאה');
-    const doneCol = assignCol_(data.headers, 'טופל');
-    const statusCol = assignCol_(data.headers, 'סטטוס שסומן');
-    const doneDateCol = assignCol_(data.headers, 'תאריך טיפול');
-    if (dateCol === -1 || doneCol === -1) return;
-
-    const now = Date.now();
-    data.values.forEach(function (row, i) {
-      if (isDoneValue_(row[doneCol])) return;
-      const assignedAt = row[dateCol];
-      if (!(assignedAt instanceof Date) || isNaN(assignedAt.getTime())) return;
-      if (now - assignedAt.getTime() < ASSIGNMENT_TIMEOUT_MS_) return;
-
-      const rowIndex = i + 2;
-      data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
-      if (statusCol !== -1) data.sheet.getRange(rowIndex, statusCol + 1).setValue(ASSIGN_EXPIRED_STATUS_);
-      if (doneDateCol !== -1) data.sheet.getRange(rowIndex, doneDateCol + 1).setValue(new Date());
-    });
-  } finally {
-    lock.releaseLock();
-  }
-}
+// בעבר: ליד שלא טופל תוך 9 שעות חזר לבד למיטוב (expireStaleAssignments_).
+// הוסר לבקשת הלקוחה - הליד נשאר פתוח אצל הנציגה עד שהיא בעצמה סוגרת
+// אותו; במקום סגירה אוטומטית מוצג בצד הלקוח מונה זמן חי (כמה זמן פתוח)
+// עם סימון חזותי (לא חוסם) אחרי 9 שעות, מבוסס על assignedAtMs שכבר
+// מוחזר מכאן ומ-getRepData. אם צריך את הרעיון הזה שוב - הקוד המקורי
+// נשמר בהיסטוריית git (חיפוש "ASSIGN_EXPIRED_STATUS_").
 
 /**
  * כל נתוני מסך "ניהול לידים" (לשונית נפרדת, נפתחת רק בלחיצה - לא
- * מוצגת בדשבורד הראשי): כל ההקצאות אי-פעם (פתוחות/טופלו/חזרו למיטוב
- * לבד אחרי 9 שעות), סטטיסטיקה מסכמת, ודירוג נציגות לפי תיאומים.
- * expireStaleAssignments_ בהתחלה - כדי שהמצב תמיד יהיה עדכני, גם אם
- * אף אחד לא טען את הדשבורד הרגיל לאחרונה.
+ * מוצגת בדשבורד הראשי): כל ההקצאות אי-פעם (פתוחות/טופלו), סטטיסטיקה
+ * מסכמת, ודירוג נציגות לפי תיאומים.
  */
 function getLeadManagementData() {
-  expireStaleAssignments_();
   const data = assignRows_();
   const H = data.headers;
   const idx = {
@@ -3060,22 +3014,19 @@ function getLeadManagementData() {
 
   const rows = [];
   const repStats = {}; // { repName: { total, scheduled } } - לאחוז התיאומים, לא רק מספר גולמי
-  let scheduled = 0, exhausted = 0, expiredCount = 0;
+  let scheduled = 0, exhausted = 0;
 
   data.values.forEach(function (row) {
     const repName = String(row[idx.rep] || '');
     const isDone = isDoneValue_(row[idx.done]);
     const statusText = String(row[idx.status] || '');
-    const isExpired = normalizeLabel_(statusText) === normalizeLabel_(ASSIGN_EXPIRED_STATUS_);
 
-    if (repName && !isExpired) {
+    if (repName) {
       if (!repStats[repName]) repStats[repName] = { total: 0, scheduled: 0 };
       repStats[repName].total++;
     }
 
-    if (isExpired) {
-      expiredCount++;
-    } else if (isDone) {
+    if (isDone) {
       if (normalizeLabel_(statusText) === normalizeLabel_(REP_CELEBRATE_STATUS_)) {
         scheduled++;
         if (repName) repStats[repName].scheduled++;
@@ -3097,7 +3048,6 @@ function getLeadManagementData() {
       snapshot: idx.snapshot !== -1 ? String(row[idx.snapshot] || '') : '',
       status: statusText,
       isDone: isDone,
-      isExpired: isExpired,
       assignedAt: fmt(assignedAtDate),
       assignedAtMs: (assignedAtDate instanceof Date && !isNaN(assignedAtDate.getTime())) ? assignedAtDate.getTime() : 0,
       doneAt: fmt(row[idx.doneDate])
@@ -3116,9 +3066,14 @@ function getLeadManagementData() {
     total: data.values.length,
     scheduled: scheduled,
     exhausted: exhausted,
-    expiredCount: expiredCount,
     leaderboard: leaderboard,
-    rows: rows
+    rows: rows,
+    // לצורך מסך "כל הלידים": כפתורי סטטוס מהירים לעריכה (אותם שהנציגה
+    // רואה) ורשימת כל הנציגות הקיימות (גם מי שאין לה כרגע ליד פתוח -
+    // כדי שאפשר יהיה להעביר גם אליה) - שני הדברים לצורך אותה מודל
+    // עריכה/העברה, בלי קריאת שרת נוספת.
+    quickStatuses: REP_QUICK_STATUSES_,
+    repNames: getRepNames()
   };
 }
 
@@ -3253,6 +3208,84 @@ function cancelAssignment(sheetName, phone) {
 }
 
 /**
+ * מזי/טליה מעדכנות ידנית סטטוס+הערה לכל הקצאה ממסך "כל הלידים שהועברו" -
+ * בלי צורך בקוד אישי של נציגה ובלי בדיקת בעלות (בשונה מ-completeAssignment,
+ * שרק הנציגה עצמה יכולה לקרוא לה). אותה לוגיקה בדיוק - כתיבה חזרה לשורת
+ * הליד בקמפיין + addStatusIfMissing_ כדי שהסטטוס לעולם לא "ייעלם"
+ * מהתצוגה. עובד גם על הקצאה פתוחה (בפועל סוגר אותה, כמו שהנציגה הייתה
+ * עושה) וגם על הקצאה שכבר טופלה (לתקן טעות בדיעבד).
+ */
+function adminUpdateAssignment(assignmentId, statusText, noteText) {
+  if (!statusText) throw new Error('יש לבחור סטטוס');
+  if (!String(noteText || '').trim()) throw new Error('יש לכתוב הערה');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const data = assignRows_();
+    const H = data.headers;
+    const idCol = assignCol_(H, 'מזהה הקצאה');
+    const repCol = assignCol_(H, 'נציגה');
+    const doneCol = assignCol_(H, 'טופל');
+    const statusCol = assignCol_(H, 'סטטוס שסומן');
+    const noteCol = assignCol_(H, 'הערת נציגה');
+    const dateCol = assignCol_(H, 'תאריך טיפול');
+    const campCol = assignCol_(H, 'קמפיין');
+    const phoneCol = assignCol_(H, 'טלפון נייד');
+
+    for (let i = 0; i < data.values.length; i++) {
+      const row = data.values[i];
+      if (String(row[idCol]) !== String(assignmentId)) continue;
+
+      const rowIndex = i + 2;
+      const repName = String(row[repCol] || '');
+      data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
+      data.sheet.getRange(rowIndex, statusCol + 1).setValue(statusText);
+      data.sheet.getRange(rowIndex, noteCol + 1).setValue(noteText || '');
+      data.sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
+
+      addStatusIfMissing_(statusText);
+      writeBackRepStatus_(String(row[campCol]), String(row[phoneCol]), repName, statusText, noteText);
+      return { success: true };
+    }
+    throw new Error('ההקצאה לא נמצאה');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * מזי/טליה מעבירות ליד פתוח לנציגה אחרת ממסך "כל הלידים שהועברו".
+ * **תמונת מצב חדשה, לא גרירת הישנה** (בקשה מפורשת של הלקוחה): מבטלת את
+ * ההקצאה הקיימת בדיוק כמו cancelAssignment (בשקט, בלי לכתוב סטטוס/הערה
+ * לקמפיין - זו לא "החלטה" של הנציגה הקודמת), ופותחת הקצאה חדשה לנציגה
+ * החדשה עם תיעוד עדכני מהקמפיין דרך assignLead הרגילה.
+ */
+function adminReassignLead(assignmentId, newRepName) {
+  const data = assignRows_();
+  const H = data.headers;
+  const idCol = assignCol_(H, 'מזהה הקצאה');
+  const doneCol = assignCol_(H, 'טופל');
+  const campCol = assignCol_(H, 'קמפיין');
+  const phoneCol = assignCol_(H, 'טלפון נייד');
+  const noteToRepCol = assignCol_(H, 'הערה לנציגה');
+
+  for (let i = 0; i < data.values.length; i++) {
+    const row = data.values[i];
+    if (String(row[idCol]) !== String(assignmentId)) continue;
+    if (isDoneValue_(row[doneCol])) throw new Error('ההקצאה הזו כבר סגורה - אי אפשר להעביר ליד שכבר טופל');
+
+    const sheetName = String(row[campCol] || '');
+    const phone = String(row[phoneCol] || '');
+    const noteToRep = noteToRepCol !== -1 ? String(row[noteToRepCol] || '') : '';
+
+    cancelAssignment(sheetName, phone);
+    return assignLead(sheetName, phone, newRepName, noteToRep);
+  }
+  throw new Error('ההקצאה לא נמצאה');
+}
+
+/**
  * מחיקת שורת הקצאה **ספציפית** מטאב "הקצאות" לפי "מזהה הקצאה" הייחודי -
  * בין אם היא עדיין פתוחה ובין אם כבר טופלה. בשונה מ-cancelAssignment
  * (שמוגבלת בכוונה להקצאות פתוחות בלבד, לפי קמפיין+טלפון): כאן מיטוב
@@ -3380,7 +3413,6 @@ function getRepData(repKey) {
   const rep = repByKey_(repKey);
   if (!rep) throw new Error('לינק לא מזוהה. יש לפנות לטליה לקבלת לינק חדש.');
 
-  expireStaleAssignments_();
   const data = assignRows_();
   const H = data.headers;
   const idx = {
@@ -4308,8 +4340,6 @@ function getCampaignData_impl_(sheetName) {
       availableNames: campaignSheets.map(function (s) { return s.getName(); })
     };
   }
-
-  expireStaleAssignments_();
 
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
