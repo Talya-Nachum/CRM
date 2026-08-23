@@ -3241,7 +3241,7 @@ function adminUpdateAssignment(assignmentId, statusText, noteText) {
 
       const rowIndex = i + 2;
       const repName = String(row[repCol] || '');
-      if (!keepOpen) data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
+      data.sheet.getRange(rowIndex, doneCol + 1).setValue(keepOpen ? 'לא' : 'כן');
       data.sheet.getRange(rowIndex, statusCol + 1).setValue(statusText);
       data.sheet.getRange(rowIndex, noteCol + 1).setValue(noteText || '');
       data.sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());
@@ -3544,10 +3544,13 @@ function completeAssignment(repKey, assignmentId, statusText, noteText) {
       if (normalizeLabel_(row[repCol]) !== normalizeLabel_(rep.name)) {
         throw new Error('ההקצאה הזו שייכת לנציגה אחרת');
       }
-      if (isDoneValue_(row[doneCol])) return { success: true, alreadyDone: true };
 
+      // מותר לערוך גם הקצאה שכבר טופלה (למשל לתקן "בתהליך" ישן שנסגר
+      // בטעות לפני התיקון) - לא חוסמים יותר, ר' openDoneModal ברפ-דשבורד
+      // שנפתחת גם מטבלת "טופלו". doneCol נקבע **תמיד** במפורש לפי keepOpen
+      // (לא רק "מדלגים" עליו) כדי שבחירה ב"בתהליך" תפתח מחדש הקצאה סגורה.
       const rowIndex = i + 2;
-      if (!keepOpen) data.sheet.getRange(rowIndex, doneCol + 1).setValue('כן');
+      data.sheet.getRange(rowIndex, doneCol + 1).setValue(keepOpen ? 'לא' : 'כן');
       data.sheet.getRange(rowIndex, statusCol + 1).setValue(statusText);
       data.sheet.getRange(rowIndex, noteCol + 1).setValue(noteText || '');
       data.sheet.getRange(rowIndex, dateCol + 1).setValue(new Date());

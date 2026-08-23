@@ -633,17 +633,24 @@
     }
 
     wrap.innerHTML = '<table><thead><tr>' +
-      '<th style="width:13%">תאריך טיפול</th><th style="width:20%">שם חברה</th>' +
-      '<th style="width:15%">איש קשר</th><th style="width:17%">קמפיין</th>' +
-      '<th style="width:14%">סטטוס</th><th>הערה שכתבתי</th>' +
+      '<th style="width:13%">תאריך טיפול</th><th style="width:19%">שם חברה</th>' +
+      '<th style="width:14%">איש קשר</th><th style="width:16%">קמפיין</th>' +
+      '<th style="width:13%">סטטוס</th><th>הערה שכתבתי</th><th style="width:40px"></th>' +
       '</tr></thead><tbody>' +
       list.map(function (l) {
         return '<tr><td>' + esc(l.doneAt) + '</td><td>' + esc(l.company) + '</td>' +
           '<td><b>' + esc(l.name) + '</b></td><td>' + esc(l.campaign) + '</td>' +
           '<td><span class="pill" style="background:rgba(31,170,89,.14);color:#137A43">' +
             esc(l.status) + '</span></td>' +
-          '<td class="note-full">' + esc(l.note || '—') + '</td></tr>';
+          '<td class="note-full">' + esc(l.note || '—') + '</td>' +
+          '<td><button type="button" class="done-edit-btn" data-id="' + esc(l.id) + '" ' +
+            'title="עריכת סטטוס והערה" style="border:none;background:transparent;cursor:pointer;font-size:15px">✏️</button></td>' +
+          '</tr>';
       }).join('') + '</tbody></table>';
+
+    wrap.querySelectorAll('.done-edit-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { openDoneModal(btn.getAttribute('data-id')); });
+    });
   }
 
   function findLead(id) {
