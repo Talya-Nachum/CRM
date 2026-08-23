@@ -257,6 +257,7 @@ function getLeads() {
   var createdIdx = fieldIndex_('createdAt');
   var updatedIdx = fieldIndex_('updatedAt');
   var statusIdx = fieldIndex_('status');
+  var sectorIdx = fieldIndex_('sector');
   var leads = [];
 
   for (var i = 1; i < values.length; i++) {
@@ -269,6 +270,12 @@ function getLeads() {
     if (!row[createdIdx]) { row[createdIdx] = now; needsWriteBack = true; }
     if (!row[updatedIdx]) { row[updatedIdx] = now; needsWriteBack = true; }
     if (!row[statusIdx]) { row[statusIdx] = getDefaultStatus_(); needsWriteBack = true; }
+
+    // שורה שנוספה ידנית בגיליון בד"כ תכתוב בעמודת "סקטור" את השם בעברית
+    // (למשל "שוק ההון") ולא את המפתח הפנימי ("capital") שהדשבורד מסנן
+    // לפיו את הטאבים - בלי הנרמול הזה הליד לא יופיע באף טאב.
+    var normalizedSector = normalizeSectorValue_(row[sectorIdx]);
+    if (normalizedSector !== row[sectorIdx]) { row[sectorIdx] = normalizedSector; needsWriteBack = true; }
 
     if (needsWriteBack) {
       sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
@@ -286,6 +293,23 @@ function fieldIndex_(key) {
 
 function isRowEmpty_(row) {
   return row.every(function (cell) { return cell === '' || cell === null || cell === undefined; });
+}
+
+/**
+ * ממירה מה שנכתב בעמודת "סקטור" בגיליון (למשל "שוק ההון", שזה הכי טבעי
+ * להקליד ידנית) למפתח הפנימי של הסקטור (capital/energy/health) שהדשבורד
+ * מסנן לפיו את הטאבים. תומכת גם בהקלדת המפתח עצמו. ערך שלא מזוהה נשאר
+ * כמו שהוא (הליד לא יופיע באף טאב, אפשר לתקן מעריכת הליד בדשבורד).
+ */
+function normalizeSectorValue_(raw) {
+  var val = String(raw || '').trim();
+  if (!val) return '';
+  var lower = val.toLowerCase();
+  for (var i = 0; i < SECTORS.length; i++) {
+    var s = SECTORS[i];
+    if (s.key.toLowerCase() === lower || s.label === val) return s.key;
+  }
+  return val;
 }
 
 function addLead(leadData) {
