@@ -250,8 +250,9 @@ function logWebhook_(payload) {
 function getLeads() {
   ensureSheets_();
   var sheet = getLeadsSheet_();
-  var values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  var values = readSheetValuesResilient_(sheet, lastRow, LEAD_FIELDS.length);
 
   var idIdx = fieldIndex_('id');
   var createdIdx = fieldIndex_('createdAt');
@@ -262,7 +263,7 @@ function getLeads() {
 
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    if (isRowEmpty_(row)) continue;
+    if (!row || isRowEmpty_(row)) continue;
 
     var now = new Date();
     var needsWriteBack = false;
@@ -293,6 +294,31 @@ function fieldIndex_(key) {
 
 function isRowEmpty_(row) {
   return row.every(function (cell) { return cell === '' || cell === null || cell === undefined; });
+}
+
+/**
+ * קוראת את טווח הנתונים כולל שורת הכותרות. אם יש בגיליון אפילו תא אחד
+ * עם ערך שגיאה של נוסחה (#ERROR!/#REF!/#VALUE! וכו' - קורה בקלות בשורה
+ * שהודבקה עם נוסחה מקושרת, למשל ניקוי טלפון) - getRange().getValues()
+ * על הטווח כולו נכשל בשקט ונופל לגמרי, מה שגורם לדשבורד להיראות ריק
+ * לחלוטין (כל הטאבים מציגים 0, גם לידים תקינים). כשזה קורה, קוראים
+ * שורה-שורה במקום, ומדלגים רק על השורה הספציפית שבה יש שגיאה (במקום
+ * להפיל את כל הרשימה) - חשובה בעיקר בגיליון שמעודכן ידנית/מהדבקת אקסל.
+ */
+function readSheetValuesResilient_(sheet, lastRow, numCols) {
+  try {
+    return sheet.getRange(1, 1, lastRow, numCols).getValues();
+  } catch (e) {
+    var values = [];
+    for (var r = 1; r <= lastRow; r++) {
+      try {
+        values.push(sheet.getRange(r, 1, 1, numCols).getValues()[0]);
+      } catch (rowErr) {
+        values.push(null);
+      }
+    }
+    return values;
+  }
 }
 
 /**
