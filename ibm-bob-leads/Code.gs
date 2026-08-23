@@ -100,6 +100,48 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+/**
+ * מתוקן אוטומטית: הדבקת תא מאקסל לתוך עמודת "נייד" לפעמים מביאה איתה
+ * את הנוסחה המקורית (לא רק את המספר שרואים בה) - ומכיוון שתחביר אקסל
+ * שונה מ-Sheets, הנוסחה נופלת ל-#ERROR!. onEdit רץ אוטומטית (Apps Script
+ * מפעיל פונקציה בשם הזה לבד, בלי הגדרה) בכל עריכה/הדבקה בגיליון, ומתקן
+ * מיד תא כזה: שולף את הספרות מתוך טקסט הנוסחה (הן בד"כ עדיין "שם"),
+ * וכותב אותן כטקסט רגיל. אם אין ספרות לשלוף - רק מנקה לתא ריק, כדי שלא
+ * ישאר #ERROR! שמפיל את קריאת הגיליון (ר' readSheetValuesResilient_).
+ */
+function onEdit(e) {
+  try {
+    if (!e || !e.range) return;
+    var sheet = e.range.getSheet();
+    if (sheet.getName() !== LEADS_SHEET_NAME) return;
+
+    var phoneCol = fieldIndex_('phone') + 1;
+    if (e.range.getColumn() > phoneCol || e.range.getColumn() + e.range.getNumColumns() - 1 < phoneCol) return;
+
+    var startRow = e.range.getRow();
+    var numRows = e.range.getNumRows();
+    for (var r = 0; r < numRows; r++) {
+      var row = startRow + r;
+      if (row < 2) continue;
+      fixErrorPhoneCell_(sheet.getRange(row, phoneCol));
+    }
+  } catch (err) {
+    // onEdit לא אמור להפיל עריכה של המשתמשת בשום מקרה - בולעים שגיאות בשקט.
+  }
+}
+
+function fixErrorPhoneCell_(cell) {
+  var value = cell.getValue();
+  if (String(value).indexOf('#ERROR') === -1 && String(value).indexOf('#REF') === -1 &&
+      String(value).indexOf('#VALUE') === -1 && String(value).indexOf('#N/A') === -1) return;
+
+  var formulaText = cell.getFormula();
+  var digits = String(formulaText || '').replace(/\D/g, '');
+
+  cell.setNumberFormat('@');
+  cell.setValue(digits);
+}
+
 function getConfig() {
   return {
     clientName: CLIENT_NAME,
