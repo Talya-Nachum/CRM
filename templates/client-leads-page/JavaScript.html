@@ -26,6 +26,9 @@
     loadStatuses();
     loadTemplates();
     loadLeads();
+    // רענון לידים אוטומטי כל 10 שניות (כולל תשובות וואטסאפ נכנסות) - בלי
+    // לגעת בחיפוש/סינון/בחירה שהמשתמשת כבר הגדירה, רק מרענן את הנתונים ברקע.
+    setInterval(loadLeads, 10000);
 
     document.getElementById('addLeadBtn').addEventListener('click', openAddModal);
     document.getElementById('exportExcelBtn').addEventListener('click', onExportExcel);
