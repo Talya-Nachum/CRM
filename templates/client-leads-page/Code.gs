@@ -243,8 +243,9 @@ function logWebhook_(payload) {
 function getLeads() {
   ensureSheets_();
   var sheet = getLeadsSheet_();
-  var values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  var values = readSheetValuesResilient_(sheet, lastRow, LEAD_FIELDS.length);
 
   var idIdx = fieldIndex_('id');
   var createdIdx = fieldIndex_('createdAt');
@@ -254,7 +255,7 @@ function getLeads() {
 
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    if (isRowEmpty_(row)) continue;
+    if (!row || isRowEmpty_(row)) continue;
 
     var now = new Date();
     var needsWriteBack = false;
@@ -279,6 +280,74 @@ function fieldIndex_(key) {
 
 function isRowEmpty_(row) {
   return row.every(function (cell) { return cell === '' || cell === null || cell === undefined; });
+}
+
+/**
+ * קוראת את טווח הנתונים כולל שורת הכותרות. אם יש בגיליון אפילו תא אחד
+ * עם ערך שגיאה של נוסחה (#ERROR!/#REF!/#VALUE! וכו' - קורה בקלות בשורה
+ * שהודבקה עם נוסחה מקושרת מאקסל, למשל ניקוי טלפון) - getRange().getValues()
+ * על הטווח כולו נכשל בשקט ונופל לגמרי, מה שגורם לדשבורד להיראות ריק
+ * לחלוטין (0 לידים בכל מקום, גם לידים תקינים). כשזה קורה, קוראים
+ * שורה-שורה במקום, ומדלגים רק על השורה הספציפית שבה יש שגיאה (במקום
+ * להפיל את כל הרשימה) - חשוב בעיקר בגיליון שמעודכן ידנית/מהדבקת אקסל
+ * (קרה בפועל אצל IBM BOB).
+ */
+function readSheetValuesResilient_(sheet, lastRow, numCols) {
+  try {
+    return sheet.getRange(1, 1, lastRow, numCols).getValues();
+  } catch (e) {
+    var values = [];
+    for (var r = 1; r <= lastRow; r++) {
+      try {
+        values.push(sheet.getRange(r, 1, 1, numCols).getValues()[0]);
+      } catch (rowErr) {
+        values.push(null);
+      }
+    }
+    return values;
+  }
+}
+
+/**
+ * מתוקן אוטומטית: הדבקת תא מאקסל לתוך עמודת "נייד" לפעמים מביאה איתה
+ * את הנוסחה המקורית (לא רק את המספר שרואים בה) - ומכיוון שתחביר אקסל
+ * שונה מ-Sheets, הנוסחה נופלת ל-#ERROR!. onEdit רץ אוטומטית (Apps Script
+ * מפעיל פונקציה בשם הזה לבד, בלי הגדרה) בכל עריכה/הדבקה בגיליון, ומתקן
+ * מיד תא כזה: שולף את הספרות מתוך טקסט הנוסחה (הן בד"כ עדיין "שם"),
+ * וכותב אותן כטקסט רגיל. אם אין ספרות לשלוף - רק מנקה לתא ריק, כדי שלא
+ * ישאר #ERROR! שמפיל את קריאת הגיליון (ר' readSheetValuesResilient_).
+ */
+function onEdit(e) {
+  try {
+    if (!e || !e.range) return;
+    var sheet = e.range.getSheet();
+    if (sheet.getName() !== LEADS_SHEET_NAME) return;
+
+    var phoneCol = fieldIndex_('phone') + 1;
+    if (e.range.getColumn() > phoneCol || e.range.getColumn() + e.range.getNumColumns() - 1 < phoneCol) return;
+
+    var startRow = e.range.getRow();
+    var numRows = e.range.getNumRows();
+    for (var r = 0; r < numRows; r++) {
+      var row = startRow + r;
+      if (row < 2) continue;
+      fixErrorPhoneCell_(sheet.getRange(row, phoneCol));
+    }
+  } catch (err) {
+    // onEdit לא אמור להפיל עריכה של המשתמשת בשום מקרה - בולעים שגיאות בשקט.
+  }
+}
+
+function fixErrorPhoneCell_(cell) {
+  var value = cell.getValue();
+  if (String(value).indexOf('#ERROR') === -1 && String(value).indexOf('#REF') === -1 &&
+      String(value).indexOf('#VALUE') === -1 && String(value).indexOf('#N/A') === -1) return;
+
+  var formulaText = cell.getFormula();
+  var digits = String(formulaText || '').replace(/\D/g, '');
+
+  cell.setNumberFormat('@');
+  cell.setValue(digits);
 }
 
 function addLead(leadData) {
