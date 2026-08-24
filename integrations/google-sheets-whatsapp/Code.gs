@@ -5418,6 +5418,38 @@ function debugPearlLead() {
 }
 
 /**
+ * כלי אבחון למרכז השליטה של פרלה - מדפיס ל-Logger את ה-JSON הגולמי
+ * משלוש הקריאות שהמסך תלוי בהן: רשימת כל הפרלות (כדי לראות את השם
+ * האמיתי של השדה "פעילה/לא פעילה"), לידים של פרלה אחת (כדי לראות את
+ * שם שדה הסטטוס), ושיחות של היום עם השדות המורחבים (תמלול/הקלטה/
+ * משך) - כדי לראות אם הם בכלל חוזרים ובאיזה שם. להריץ אם משהו במסך
+ * "לא נכון" (פעיל/לא פעיל הפוך, ממתינים לחיוג לא נכון, לידים מהיום
+ * ריק) - ולשלוח את הפלט המלא במקום לנחש עוד שם שדה.
+ */
+function debugPearlControlRaw() {
+  const listRes = pearlFetch_('get', '/Pearl');
+  Logger.log('=== GET /Pearl (רשימת כל הפרלות) - קוד תשובה: ' + listRes.code + ' ===');
+  Logger.log(listRes.text.slice(0, 3000));
+
+  const pearlId = DEFAULT_OUTBOUND_ID;
+  const leadsRes = pearlFetch_('post', '/Outbound/' + pearlId + '/Leads', {
+    skip: 0, limit: 3, isAscending: false
+  });
+  Logger.log('=== POST /Outbound/' + pearlId + '/Leads (3 לידים) - קוד תשובה: ' + leadsRes.code + ' ===');
+  Logger.log(leadsRes.text.slice(0, 3000));
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const callsRes = pearlFetch_('post', '/Pearl/' + pearlId + '/Calls/Bulk', {
+    skip: 0, limit: 5, isAscending: false,
+    fromDate: pearlIsoDate_(todayStart), toDate: pearlIsoDate_(new Date()),
+    fields: ['Tags', 'Name', 'Summary', 'LeadId', 'Transcript', 'Recording', 'StartTime', 'Duration', 'PhoneNumber']
+  });
+  Logger.log('=== POST /Pearl/' + pearlId + '/Calls/Bulk (היום, שדות מורחבים) - קוד תשובה: ' + callsRes.code + ' ===');
+  Logger.log(callsRes.text.slice(0, 3000));
+}
+
+/**
  * כל הלינקים שמוצגים בחלון "לינקים" בדשבורד הראשי: מסך פרלה בשורה
  * הראשונה, ואחריו הלינק האישי של כל נציגה. מרוכז בפונקציה אחת כדי
  * שהלקוחה לא תצטרך להריץ שום דבר בעורך כדי למצוא כתובת.
