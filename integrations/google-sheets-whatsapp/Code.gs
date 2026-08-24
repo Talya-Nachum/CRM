@@ -1595,6 +1595,19 @@ function handleWixWebhook_(ss, payload) {
  * לשיתוף.
  */
 function doGet(e) {
+  // ?pearlctl=<קוד> מגיש את "מרכז שליטה - פרלה" - סקירה של כל הפרלות
+  // יחד + לידים מהיום מרוכזים מכולן, בלי קשר לגיליון. אותו קוד הרשאה
+  // בדיוק כמו ?pearl= (pearlViewKey_) - זו אותה רמת גישה, לא סוד נפרד.
+  const pearlCtlKey = (e && e.parameter && e.parameter.pearlctl) ? String(e.parameter.pearlctl) : '';
+  if (pearlCtlKey) {
+    const pearlCtlTemplate = HtmlService.createTemplateFromFile('PearlControl');
+    pearlCtlTemplate.baseUrl = ScriptApp.getService().getUrl();
+    pearlCtlTemplate.pearlKey = pearlCtlKey;
+    return pearlCtlTemplate.evaluate()
+      .setTitle('מרכז שליטה - פרלה')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // ?pearl=<קוד> מגיש את "מסך פרלה" - חלון חי ל-NLPearl, בלי קשר לגיליון.
   const pearlKey = (e && e.parameter && e.parameter.pearl) ? String(e.parameter.pearl) : '';
   if (pearlKey) {
@@ -4896,6 +4909,132 @@ function resetPearlLeads(key, pearlId, leadIds) {
   };
 }
 
+// --- מרכז שליטה - פרלה: סקירת כל הפרלות + לידים מהיום מרוכזים מכולן ---
+const PEARL_TAGS_SHEET_NAME = 'תגיות פרלה - למסך שליטה';
+const DEFAULT_PEARL_TAGS_ = ['פגישה נקבעה', 'מעוניין', 'לא מעוניין', 'לחזור אליו'];
+// עוד לא נענה/ממתין לחיוג (1/10/20/40/300) + אין מענה, מועמד לחיוג
+// חוזר (70/150) - זה מה שנספר כ"ממתינים לחיוג" בסקירה. **לא** כולל
+// 100/110 (השיחה בפועל הסתיימה, בהצלחה או לא) ולא סטטוסי-קצה
+// (שגוי/לא לפנות/שגיאת מערכת).
+const PEARL_REMAINING_STATUS_CODES_ = [1, 10, 20, 40, 300, 70, 150];
+// עמוד ראשון בלבד (לא כל הלידים) לכל פרלה - הערכה, לא ספירה מדויקת.
+// על פני 20+ פרלות ביחד, בדיקה מלאה הייתה עלולה לחרוג מזמן הריצה של
+// Apps Script. אם הפרלה קטנה מהמדגם - המספר מדויק; אם גדולה ממנו -
+// מסומן truncated ומוצג "X+" בתצוגה, לא נספר עד הסוף בשקט.
+const PEARL_OVERVIEW_SAMPLE_ = 100;
+// כמה פריטים מוצגים בסה"כ ב"לידים מהיום" (על פני כל הפרלות ביחד).
+const PEARL_FEED_MAX_ = 200;
+
+function getPearlTagsList_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(PEARL_TAGS_SHEET_NAME);
+  if (!sheet) return DEFAULT_PEARL_TAGS_.slice();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 1) return DEFAULT_PEARL_TAGS_.slice();
+  return sheet.getRange(1, 1, lastRow, 1).getValues()
+    .map(function (r) { return String(r[0] || '').trim(); })
+    .filter(function (s) { return !!s; });
+}
+
+/**
+ * יוצרת את טאב "תגיות פרלה - למסך שליטה" ומזריעה כמה תגיות לדוגמה -
+ * פעם אחת בלבד, בדיוק כמו setupStatusListSheet. הלקוחה עורכת את
+ * הרשימה ישירות בטאב - זה מה שקובע אילו תגיות מוצגות כפילטר במרכז
+ * השליטה של פרלה (ר' getPearlTodayFeed).
+ */
+function setupPearlTagsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(PEARL_TAGS_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(PEARL_TAGS_SHEET_NAME);
+  } else if (sheet.getLastRow() > 0) {
+    Logger.log('הטאב "' + PEARL_TAGS_SHEET_NAME + '" כבר קיים ומכיל נתונים - לא נגעתי בו.');
+    return;
+  }
+  sheet.getRange(1, 1, DEFAULT_PEARL_TAGS_.length, 1)
+    .setValues(DEFAULT_PEARL_TAGS_.map(function (s) { return [s]; }));
+  sheet.getRange(1, 2).setValue('← תגיות שמוצגות כפילטר במרכז השליטה של פרלה. מוסיפים/מוחקים/עורכים שורות ישירות כאן.');
+  Logger.log('הטאב "' + PEARL_TAGS_SHEET_NAME + '" נוצר והוזרע ב-' + DEFAULT_PEARL_TAGS_.length + ' תגיות.');
+}
+
+/**
+ * סקירת כל הפרלות (Outbounds) בחשבון - פעילה/לא פעילה + הערכת כמה
+ * לידים עדיין ממתינים לחיוג בכל אחת (ר' PEARL_OVERVIEW_SAMPLE_ למעלה
+ * למה זו הערכה ולא ספירה מדויקת).
+ */
+function getPearlControlOverview(key) {
+  assertPearlKey_(key);
+  const campaigns = getPearlCampaigns(key);
+
+  campaigns.forEach(function (c) {
+    const res = pearlFetch_('post', '/Outbound/' + encodeURIComponent(c.id) + '/Leads', {
+      skip: 0, limit: PEARL_OVERVIEW_SAMPLE_, isAscending: false
+    });
+    if (!res.ok) { c.remaining = null; c.remainingTruncated = false; return; }
+    const page = pearlResults_(res.data);
+    let remaining = 0;
+    page.forEach(function (lead) {
+      const status = Number(pearlFirst_(lead, ['status', 'leadStatus', 'statusCode']) || 0);
+      if (PEARL_REMAINING_STATUS_CODES_.indexOf(status) !== -1) remaining++;
+    });
+    c.remaining = remaining;
+    c.remainingTruncated = page.length >= PEARL_OVERVIEW_SAMPLE_;
+  });
+
+  return campaigns;
+}
+
+/**
+ * כל השיחות מ**היום** (00:00 עד עכשיו), מרוכזות מ**כל** הפרלות ביחד -
+ * זה הליבה של מרכז השליטה. לכל פרלה: קריאה אחת ל-Calls/Bulk עם טווח
+ * תאריכים של היום בלבד ובקשה מורחבת של שדות (כולל Transcript/Recording -
+ * לא נבדקו בעבר באותה קריאה, רק Tags/Name/Summary/LeadId ב-getPearlBoard;
+ * אם הם חוזרים ריקים בפועל - זה סימן שצריך Logger.log על התשובה הגולמית
+ * ולתקן את שמות השדות, לא לנחש שוב). ממוין מהחדש לישן, עם תקרה כוללת
+ * (PEARL_FEED_MAX_) כדי שלא "ייבלע" בשקט אם יש הרבה שיחות היום.
+ */
+function getPearlTodayFeed(key) {
+  assertPearlKey_(key);
+  const campaigns = getPearlCampaigns(key);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const now = new Date();
+
+  const items = [];
+  campaigns.forEach(function (c) {
+    const res = pearlFetch_('post', '/Pearl/' + encodeURIComponent(c.id) + '/Calls/Bulk', {
+      skip: 0, limit: PEARL_CALLS_PAGE_, isAscending: false,
+      fromDate: pearlIsoDate_(todayStart), toDate: pearlIsoDate_(now),
+      fields: ['Tags', 'Name', 'Summary', 'LeadId', 'Transcript', 'Recording', 'StartTime', 'Duration', 'PhoneNumber']
+    });
+    if (!res.ok) return;
+    pearlResults_(res.data).forEach(function (call) {
+      const tags = pearlFirst_(call, ['tags', 'Tags']);
+      items.push({
+        pearlId: c.id,
+        pearlName: c.name,
+        leadId: String(pearlFirst_(call, ['leadId', 'lead_id', 'LeadId']) || ''),
+        name: String(pearlFirst_(call, ['name', 'Name']) || ''),
+        phone: String(pearlFirst_(call, ['phoneNumber', 'PhoneNumber', 'to']) || ''),
+        summary: String(pearlFirst_(call, ['summary', 'Summary']) || ''),
+        tags: Array.isArray(tags) ? tags.map(String) : (tags ? [String(tags)] : []),
+        transcript: pearlTranscriptText_(pearlFirst_(call, ['transcript', 'Transcript'])),
+        recording: String(pearlFirst_(call, ['recording', 'Recording']) || ''),
+        duration: Number(pearlFirst_(call, ['duration', 'Duration']) || 0),
+        startedAtMs: pearlIsoToMs_(pearlFirst_(call, ['startTime', 'StartTime']))
+      });
+    });
+  });
+
+  items.sort(function (a, b) { return b.startedAtMs - a.startedAtMs; });
+  return {
+    items: items.slice(0, PEARL_FEED_MAX_),
+    tags: getPearlTagsList_(),
+    truncated: items.length > PEARL_FEED_MAX_,
+    updatedAt: Date.now()
+  };
+}
+
 /**
  * מריצים פעם אחת מהעורך כדי לשמור את מפתח ה-API של Seamless.AI. נפתחת
  * חלונית הזנה בגיליון עצמו (חייבים שהגיליון יהיה פתוח בטאב אחר) - כדי
@@ -5292,7 +5431,15 @@ function getDashboardLinks() {
     active: true,
     kind: 'pearl'
   };
-  return [pearlRow].concat(getRepLinks().map(function (rep) {
+  const pearlCtlRow = {
+    name: '🎙️ מרכז שליטה - פרלה',
+    email: '',
+    key: '',
+    link: ScriptApp.getService().getUrl() + '?pearlctl=' + pearlViewKey_(),
+    active: true,
+    kind: 'pearl'
+  };
+  return [pearlRow, pearlCtlRow].concat(getRepLinks().map(function (rep) {
     rep.kind = 'rep';
     return rep;
   }));
