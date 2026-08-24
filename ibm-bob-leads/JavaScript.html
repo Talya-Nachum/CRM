@@ -17,9 +17,10 @@
     loadStatuses();
     loadTemplates();
     loadLeads();
-    // רענון לידים אוטומטי כל 10 שניות (כולל תשובות וואטסאפ נכנסות) - בלי
-    // לגעת בחיפוש/סינון/בחירה שהמשתמשת כבר הגדירה, רק מרענן את הנתונים ברקע.
-    setInterval(loadLeads, 10000);
+    // הרענון האוטומטי כובה זמנית (היה כל 10 שניות) - ריצות מקבילות שלו
+    // גרמו לעומס נעילות על הגיליון בזמן הדבקה מרובה של לידים חדשים.
+    // אפשר להחזיר את השורה הבאה כשרוצים רענון אוטומטי שוב:
+    // setInterval(loadLeads, 10000);
 
     document.getElementById('addLeadBtn').addEventListener('click', openAddModal);
     document.getElementById('exportExcelBtn').addEventListener('click', onExportExcel);

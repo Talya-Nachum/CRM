@@ -333,6 +333,12 @@ function getLeads() {
   var leads = [];
   var anyWriteBack = false;
   var hasUnreadableRow = false;
+  // מחושב פעם אחת מחוץ ללולאה בכוונה - getDefaultStatus_() קוראת שוב ל-
+  // ensureSheets_() (שנועלת/משחררת נעילה), וקריאה לה בכל שורה בנפרד (כמו
+  // שהיה קודם) יצרה הרבה נעילות ברצף באותה ריצה כשמדביקים הרבה שורות
+  // חדשות בבת אחת - עד כדי כך שריצה מקבילה (הרענון האוטומטי) הייתה נתקעת
+  // ומקבלת "תום הזמן הקצוב של הנעילה".
+  var defaultStatus = getDefaultStatus_();
 
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
@@ -343,7 +349,7 @@ function getLeads() {
     if (!row[idIdx]) { row[idIdx] = Utilities.getUuid(); anyWriteBack = true; }
     if (!row[createdIdx]) { row[createdIdx] = now; anyWriteBack = true; }
     if (!row[updatedIdx]) { row[updatedIdx] = now; anyWriteBack = true; }
-    if (!row[statusIdx]) { row[statusIdx] = getDefaultStatus_(); anyWriteBack = true; }
+    if (!row[statusIdx]) { row[statusIdx] = defaultStatus; anyWriteBack = true; }
 
     // שורה שנוספה ידנית בגיליון בד"כ תכתוב בעמודת "סקטור" את השם בעברית
     // (למשל "שוק ההון") ולא את המפתח הפנימי ("capital") שהדשבורד מסנן
