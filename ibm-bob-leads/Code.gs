@@ -315,40 +315,68 @@ function getLeads() {
   var sheet = getLeadsSheet_();
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  var values = readSheetValuesResilient_(sheet, lastRow, LEAD_FIELDS.length);
 
-  var idIdx = fieldIndex_('id');
-  var createdIdx = fieldIndex_('createdAt');
-  var updatedIdx = fieldIndex_('updatedAt');
-  var statusIdx = fieldIndex_('status');
-  var sectorIdx = fieldIndex_('sector');
-  var leads = [];
+  // נעילה סביב קריאת הנתונים + כתיבת ההשלמות בחזרה: בלי זה, שתי קריאות
+  // getLeads() שרצות כמעט בו-זמנית (למשל הרענון האוטומטי כל 10 שניות
+  // שחופף לריצה קודמת שעדיין לא סיימה, או שתי לשוניות פתוחות) יכולות
+  // כל אחת לקרוא "תמונה" של הגיליון בזמן מעט שונה, ואז לכתוב בחזרה לפי
+  // מספרי שורות שכבר לא נכונים (אם בינתיים שורה נמחקה/נוספה) - מה שגורם
+  // לכתיבת נתונים ישנים על גבי שורה לא נכונה (למשל שם חברה "קופץ" לשורה
+  // שמעל, או ששורה שנמחקה "חוזרת לחיים").
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var values = readSheetValuesResilient_(sheet, lastRow, LEAD_FIELDS.length);
 
-  for (var i = 1; i < values.length; i++) {
-    var row = values[i];
-    if (!row || isRowEmpty_(row)) continue;
+    var idIdx = fieldIndex_('id');
+    var createdIdx = fieldIndex_('createdAt');
+    var updatedIdx = fieldIndex_('updatedAt');
+    var statusIdx = fieldIndex_('status');
+    var sectorIdx = fieldIndex_('sector');
+    var leads = [];
+    var anyWriteBack = false;
+    var hasUnreadableRow = false;
 
-    var now = new Date();
-    var needsWriteBack = false;
-    if (!row[idIdx]) { row[idIdx] = Utilities.getUuid(); needsWriteBack = true; }
-    if (!row[createdIdx]) { row[createdIdx] = now; needsWriteBack = true; }
-    if (!row[updatedIdx]) { row[updatedIdx] = now; needsWriteBack = true; }
-    if (!row[statusIdx]) { row[statusIdx] = getDefaultStatus_(); needsWriteBack = true; }
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i];
+      if (!row) { hasUnreadableRow = true; continue; }
+      if (isRowEmpty_(row)) continue;
 
-    // שורה שנוספה ידנית בגיליון בד"כ תכתוב בעמודת "סקטור" את השם בעברית
-    // (למשל "שוק ההון") ולא את המפתח הפנימי ("capital") שהדשבורד מסנן
-    // לפיו את הטאבים - בלי הנרמול הזה הליד לא יופיע באף טאב.
-    var normalizedSector = normalizeSectorValue_(row[sectorIdx]);
-    if (normalizedSector !== row[sectorIdx]) { row[sectorIdx] = normalizedSector; needsWriteBack = true; }
+      var now = new Date();
+      if (!row[idIdx]) { row[idIdx] = Utilities.getUuid(); anyWriteBack = true; }
+      if (!row[createdIdx]) { row[createdIdx] = now; anyWriteBack = true; }
+      if (!row[updatedIdx]) { row[updatedIdx] = now; anyWriteBack = true; }
+      if (!row[statusIdx]) { row[statusIdx] = getDefaultStatus_(); anyWriteBack = true; }
 
-    if (needsWriteBack) {
-      sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+      // שורה שנוספה ידנית בגיליון בד"כ תכתוב בעמודת "סקטור" את השם בעברית
+      // (למשל "שוק ההון") ולא את המפתח הפנימי ("capital") שהדשבורד מסנן
+      // לפיו את הטאבים - בלי הנרמול הזה הליד לא יופיע באף טאב.
+      var normalizedSector = normalizeSectorValue_(row[sectorIdx]);
+      if (normalizedSector !== row[sectorIdx]) { row[sectorIdx] = normalizedSector; anyWriteBack = true; }
+
+      leads.push(rowToLead_(row));
     }
 
-    leads.push(rowToLead_(row));
-  }
+    if (anyWriteBack) {
+      if (hasUnreadableRow) {
+        // נתקלנו בשורה עם שגיאת נוסחה שלא ניתן היה לקרוא (ר' readSheetValuesResilient_) -
+        // אי אפשר לכתוב אותה בחזרה כחלק מבלוק אחיד, אז חוזרים לכתיבה שורה-שורה
+        // (איטי יותר, אבל זה מקרה קצה נדיר).
+        for (var r = 1; r < values.length; r++) {
+          if (values[r]) sheet.getRange(r + 1, 1, 1, values[r].length).setValues([values[r]]);
+        }
+      } else {
+        // כתיבה אחת מרוכזת לכל בלוק הנתונים, במקום שורה-שורה - מקצרת
+        // דרמטית את משך הריצה (וכך את "חלון הזמן" הפגיע שתואר למעלה),
+        // בעיקר כשמדביקים הרבה שורות חדשות בבת אחת.
+        sheet.getRange(2, 1, values.length - 1, LEAD_FIELDS.length).setValues(values.slice(1));
+      }
+    }
 
-  return leads.reverse();
+    return leads.reverse();
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function fieldIndex_(key) {
