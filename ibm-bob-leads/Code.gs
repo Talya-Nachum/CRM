@@ -211,11 +211,21 @@ function doPost(e) {
 /* ============================== Sheets bootstrap ============================== */
 
 function ensureSheets_() {
-  // כשהדף נטען, לפעמים הדפדפן שולח כמה בקשות כמעט בו-זמנית (למשל טעינה
-  // כפולה/רענון מהיר) - בלי הנעילה כאן, שתי הרצות מקבילות יכולות שתיהן
-  // "לראות" שטאב מסוים עדיין לא קיים ולנסות ליצור אותו פעמיים, מה שגורם
-  // לשגיאת "כבר קיים גיליון בשם...". הנעילה מבטיחה שרק הרצה אחת יוצרת
-  // טאבים בכל רגע נתון.
+  // מסלול מהיר בלי נעילה בכלל: ברגע שכל שלוש הלשוניות כבר קיימות (המצב
+  // הרגיל אחרי הפעם הראשונה) אין שום דבר ליצור, אז אין סיבה לנעול. זו
+  // הפונקציה שנקראת בתחילת כל קריאה לשרת (doGet/getConfig/getStatuses/
+  // getTemplates/getLeads/doPost) - נעילה בכל קריאה כזו, גם כשמיותרת,
+  // היא זו שיצרה את הפקק כשכמה קריאות רצות במקביל.
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var leadsSheet = ss.getSheetByName(LEADS_SHEET_NAME);
+  if (leadsSheet && leadsSheet.getLastColumn() >= LEAD_FIELDS.length &&
+      ss.getSheetByName(STATUSES_SHEET_NAME) && ss.getSheetByName(TEMPLATES_SHEET_NAME)) {
+    return;
+  }
+
+  // מגיעים לכאן רק כשבאמת חסר משהו (הרצה ראשונה אי פעם, או הוספת שדה
+  // חדש ל-LEAD_FIELDS) - כאן כן נועלים, כדי שלא ייווצרו לשוניות כפולות
+  // אם כמה קריאות מגיעות ממש באותו רגע.
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
