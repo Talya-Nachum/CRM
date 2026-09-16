@@ -69,6 +69,20 @@ const REPLY_DATE_HEADER = 'תאריך תשובה';
 const SENT_STATUS = 'נשלח וואטסאפ';
 const APPROVED_STATUS = 'מאושר לשליחה';
 
+// --- עמוד אירוע (?event=<שם טאב>) ---
+// שתי עמודות אופציונליות, נקראות **רק משורה 2** (בדיוק כמו "מספר תבנית"/
+// "מזהה קמפיין") - כך שהלקוחה קובעת תאריך/מידע על האירוע ישירות בגיליון,
+// בלי לגעת בקוד. חסרות/ריקות = הבאנר המתאים פשוט לא מוצג.
+const EVENT_DATE_HEADER = 'תאריך אירוע';
+const EVENT_INFO_HEADER = 'מידע אירוע';
+// סטטוסים ב"סטטוס איש קשר" שנחשבים "נרשם" לצורך באנר הספירה - לפי
+// תחילית "נרשם" (תופס גם "נרשם ע"י מיטוב" וגם "נרשם לבד" מ-
+// DEFAULT_STATUS_LIST_, אבל לא "ירשם לבד" - זמן עתיד, עוד לא נרשם בפועל).
+const EVENT_REGISTERED_PREFIX_ = 'נרשם';
+// תקרת בטיחות לשליחה מרובה בלחיצה אחת (כמו maxReset במסך פרלה) - כדי
+// לא לפגוע בזמן הריצה של 6 דקות של Apps Script על רשימה גדולה מדי.
+const EVENT_SEND_CAP_ = 250;
+
 // --- תזמון שליחה ---
 // שני סטטוסים נפרדים במכוון, כדי שהסטטוס עצמו יגיד מה יקרה ולא נצטרך
 // לנחש לפי אם תא התאריך ריק:
@@ -1616,6 +1630,22 @@ function doGet(e) {
     pearlTemplate.pearlKey = pearlKey;
     return pearlTemplate.evaluate()
       .setTitle('מסך פרלה')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
+  // ?event=<שם הטאב> מגיש את "עמוד אירוע" - דף הזמנות/רישום ייעודי
+  // ללקוח בודד (למשל "אודיוקודס שולחן עגול"): באנרים (נרשמו/מידע/ספירה
+  // לאחור) + שליחת וואטסאפ לנבחרים או לכולם, מעל אותו טאב קמפיין רגיל.
+  // אותו דפוס בדיוק כמו ?rep=/?pearl= - כדי לפתוח עוד אירוע בעתיד פשוט
+  // משכפלים טאב קמפיין (ראו README) ומחליפים את שם הטאב בכתובת, בלי
+  // לגעת בקוד.
+  const eventSheetName = (e && e.parameter && e.parameter.event) ? String(e.parameter.event) : '';
+  if (eventSheetName) {
+    const eventTemplate = HtmlService.createTemplateFromFile('EventDashboard');
+    eventTemplate.baseUrl = ScriptApp.getService().getUrl();
+    eventTemplate.sheetName = eventSheetName;
+    return eventTemplate.evaluate()
+      .setTitle('עמוד אירוע')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
@@ -5475,4 +5505,194 @@ function getDashboardLinks() {
     rep.kind = 'rep';
     return rep;
   }));
+}
+
+// ============================================================================
+//                    עמוד אירוע - הזמנות/רישום ללקוח בודד (?event=)
+// ============================================================================
+// לא נוגע בשום דבר קיים: קורא/כותב לאותן עמודות שהדשבורד הראשי כבר
+// מכיר (טלפון/שם/סטטוס/סטטוס איש קשר), עם שתי עמודות-שורה-2 חדשות
+// ואופציונליות (EVENT_DATE_HEADER/EVENT_INFO_HEADER). עריכת סטטוס
+// (setUserStatus) והוספת איש קשר (addContact) כבר גנריות לפי שם טאב -
+// עמוד האירוע משתמש בהן כמו שהן, בלי כפילות קוד.
+
+function getEventPageData(sheetName) {
+  try {
+    return getEventPageData_impl_(sheetName);
+  } catch (err) {
+    return {
+      error: 'exception',
+      message: String(err && err.message || err),
+      stack: String(err && err.stack || '')
+    };
+  }
+}
+
+function getEventPageData_impl_(sheetName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet || !isCampaignSheet_(sheet)) {
+    return {
+      error: 'not_found',
+      requestedName: sheetName,
+      availableNames: getCampaignSheets_(ss).map(function (s) { return s.getName(); })
+    };
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+  const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+  const companyCol = findColumnNormalized_(headers, COMPANY_HEADER);
+  const titleCol = findColumnNormalized_(headers, TITLE_HEADER);
+  const emailCol = findColumnNormalized_(headers, EMAIL_HEADER);
+  const sourceCol = findColumnNormalized_(headers, SOURCE_HEADER);
+  const statusCol = findHeaderIndex_(headers, STATUS_HEADER, STATUS_HEADER_LEGACY);
+  const regCol = findColumnNormalized_(headers, FIRST_REPLY_HEADER);
+  const notesCol = findColumnNormalized_(headers, USER_NOTES_HEADER);
+  const templateCol = findColumnNormalized_(headers, TEMPLATE_HEADER);
+  const eventDateCol = findColumnNormalized_(headers, EVENT_DATE_HEADER);
+  const eventInfoCol = findColumnNormalized_(headers, EVENT_INFO_HEADER);
+
+  // ברירות מחדל לכל הטאב - נלקחות משורה 2 בלבד, בדיוק כמו מספר תבנית.
+  const row2 = data[1] || [];
+  const templateId = (templateCol !== -1 && row2[templateCol]) ? String(row2[templateCol]) : DEFAULT_TEMPLATE_ID;
+  const eventDateRaw = eventDateCol !== -1 ? row2[eventDateCol] : null;
+  const eventDate = parseScheduleValue_(eventDateRaw);
+  const eventInfo = (eventInfoCol !== -1 && row2[eventInfoCol]) ? String(row2[eventInfoCol]) : '';
+
+  let registeredCount = 0;
+  const rows = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const phone = phoneCol !== -1 ? row[phoneCol] : '';
+    if (!phone) continue;
+
+    const registrationStatus = regCol !== -1 ? String(row[regCol] || '').trim() : '';
+    if (registrationStatus.indexOf(EVENT_REGISTERED_PREFIX_) === 0) registeredCount++;
+
+    rows.push({
+      name: nameCol !== -1 ? row[nameCol] : '',
+      phone: String(phone),
+      company: companyCol !== -1 ? row[companyCol] : '',
+      title: titleCol !== -1 ? row[titleCol] : '',
+      email: emailCol !== -1 ? row[emailCol] : '',
+      source: sourceCol !== -1 ? row[sourceCol] : '',
+      sendStatus: statusCol !== -1 ? String(row[statusCol] || '') : '',
+      sendStatusClass: classifyStatus_(statusCol !== -1 ? row[statusCol] : ''),
+      registrationStatus: registrationStatus,
+      notes: notesCol !== -1 ? String(row[notesCol] || '') : ''
+    });
+  }
+
+  return {
+    sheetName: sheet.getName(),
+    rows: rows,
+    totalCount: rows.length,
+    registeredCount: registeredCount,
+    statusList: getStatusList_(),
+    templateId: templateId,
+    eventDate: (eventDate instanceof Date) ? eventDate.toISOString() : null,
+    eventDateLabel: (eventDate instanceof Date)
+      ? Utilities.formatDate(eventDate, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : '',
+    eventInfo: eventInfo
+  };
+}
+
+/**
+ * שולחת תבנית וואטסאפ (InforU) לרשימת טלפונים מפורשת - בלי תלות בעמודת
+ * הסטטוס ("מאושר לשליחה"), כדי שאפשר יהיה לבחור בדשבורד אנשים ספציפיים
+ * (או "כולם") וללחוץ שליחה ישירות. אותו payload בדיוק כמו
+ * sendMessagesInSheet_ (כדי לא לשכפל התנהגות שונה בטעות), רק שמקור
+ * השורות הוא הרשימה שהתקבלה ולא סריקת "מי מסומן". אחרי שליחה מוצלחת
+ * נכתב אותו SENT_STATUS לעמודת הסטטוס, בדיוק כמו בזרימה הרגילה - כך
+ * ששתי דרכי השליחה (תפריט/דשבורד) משאירות את אותו עקבות בגיליון.
+ */
+function sendEventWhatsApp(sheetName, phones) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet || !isCampaignSheet_(sheet)) {
+    throw new Error('הטאב "' + sheetName + '" לא נמצא או אינו טאב קמפיין');
+  }
+  if (!Array.isArray(phones) || !phones.length) {
+    return { sent: [], failed: [], total: 0, cappedRemaining: 0 };
+  }
+
+  const targetSuffixes = phones.map(phoneSuffix_).filter(Boolean);
+  const capped = targetSuffixes.length > EVENT_SEND_CAP_;
+  const toSend = capped ? targetSuffixes.slice(0, EVENT_SEND_CAP_) : targetSuffixes;
+  const wanted = {};
+  toSend.forEach(function (s) { wanted[s] = true; });
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const phoneCol = findColumnNormalized_(headers, PHONE_HEADER);
+  const nameCol = findColumnNormalized_(headers, NAME_HEADER);
+  const statusCol = findHeaderIndex_(headers, STATUS_HEADER, STATUS_HEADER_LEGACY);
+  const templateCol = findColumnNormalized_(headers, TEMPLATE_HEADER);
+  if (phoneCol === -1 || nameCol === -1 || statusCol === -1) {
+    throw new Error('לטאב "' + sheetName + '" חסרה אחת מהעמודות הנדרשות (טלפון נייד / שם פרטי / סטטוס דיוור)');
+  }
+
+  const sheetTemplateId = (templateCol !== -1 && data[1] && data[1][templateCol])
+    ? String(data[1][templateCol]) : DEFAULT_TEMPLATE_ID;
+
+  const sent = [];
+  const failed = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const rowSuffix = phoneSuffix_(data[i][phoneCol]);
+    if (!rowSuffix || !wanted[rowSuffix]) continue;
+    delete wanted[rowSuffix]; // כל טלפון נשלח פעם אחת גם אם יש שורה כפולה
+
+    const row = data[i];
+    const phone = String(row[phoneCol]).replace(/\D/g, '');
+    const name = row[nameCol];
+    const templateId = (templateCol !== -1 && row[templateCol]) ? String(row[templateCol]) : sheetTemplateId;
+    const rowIndex = i + 1;
+
+    recordLastContact_(phone, sheet.getName());
+
+    const payload = {
+      Data: {
+        TemplateId: templateId,
+        TemplateParameters: [
+          { Name: '[#1#]', Type: 'Contact', Value: 'FirstName' }
+        ],
+        Recipients: [
+          { Phone: phone, FirstName: name }
+        ]
+      }
+    };
+
+    const response = UrlFetchApp.fetch(INFORU_ENDPOINT, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: getInforuAuthHeader_() },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+
+    let result;
+    try { result = JSON.parse(response.getContentText()); } catch (err) { result = {}; }
+    const ok = result.StatusId === 1;
+    const newStatus = ok ? SENT_STATUS : 'שגיאה: ' + (result.StatusDescription || 'לא ידוע');
+    sheet.getRange(rowIndex, statusCol + 1).setValue(newStatus);
+
+    if (ok) sent.push({ phone: phone, name: name });
+    else failed.push({ phone: phone, name: name, error: newStatus });
+  }
+
+  // מספר בקשה כלשהו שלא נמצא כלל בטאב (טלפון לא קיים) - מדווח בנפרד,
+  // כדי שהצוות ידע שלא "נבלע" בשקט.
+  const notFound = Object.keys(wanted);
+
+  return {
+    sent: sent,
+    failed: failed,
+    notFound: notFound,
+    total: toSend.length,
+    cappedRemaining: capped ? (targetSuffixes.length - EVENT_SEND_CAP_) : 0
+  };
 }

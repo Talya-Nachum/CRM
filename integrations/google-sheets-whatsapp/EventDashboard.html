@@ -1,0 +1,530 @@
+<!--
+  עמוד אירוע (?event=<שם טאב>). מוגש ע"י doGet() ב-Code.gs - אותו טאב
+  קמפיין רגיל בגיליון, רק תצוגה ופעולות שונות: באנרים (נרשמו/מידע על
+  האירוע/ספירה לאחור), ושליחת וואטסאפ לאנשים נבחרים או לכולם בלחיצה,
+  בלי לסמן "מאושר לשליחה" ידנית בגיליון. כל הנתונים נקראים ונכתבים
+  לגיליון דרך google.script.run - שום דבר כאן אינו נתון קבוע.
+-->
+<style>
+  :root {
+    --bg: #F5F6F9;
+    --bg-2: #EEF3FB;
+    --surface: #FFFFFF;
+    --surface-2: #F2F4F7;
+    --border: #E3E6EC;
+    --text: #1B1D22;
+    --text-muted: #667085;
+    --accent: #116DFF;
+    --accent-grad-1: #2E82FF;
+    --accent-grad-2: #0B57D0;
+    --accent-soft: #E8F0FF;
+    --accent-2: #7C5CFC;
+    --good: #1FAA59;
+    --good-soft: #E5F6EC;
+    --bad: #E1442F;
+    --bad-soft: #FCE9E7;
+    --pending: #B7791F;
+    --pending-soft: #FBF0DD;
+    --shadow: 0 1px 2px rgba(17,17,31,0.05), 0 8px 24px rgba(17,17,31,0.06);
+    --radius: 12px;
+    --radius-btn: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101216; --bg-2: #14171D; --surface: #171A20; --surface-2: #1D2129;
+      --border: #2A2E37; --text: #ECEEF2; --text-muted: #9AA0AC;
+      --accent: #4C93FF; --accent-grad-1: #6AA5FF; --accent-grad-2: #2E7DFF;
+      --accent-soft: #1B2A42; --accent-2: #A392FF;
+      --good: #34D399; --good-soft: #10291B; --bad: #F87171; --bad-soft: #341714;
+      --pending: #FBBF24; --pending-soft: #332507;
+      --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: linear-gradient(150deg, var(--bg) 0%, var(--bg-2) 100%);
+    color: var(--text); font-family: "Segoe UI", "Arial Hebrew", Arial, sans-serif;
+    direction: rtl; line-height: 1.5;
+  }
+  .page { max-width: 1400px; margin: 0 auto; padding: 18px 18px 40px; display: flex; flex-direction: column; gap: 16px; }
+
+  .topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 20px; margin: 0; font-weight: 800; }
+  .topbar .sub { font-size: 12.5px; color: var(--text-muted); }
+  .spacer { flex: 1; }
+  .btn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: var(--radius-btn); padding: 8px 14px; font-size: 13px; font-weight: 700;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: box-shadow .15s;
+  }
+  .btn:hover { box-shadow: var(--shadow); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary { background: linear-gradient(135deg, var(--accent-grad-1), var(--accent-grad-2)); color: #fff; border: none; }
+  .btn.good { background: var(--good); color: #fff; border: none; }
+  input[type="search"], input[type="text"], input[type="email"], select, textarea {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: var(--radius-btn); padding: 8px 10px; font-size: 13px; font-family: inherit;
+  }
+
+  .banners { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .banner {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 4px;
+  }
+  .banner .label { font-size: 12px; color: var(--text-muted); font-weight: 700; }
+  .banner .value { font-size: 26px; font-weight: 800; }
+  .banner .value small { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+  .banner.info .value { font-size: 15px; font-weight: 600; white-space: pre-wrap; line-height: 1.5; }
+  .banner.countdown.urgent .value { color: var(--bad); }
+  .banner.countdown.today .value { color: var(--good); }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .actionbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px;
+  }
+  .actionbar label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .actionbar .count { font-size: 12.5px; color: var(--text-muted); }
+
+  .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+  thead th {
+    text-align: right; padding: 10px 8px; background: var(--surface-2); color: var(--text-muted);
+    font-weight: 700; font-size: 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  tbody td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr.picked { background: var(--accent-soft); }
+  th.c-pick, td.c-pick { width: 34px; }
+  th.c-phone, td.c-phone { width: 110px; }
+  th.c-name, td.c-name { width: 14%; }
+  th.c-company, td.c-company { width: 16%; }
+  th.c-email, td.c-email { width: 16%; }
+  th.c-send, td.c-send { width: 130px; }
+  th.c-reg, td.c-reg { width: 150px; }
+  .muted { color: var(--text-muted); }
+  .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.pending { background: var(--pending-soft); color: var(--pending); }
+  .reg-cell { cursor: pointer; }
+  .reg-cell:hover { text-decoration: underline; }
+  .empty { padding: 30px; text-align: center; color: var(--text-muted); }
+
+  .overlay { position: fixed; inset: 0; background: rgba(15,17,22,.45); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .overlay.on { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; width: 100%; max-width: 460px; max-height: 86vh; overflow: auto; }
+  .modal h3 { margin: 0 0 10px; font-size: 16px; }
+  .modal .row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .modal .row label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+  .modal .actions { display: flex; gap: 8px; justify-content: flex-start; margin-top: 12px; }
+  .modal .list { max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; margin: 8px 0; font-size: 12.5px; }
+  .modal .list div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+  .warn { background: var(--pending-soft); color: var(--pending); border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-bottom: 8px; }
+  .status-opts { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 4px; }
+  .status-opts .opt { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+  .status-opts .opt:hover, .status-opts .opt.sel { background: var(--accent-soft); }
+  .hint { font-size: 11px; color: var(--text-muted); }
+  .toast { position: fixed; bottom: 18px; left: 18px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: var(--radius-btn); padding: 10px 14px; font-size: 13px; z-index: 60; display: none; }
+  .toast.on { display: block; }
+</style>
+
+<div class="page">
+  <div class="topbar">
+    <div>
+      <h1 id="pageTitle">עמוד אירוע</h1>
+      <div class="sub" id="pageSub">טוען...</div>
+    </div>
+    <div class="spacer"></div>
+    <input type="search" id="searchInput" placeholder="חיפוש שם / חברה / טלפון...">
+    <button class="btn" id="addContactBtn">➕ הוספת איש קשר</button>
+    <button class="btn" id="refreshBtn">🔄 רענון</button>
+  </div>
+
+  <div class="banners" id="banners"></div>
+
+  <div class="actionbar">
+    <label><input type="checkbox" id="pickAll"> סמן הכל</label>
+    <div class="count">נבחרו <span id="pickCount">0</span> מתוך <span id="visibleCount">0</span></div>
+    <div class="spacer"></div>
+    <button class="btn primary" id="sendSelectedBtn" disabled>📤 שלח לנבחרים</button>
+    <button class="btn good" id="sendAllBtn">📤 שלח לכל הרשימה</button>
+  </div>
+
+  <div class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="c-pick"></th>
+            <th class="c-name">שם</th>
+            <th class="c-company">חברה / תפקיד</th>
+            <th class="c-phone">טלפון</th>
+            <th class="c-email">אימייל</th>
+            <th class="c-send">סטטוס שליחה</th>
+            <th class="c-reg">סטטוס הרשמה</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="emptyMsg" style="display:none">אין אנשי קשר להצגה</div>
+  </div>
+</div>
+
+<!-- אישור שליחה -->
+<div class="overlay" id="confirmOverlay">
+  <div class="modal">
+    <h3 id="confirmTitle">לשלוח הודעה?</h3>
+    <div id="confirmWarn" class="warn" style="display:none"></div>
+    <div id="confirmList" class="list"></div>
+    <div class="actions">
+      <button class="btn primary" id="confirmSendBtn">שלח</button>
+      <button class="btn" id="confirmCancelBtn">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- הוספת איש קשר -->
+<div class="overlay" id="addOverlay">
+  <div class="modal">
+    <h3>הוספת איש קשר</h3>
+    <div class="row"><label>שם פרטי</label><input type="text" id="addName"></div>
+    <div class="row"><label>טלפון נייד</label><input type="text" id="addPhone" placeholder="05X-XXXXXXX"></div>
+    <div class="row"><label>שם חברה</label><input type="text" id="addCompany"></div>
+    <div class="row"><label>תפקיד</label><input type="text" id="addTitle"></div>
+    <div class="row"><label>אימייל</label><input type="email" id="addEmail"></div>
+    <div id="addError" class="warn" style="display:none"></div>
+    <div class="actions">
+      <button class="btn primary" id="addSaveBtn">שמירה</button>
+      <button class="btn" id="addCancelBtn">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- עריכת סטטוס הרשמה -->
+<div class="overlay" id="statusOverlay">
+  <div class="modal">
+    <h3>עדכון סטטוס הרשמה</h3>
+    <div class="hint" id="statusForName"></div>
+    <div class="row">
+      <label>מי מעדכנת</label>
+      <select id="statusUserSel">
+        <option value="מזי">מזי</option>
+        <option value="טליה">טליה</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>סטטוס</label>
+      <input type="text" id="statusFilterInput" placeholder="הקלידי לסינון הרשימה...">
+      <div class="status-opts" id="statusOpts"></div>
+    </div>
+    <div id="statusError" class="warn" style="display:none"></div>
+    <div class="actions">
+      <button class="btn primary" id="statusSaveBtn" disabled>שמירה</button>
+      <button class="btn" id="statusCancelBtn">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  var SHEET_NAME = <?!= JSON.stringify(sheetName) ?>;
+
+  var el = function (id) { return document.getElementById(id); };
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  var state = { rows: [], statusList: [], picked: {}, search: '', statusPhone: null, statusRowName: '', busy: false };
+
+  function toast(msg) {
+    el('toast').textContent = msg;
+    el('toast').classList.add('on');
+    setTimeout(function () { el('toast').classList.remove('on'); }, 3200);
+  }
+
+  function visibleRows() {
+    var q = state.search.trim().toLowerCase();
+    if (!q) return state.rows;
+    return state.rows.filter(function (r) {
+      return (r.name + ' ' + r.company + ' ' + r.phone + ' ' + r.email).toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  function renderBanners(data) {
+    var html = '';
+
+    html += '<div class="banner">' +
+      '<div class="label">נרשמו</div>' +
+      '<div class="value">' + data.registeredCount + ' <small>מתוך ' + data.totalCount + '</small></div>' +
+      '</div>';
+
+    if (data.eventInfo) {
+      html += '<div class="banner info"><div class="label">על האירוע</div><div class="value">' + esc(data.eventInfo) + '</div></div>';
+    }
+
+    if (data.eventDate) {
+      var target = new Date(data.eventDate).getTime();
+      var now = Date.now();
+      var msPerDay = 86400000;
+      var days = Math.ceil((target - now) / msPerDay);
+      var cls = 'banner countdown';
+      var text;
+      if (days > 1) { text = 'עוד ' + days + ' ימים'; }
+      else if (days === 1) { text = 'מחר!'; cls += ' urgent'; }
+      else if (days === 0) { text = 'היום!'; cls += ' today'; }
+      else { text = 'האירוע הסתיים'; }
+      html += '<div class="' + cls + '"><div class="label">' + esc(data.eventDateLabel) + '</div><div class="value">' + text + '</div></div>';
+    }
+
+    el('banners').innerHTML = html;
+  }
+
+  function statusClassFor(status) {
+    if (!status) return 'pending';
+    if (status.indexOf('שגיאה') === 0) return 'bad';
+    return 'good';
+  }
+
+  function render() {
+    var rows = visibleRows();
+    el('visibleCount').textContent = rows.length;
+
+    if (!rows.length) {
+      el('tableBody').innerHTML = '';
+      el('emptyMsg').style.display = '';
+      syncPickState();
+      return;
+    }
+    el('emptyMsg').style.display = 'none';
+
+    el('tableBody').innerHTML = rows.map(function (r) {
+      var picked = !!state.picked[r.phone];
+      var subtitle = [r.company, r.title].filter(Boolean).join(' · ');
+      return '<tr class="' + (picked ? 'picked' : '') + '" data-phone="' + esc(r.phone) + '">' +
+        '<td class="c-pick"><input type="checkbox" data-pick="' + esc(r.phone) + '"' + (picked ? ' checked' : '') + '></td>' +
+        '<td class="c-name">' + (esc(r.name) || '<span class="muted">—</span>') + '</td>' +
+        '<td class="c-company muted">' + (esc(subtitle) || '—') + '</td>' +
+        '<td class="c-phone">' + esc(r.phone) + '</td>' +
+        '<td class="c-email muted">' + (esc(r.email) || '—') + '</td>' +
+        '<td class="c-send"><span class="pill ' + esc(r.sendStatusClass) + '">' + (esc(r.sendStatus) || 'טרם נשלח') + '</span></td>' +
+        '<td class="c-reg reg-cell" data-editreg="' + esc(r.phone) + '">' +
+          (r.registrationStatus ? '<span class="pill good">' + esc(r.registrationStatus) + '</span>' : '<span class="muted">— (לחצי לעדכון)</span>') +
+        '</td>' +
+        '</tr>';
+    }).join('');
+
+    Array.prototype.forEach.call(el('tableBody').querySelectorAll('[data-pick]'), function (box) {
+      box.addEventListener('change', function () {
+        var phone = box.getAttribute('data-pick');
+        if (box.checked) state.picked[phone] = true; else delete state.picked[phone];
+        var tr = box.closest('tr');
+        if (tr) tr.classList.toggle('picked', box.checked);
+        syncPickState();
+      });
+    });
+
+    Array.prototype.forEach.call(el('tableBody').querySelectorAll('[data-editreg]'), function (cell) {
+      cell.addEventListener('click', function () { openStatusModal(cell.getAttribute('data-editreg')); });
+    });
+
+    syncPickState();
+  }
+
+  function syncPickState() {
+    var ids = Object.keys(state.picked);
+    el('pickCount').textContent = ids.length;
+    el('sendSelectedBtn').disabled = ids.length === 0 || state.busy;
+    var rows = visibleRows();
+    el('pickAll').checked = rows.length > 0 && rows.every(function (r) { return state.picked[r.phone]; });
+  }
+
+  el('pickAll').addEventListener('change', function () {
+    var rows = visibleRows();
+    if (el('pickAll').checked) rows.forEach(function (r) { state.picked[r.phone] = true; });
+    else rows.forEach(function (r) { delete state.picked[r.phone]; });
+    render();
+  });
+
+  el('searchInput').addEventListener('input', function () { state.search = el('searchInput').value; render(); });
+
+  /* ---------- טעינת נתונים ---------- */
+
+  function load() {
+    google.script.run.withSuccessHandler(function (data) {
+      if (data && data.error) {
+        el('pageSub').textContent = 'שגיאה בטעינה: ' + (data.message || data.error);
+        return;
+      }
+      state.rows = data.rows || [];
+      state.statusList = data.statusList || [];
+      el('pageTitle').textContent = data.sheetName;
+      el('pageSub').textContent = data.totalCount + ' אנשי קשר ברשימה';
+      renderBanners(data);
+      render();
+    }).withFailureHandler(function (err) {
+      el('pageSub').textContent = 'שגיאת שרת: ' + (err && err.message || err);
+    }).getEventPageData(SHEET_NAME);
+  }
+
+  el('refreshBtn').addEventListener('click', load);
+  setInterval(function () { if (!state.busy) load(); }, 30000);
+
+  /* ---------- שליחת וואטסאפ ---------- */
+
+  function openSendConfirm(phones) {
+    if (!phones.length) return;
+    var byPhone = {};
+    state.rows.forEach(function (r) { byPhone[r.phone] = r; });
+    var chosen = phones.map(function (p) { return byPhone[p]; }).filter(Boolean);
+
+    el('confirmTitle').textContent = chosen.length === 1
+      ? 'לשלוח הודעת וואטסאפ לאיש הקשר הזה?'
+      : 'לשלוח הודעת וואטסאפ ל-' + chosen.length + ' אנשי קשר?';
+
+    el('confirmList').innerHTML = chosen.slice(0, 40).map(function (r) {
+      return '<div><span>' + esc(r.name || '—') + '</span><span class="muted">' + esc(r.phone) + '</span></div>';
+    }).join('') + (chosen.length > 40 ? '<div class="muted">ועוד ' + (chosen.length - 40) + '...</div>' : '');
+
+    var warn = el('confirmWarn');
+    if (chosen.length > 250) {
+      warn.style.display = '';
+      warn.textContent = 'נבחרו ' + chosen.length + ' אנשי קשר. בלחיצה אחת יישלח ל-250 הראשונים, והשאר יישארו מסומנים לפעם הבאה.';
+    } else {
+      warn.style.display = 'none';
+    }
+
+    el('confirmOverlay').classList.add('on');
+    el('confirmSendBtn').onclick = function () { doSend(phones); };
+  }
+
+  el('sendSelectedBtn').addEventListener('click', function () { openSendConfirm(Object.keys(state.picked)); });
+  el('sendAllBtn').addEventListener('click', function () { openSendConfirm(visibleRows().map(function (r) { return r.phone; })); });
+  el('confirmCancelBtn').addEventListener('click', function () { el('confirmOverlay').classList.remove('on'); });
+
+  function doSend(phones) {
+    el('confirmOverlay').classList.remove('on');
+    state.busy = true;
+    el('sendSelectedBtn').textContent = 'שולח...';
+    el('sendAllBtn').disabled = true;
+
+    google.script.run.withSuccessHandler(function (result) {
+      state.busy = false;
+      el('sendSelectedBtn').textContent = '📤 שלח לנבחרים';
+      el('sendAllBtn').disabled = false;
+      var sent = (result.sent || []).length;
+      var failed = (result.failed || []).length;
+      var msg = 'נשלח ל-' + sent + ' אנשי קשר.';
+      if (failed) msg += ' נכשל ל-' + failed + '.';
+      if (result.cappedRemaining) msg += ' נשארו ' + result.cappedRemaining + ' לא נשלחו (תקרה) - אפשר לשלוח שוב.';
+      toast(msg);
+      state.picked = {};
+      load();
+    }).withFailureHandler(function (err) {
+      state.busy = false;
+      el('sendSelectedBtn').textContent = '📤 שלח לנבחרים';
+      el('sendAllBtn').disabled = false;
+      toast('שגיאת שרת: ' + (err && err.message || err));
+    }).sendEventWhatsApp(SHEET_NAME, phones);
+  }
+
+  /* ---------- הוספת איש קשר ---------- */
+
+  el('addContactBtn').addEventListener('click', function () {
+    ['addName', 'addPhone', 'addCompany', 'addTitle', 'addEmail'].forEach(function (id) { el(id).value = ''; });
+    el('addError').style.display = 'none';
+    el('addOverlay').classList.add('on');
+  });
+  el('addCancelBtn').addEventListener('click', function () { el('addOverlay').classList.remove('on'); });
+
+  el('addSaveBtn').addEventListener('click', function () {
+    var fields = {
+      name: el('addName').value.trim(),
+      phone: el('addPhone').value.trim(),
+      company: el('addCompany').value.trim(),
+      title: el('addTitle').value.trim(),
+      email: el('addEmail').value.trim()
+    };
+    if (!fields.phone) {
+      el('addError').style.display = '';
+      el('addError').textContent = 'חובה למלא טלפון';
+      return;
+    }
+    el('addSaveBtn').disabled = true;
+    google.script.run.withSuccessHandler(function () {
+      el('addSaveBtn').disabled = false;
+      el('addOverlay').classList.remove('on');
+      toast('איש הקשר נוסף');
+      load();
+    }).withFailureHandler(function (err) {
+      el('addSaveBtn').disabled = false;
+      el('addError').style.display = '';
+      el('addError').textContent = String(err && err.message || err);
+    }).addContact(SHEET_NAME, fields);
+  });
+
+  /* ---------- עדכון סטטוס הרשמה ---------- */
+
+  function openStatusModal(phone) {
+    var row = state.rows.filter(function (r) { return r.phone === phone; })[0];
+    if (!row) return;
+    state.statusPhone = phone;
+    el('statusForName').textContent = (row.name || phone) + ' - ' + phone;
+    el('statusFilterInput').value = row.registrationStatus || '';
+    el('statusError').style.display = 'none';
+    el('statusSaveBtn').disabled = true;
+    renderStatusOptions(row.registrationStatus || '');
+    el('statusOverlay').classList.add('on');
+  }
+  el('statusCancelBtn').addEventListener('click', function () { el('statusOverlay').classList.remove('on'); });
+
+  function renderStatusOptions(filterText) {
+    var key = (filterText || '').trim();
+    var matches = key
+      ? state.statusList.filter(function (s) { return s.indexOf(key) !== -1; })
+      : state.statusList;
+    if (!state.statusList.length) {
+      el('statusOpts').innerHTML = '<div class="hint">הרשימה עדיין לא הוגדרה בגיליון (טאב "רשימת סטטוסים")</div>';
+    } else if (!matches.length) {
+      el('statusOpts').innerHTML = '<div class="hint">אין התאמה - יש לבחור ערך מהרשימה</div>';
+    } else {
+      el('statusOpts').innerHTML = matches.map(function (s) {
+        return '<div class="opt' + (s === filterText ? ' sel' : '') + '" data-val="' + esc(s) + '">' + esc(s) + '</div>';
+      }).join('');
+    }
+    Array.prototype.forEach.call(el('statusOpts').querySelectorAll('[data-val]'), function (opt) {
+      opt.addEventListener('click', function () {
+        el('statusFilterInput').value = opt.getAttribute('data-val');
+        renderStatusOptions(opt.getAttribute('data-val'));
+        el('statusSaveBtn').disabled = false;
+      });
+    });
+  }
+  el('statusFilterInput').addEventListener('input', function () {
+    renderStatusOptions(el('statusFilterInput').value);
+    var exact = state.statusList.indexOf(el('statusFilterInput').value.trim()) !== -1;
+    el('statusSaveBtn').disabled = !exact;
+  });
+
+  el('statusSaveBtn').addEventListener('click', function () {
+    var statusVal = el('statusFilterInput').value.trim();
+    if (state.statusList.indexOf(statusVal) === -1) return;
+    el('statusSaveBtn').disabled = true;
+    google.script.run.withSuccessHandler(function () {
+      el('statusOverlay').classList.remove('on');
+      toast('הסטטוס עודכן');
+      load();
+    }).withFailureHandler(function (err) {
+      el('statusError').style.display = '';
+      el('statusError').textContent = String(err && err.message || err);
+      el('statusSaveBtn').disabled = false;
+    }).setUserStatus(SHEET_NAME, state.statusPhone, el('statusUserSel').value, statusVal);
+  });
+
+  load();
+</script>
