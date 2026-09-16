@@ -1,0 +1,272 @@
+<style>
+  /* פלטה ייעודית ללקוח הזה (אפרסק / סגלגל / תכלת, כולל הכחול הרשמי של
+     אודיוקודס #33a3dc) - שונה מברירת המחדל נייבי+זהב של התבנית הבסיסית. */
+  :root {
+    --ink: #211f33;
+    --header-a: #1c1836;
+    --header-b: #2b2350;
+    --header-c: #3a2d63;
+    --paper: #faf5f0;
+    --surface: #ffffff;
+    --border: #ece2d8;
+    --border-soft: #f1e9e1;
+    --muted: #7a7188;
+
+    --accent-600: #1c98a0;
+    --accent-700: #157880;
+    --accent-100: #dcf1ef;
+
+    --peach-500: #e0895f;
+    --peach-100: #fbe3d3;
+
+    --violet-500: #7c5fa6;
+    --violet-700: #5f4680;
+
+    --st-new: #8a8296;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Segoe UI", Arial, "Helvetica Neue", sans-serif;
+  }
+
+  header.hub {
+    background: linear-gradient(155deg, var(--header-a), var(--header-b) 55%, var(--header-c));
+    color: #fff;
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+
+  .logo-mark { display: flex; align-items: center; gap: 10px; }
+  .logo-mark svg { width: 34px; height: 34px; flex-shrink: 0; }
+  .logo-mark svg.mituv-icon { width: 28px; height: 28px; }
+  .logo-divider { width: 1px; height: 26px; background: rgba(255,255,255,0.22); flex-shrink: 0; }
+
+  .ac-mark { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .ac-mark svg { width: 24px; height: 24px; }
+  .ac-mark .ac-word { font-size: 15px; font-weight: 800; letter-spacing: 0.01em; color: #fff; }
+  .ac-mark .ac-word b { color: #7fd8d0; font-weight: 800; }
+
+  .logo-text { display: flex; flex-direction: column; line-height: 1.15; }
+  .logo-text .word { font-size: 15.5px; font-weight: 700; letter-spacing: 0.2px; }
+  .logo-text .tag { font-size: 10.5px; color: #c3bcd8; font-weight: 500; }
+
+  .stat-banner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    background: rgba(28,152,160,0.22);
+    border: 1px solid var(--accent-600);
+    border-radius: 12px;
+    padding: 6px 18px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .stat-banner:hover { background: rgba(28,152,160,0.34); }
+  .stat-banner .stat-n {
+    font-size: 19px; font-weight: 800; color: #7fd8d0;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-banner .stat-u { font-size: 10px; color: #cdeceb; font-weight: 600; }
+
+  .modal.modal-wide { max-width: 800px; }
+  .modal.modal-invite { max-width: 640px; }
+
+  .countdown {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 7px 16px;
+    margin-inline-start: auto;
+  }
+
+  .countdown .cd-label { font-size: 11px; color: #c3bcd8; font-weight: 600; }
+  .cd-units { display: flex; gap: 11px; }
+  .cd-unit { text-align: center; min-width: 36px; }
+  .cd-unit .n {
+    font-size: 19px; font-weight: 800; color: #7fd8d0;
+    font-variant-numeric: tabular-nums; display: block;
+  }
+  .cd-unit .u { font-size: 9.5px; color: #a99fc4; }
+
+  .hub-actions { display: flex; gap: 10px; }
+
+  .hub-btn {
+    padding: 9px 16px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid rgba(255,255,255,0.3);
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .hub-btn:hover { background: rgba(255,255,255,0.09); }
+  .hub-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  main { padding: 22px 28px 60px; max-width: 1320px; margin: 0 auto; }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+
+  .search-input, .status-filter, select, input, textarea {
+    font-family: inherit;
+    font-size: 13.5px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .search-input { min-width: 240px; flex: 1; }
+
+  .btn {
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: none;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .btn-primary { background: var(--violet-500); color: #fff; }
+  .btn-primary:hover { background: var(--violet-700); }
+  .btn-wa { background: #1f8f5c; color: #fff; }
+  .btn-wa:disabled { background: #b9cdc3; cursor: not-allowed; opacity: 0.7; }
+  .btn-plain { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
+  .btn-danger { background: #fbe3e1; color: #a3312a; }
+
+  .count-pill { margin-inline-start: auto; font-size: 12.5px; color: var(--muted); }
+
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: auto;
+    /* גובה חסום כדי שהטבלה עצמה תגלול פנימית (לא כל הדף) - זה מה שמאפשר
+       ל-position:sticky על ה-th להיצמד באמינות לראש הטבלה: sticky נצמד
+       תמיד לגבול הגלילה הכי קרוב, וכשה-wrap עצמו לא באמת גולל (גובה auto
+       ללא הגבלה) אין לו גבול גלילה אמיתי וההדבקה לא עובדת בפועל. */
+    max-height: calc(100vh - var(--header-h, 82px) - 130px);
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1180px; }
+
+  th {
+    text-align: right;
+    padding: 11px 10px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-weight: 700;
+    white-space: nowrap;
+    font-size: 11.5px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+
+  td { padding: 22px 14px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; line-height: 1.6; }
+
+  .reply-cell { display: flex; flex-direction: column; gap: 3px; max-width: 220px; }
+  .reply-cell .reply-text { white-space: normal; }
+  .reply-cell .reply-date { font-size: 11px; color: var(--muted); }
+  tbody tr:hover { background: var(--paper); cursor: pointer; }
+  tbody tr.selected { background: var(--peach-100); }
+
+  .empty-row { text-align: center; color: var(--muted); padding: 30px !important; cursor: default; }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 11px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .row-edit { background: none; border: none; cursor: pointer; font-size: 15px; color: var(--muted); }
+  .icon-x { background: none; border: none; font-size: 17px; cursor: pointer; color: var(--muted); }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(28,24,54,0.55);
+    display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50;
+  }
+  .overlay.hidden { display: none; }
+
+  .modal {
+    background: var(--surface); border-radius: 14px; width: 100%; max-width: 480px;
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(28,24,54,0.35);
+  }
+
+  .modal-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .modal-head h2 { margin: 0; font-size: 16px; }
+  .modal-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 13px; }
+  .row2 { display: flex; gap: 12px; }
+  .row2 > div { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  label { font-size: 12px; font-weight: 700; color: var(--muted); }
+
+  .template-choice { display: flex; flex-direction: column; gap: 8px; }
+  .tpl-option {
+    border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px;
+  }
+  .tpl-option.checked { border-color: var(--accent-600); background: var(--accent-100); }
+
+  .recipients-list { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12.5px; }
+  .recipients-list span {
+    background: var(--paper); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
+  }
+
+  .admin-msg { font-size: 12.5px; color: #a3312a; }
+
+  footer.modal-actions { display: flex; gap: 10px; padding: 6px 20px 18px; justify-content: flex-end; }
+  .spacer { flex: 1; }
+  .hidden { display: none !important; }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--header-a); color: #fff; padding: 10px 18px; border-radius: 8px;
+    font-size: 13px; z-index: 100;
+  }
+  .toast.error { background: #a3312a; }
+
+  /* מודאל "מידע על הכנס" - שחזור תוכני של ההזמנה */
+  .invite-hero {
+    background: linear-gradient(155deg, var(--header-a), var(--header-b) 60%, var(--header-c));
+    color: #fff; padding: 22px 22px 20px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .invite-hero .brands { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .invite-hero h3 { margin: 0; font-size: 22px; font-weight: 800; }
+  .invite-hero .sub { font-size: 13.5px; color: #cdeceb; font-weight: 600; }
+  .invite-body { padding: 18px 22px 6px; }
+  .invite-body p { margin: 0 0 6px; font-size: 14px; }
+  .invite-body .where { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .agenda { border-top: 1px solid var(--border); margin-top: 6px; }
+  .agenda-row { display: flex; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
+  .agenda-row .time { color: var(--accent-700); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .invite-note { padding: 13px 22px 18px; font-size: 12px; color: var(--muted); background: var(--paper); border-top: 1px solid var(--border); }
+  .invite-note a { color: var(--accent-700); font-weight: 700; }
+</style>
