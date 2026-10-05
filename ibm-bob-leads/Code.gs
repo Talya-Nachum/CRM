@@ -444,6 +444,65 @@ function getLeads() {
   return leads.reverse();
 }
 
+/**
+ * כלי אבחון - מריצים ידנית מהעורך (לבחור debugWebinarStatusMismatch בתפריט
+ * העליון + Run, אחר כך View > Logs) כשמספר הערכים בעמודה "סטטוס וובינר"
+ * לא תואם למספר שמוצג בטאב וובינר בדשבורד. עובר שורה-שורה על הגיליון
+ * (לא על getLeads()) כדי לשכפל בדיוק את התנאים שגורמים לליד "להיעלם" -
+ * שורה עם שגיאת נוסחה שמפילה את הקריאה שלה כולה (נעלמת מכל הדשבורד, לא רק
+ * מוובינר!) מדווחת בנפרד משורה שבאמת ריקה בכל השדות. מדפיס מספרי שורה
+ * מדויקים כדי שיהיה אפשר לפתוח אותן בגיליון ולתקן.
+ */
+function debugWebinarStatusMismatch() {
+  var sheet = getLeadsSheet_();
+  var lastRow = sheet.getLastRow();
+  var numCols = LEAD_FIELDS.length;
+  var webinarIdx = fieldIndex_('webinarStatus');
+  var companyIdx = fieldIndex_('company');
+  var contactIdx = fieldIndex_('contactName');
+
+  var totalWithValue = 0;
+  var shownInApp = 0;
+  var unreadableRows = [];
+  var emptyRows = [];
+
+  for (var r = 2; r <= lastRow; r++) {
+    var row;
+    try {
+      row = sheet.getRange(r, 1, 1, numCols).getValues()[0];
+    } catch (e) {
+      row = null;
+    }
+
+    if (!row) {
+      unreadableRows.push(r);
+      continue;
+    }
+
+    var webinarValue = String(row[webinarIdx] || '').trim();
+    if (!webinarValue) continue;
+
+    totalWithValue++;
+    if (isRowEmpty_(row)) {
+      emptyRows.push(r);
+      continue;
+    }
+
+    shownInApp++;
+    Logger.log('שורה %s מוצגת בדשבורד: וובינר="%s" | חברה="%s" | איש קשר="%s"',
+      r, webinarValue, row[companyIdx], row[contactIdx]);
+  }
+
+  Logger.log('--- סה"כ שורות עם ערך בעמודת וובינר: %s | מהן מוצגות בדשבורד: %s ---', totalWithValue, shownInApp);
+  if (unreadableRows.length) {
+    Logger.log('שורות עם שגיאת קריאה (#ERROR!/#REF! וכו׳ באחת העמודות) - נעלמות מכל הדשבורד, לא רק מוובינר: %s',
+      unreadableRows.join(', '));
+  }
+  if (emptyRows.length) {
+    Logger.log('שורות עם ערך בעמודת וובינר אבל שנחשבות "ריקות" (בעייתי, לא אמור לקרות): %s', emptyRows.join(', '));
+  }
+}
+
 function fieldIndex_(key) {
   return LEAD_FIELDS.map(function (f) { return f.key; }).indexOf(key);
 }
