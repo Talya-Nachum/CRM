@@ -333,6 +333,8 @@
       allLeads = leads;
       renderTable();
       renderSectorTabs();
+      // אבחון זמני לפער בספירת טאב וובינר - להסיר אחרי שהבעיה נמצאת.
+      alert('אבחון: נטענו ' + allLeads.length + ' לידים בסה"כ בדף, מהם ' + webinarLeads().length + ' עם ערך בעמודת וובינר.');
     }).withFailureHandler(showError).getLeads();
   }
 
