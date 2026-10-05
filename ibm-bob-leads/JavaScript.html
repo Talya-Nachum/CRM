@@ -166,6 +166,7 @@
       renderSectorTabs();
       updateSectorStrip();
       populateSectorSelect();
+      populateWebinarStatusSelect();
       renderTable();
       syncHeaderHeight();
     }).withFailureHandler(showError).getConfig();
@@ -182,10 +183,14 @@
     return activeSectorKey === webinarSectorKey;
   }
 
-  /** לידים מכל הסקטורים שהסטטוס שלהם ברשימת "סטטוסים לוובינר" (ר' Code.gs). */
+  /**
+   * לידים ששויכו לוובינר בעמודה הנפרדת "סטטוס וובינר" (lead.webinarStatus) -
+   * לא לפי "סטטוס" הרגיל שלהם. העמודה הזו נקבעת רק ידנית (מעריכת הליד או
+   * ישירות בגיליון) ולעולם לא משתנה אוטומטית משליחת וואטסאפ/תשובה/לחיצת
+   * כפתור - כך שליד לא "נופל" מהטאב בגלל שינוי סטטוס שלא קשור לוובינר.
+   */
   function webinarLeads() {
-    var normalized = webinarStatuses.map(normalizeStatusText);
-    return allLeads.filter(function (l) { return normalized.indexOf(normalizeStatusText(l.status)) !== -1; });
+    return allLeads.filter(function (l) { return !!normalizeStatusText(l.webinarStatus); });
   }
 
   function renderSectorTabs() {
@@ -303,6 +308,24 @@
     });
   }
 
+  /**
+   * אופציות הבחירה ל"סטטוס וובינר" - מגיעות מלשונית "סטטוסים לוובינר"
+   * בגיליון (webinarStatuses, ר' getConfig ב-Code.gs). זו אותה רשימה
+   * ששימשה בעבר לסינון לפי "סטטוס" הרגיל - כאן היא רק רשימת האפשרויות
+   * לבחירה בעמודה הנפרדת, לא עוד סינון של השדה הרגיל.
+   */
+  function populateWebinarStatusSelect() {
+    var formSelect = document.getElementById('f_webinarStatus');
+    var current = formSelect.value;
+    formSelect.innerHTML = '<option value="">— לא משויך לוובינר —</option>';
+    webinarStatuses.forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = s; opt.textContent = s;
+      formSelect.appendChild(opt);
+    });
+    formSelect.value = current;
+  }
+
   /* ---------- data loading ---------- */
 
   function loadLeads() {
@@ -370,11 +393,13 @@
 
     return allLeads.filter(function (lead) {
       var matchesStatus = !statusFilter || lead.status === statusFilter;
-      // בטאב "וובינר": כל סקטור עובר (לא מסננים לפי lead.sector), אבל
-      // הסטטוס חייב להיות ברשימת "סטטוסים לוובינר" - זה התנאי שמחליף
-      // את סינון הסקטור הרגיל. בכל טאב סקטור רגיל - בדיוק כמו קודם.
+      // בטאב "וובינר": כל סקטור עובר (לא מסננים לפי lead.sector), אבל חייב
+      // להיות ערך בעמודה הנפרדת "סטטוס וובינר" (lead.webinarStatus) - זה
+      // התנאי שמחליף את סינון הסקטור הרגיל. השדה הזה נקבע רק ידנית ולא
+      // מושפע משינויי "סטטוס" הרגיל (שליחת וואטסאפ/תשובה/לחיצת כפתור).
+      // בכל טאב סקטור רגיל - בדיוק כמו קודם.
       var matchesSector = webinarActive
-        ? (webinarStatuses.map(normalizeStatusText).indexOf(normalizeStatusText(lead.status)) !== -1)
+        ? !!normalizeStatusText(lead.webinarStatus)
         : (!activeSectorKey || lead.sector === activeSectorKey);
       var haystack = [lead.company, lead.contactName, lead.phone, lead.email, lead.notes]
         .join(' ').toLowerCase();
@@ -387,6 +412,22 @@
     var s = sectorByKey(sectorKey);
     if (!s) return '';
     return '<span class="sector-tag ' + s.color + '"><span class="sector-dot"></span>' + escapeHtml(s.label) + '</span>';
+  }
+
+  /**
+   * בטאב "וובינר" מציגים את העמודה הנפרדת "סטטוס וובינר" (הקבועה, לא
+   * מושפעת משליחת וואטסאפ/תשובות) במקום "סטטוס" הרגיל - ועדיין מציגים
+   * את "סטטוס" הרגיל כשורת מידע קטנה מתחת, לשקיפות (כדי שיהיה אפשר
+   * לראות גם מה קורה בפועל עם השליחה/התשובה). בכל טאב סקטור רגיל -
+   * בדיוק כמו קודם.
+   */
+  function statusCellHtml_(lead) {
+    if (isWebinarActive()) {
+      var ws = lead.webinarStatus || '— לא נקבע —';
+      return '<span class="badge" style="background:' + colorForStatus(lead.webinarStatus || 'לא נקבע') + '">' + escapeHtml(ws) + '</span>' +
+        '<div class="reply-date">סטטוס פנימי: ' + escapeHtml(lead.status) + '</div>';
+    }
+    return '<span class="badge" style="background:' + colorForStatus(lead.status) + '">' + escapeHtml(lead.status) + '</span>';
   }
 
   /* ---------- export to excel ---------- */
@@ -462,7 +503,7 @@
         '<td>' + escapeHtml(lead.phone) + '</td>' +
         '<td>' + escapeHtml(lead.email) + '</td>' +
         '<td>' + escapeHtml(lead.notes) + '</td>' +
-        '<td><span class="badge" style="background:' + colorForStatus(lead.status) + '">' + escapeHtml(lead.status) + '</span></td>' +
+        '<td>' + statusCellHtml_(lead) + '</td>' +
         '<td><div class="reply-cell"><span class="reply-text">' + escapeHtml(lead.replyText) + '</span>' +
           (lead.replyAt ? '<span class="reply-date">' + escapeHtml(lead.replyAt) + '</span>' : '') +
           '</div></td>' +
@@ -524,6 +565,7 @@
     // אוטומטית. מטאב "וובינר" (לא סקטור אמיתי, אין אפשרות כזו ברשימה) -
     // "לא משויך" כברירת מחדל, כמו בהוספה בלי שום טאב פעיל.
     document.getElementById('f_sector').value = isWebinarActive() ? '' : (activeSectorKey || '');
+    document.getElementById('f_webinarStatus').value = '';
     document.getElementById('leadOverlay').classList.remove('hidden');
   }
 
@@ -540,6 +582,7 @@
     document.getElementById('f_email').value = lead.email || '';
     document.getElementById('f_notes').value = lead.notes || '';
     document.getElementById('f_status').value = lead.status || '';
+    document.getElementById('f_webinarStatus').value = lead.webinarStatus || '';
     document.getElementById('deleteLeadBtn').classList.remove('hidden');
     document.getElementById('leadOverlay').classList.remove('hidden');
   }
@@ -561,7 +604,8 @@
       phone: document.getElementById('f_phone').value.trim(),
       email: document.getElementById('f_email').value.trim(),
       notes: document.getElementById('f_notes').value.trim(),
-      status: document.getElementById('f_status').value
+      status: document.getElementById('f_status').value,
+      webinarStatus: document.getElementById('f_webinarStatus').value
     };
 
     var submitBtn = evt.target.querySelector('button[type="submit"]');
