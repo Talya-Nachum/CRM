@@ -374,13 +374,8 @@ function getLeads() {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  // הקריאה עצמה רצה בלי נעילה בכוונה - היא נקראת כל 10 שניות מכל לשונית
-  // פתוחה, ונעילה שחוסמת אותה (גם לכמה שניות) יוצרת פקק בין הרבה קריאות
-  // מקבילות. את ההשלמות (מזהה/תאריך/סטטוס/סקטור) כותבים בחזרה בבלוק אחד
-  // בסוף (במקום שורה-שורה) - זה כשלעצמו מקצר את "חלון הזמן" הפגיע שבו
-  // עריכה בגיליון (מחיקת שורה וכו') יכולה להתנגש עם הכתיבה מ-כמה שניות
-  // לכמעט רגע אחד. הכתיבה עצמה מוגנת בנעילה קצרה שלא חוסמת - אם היא
-  // תפוסה, פשוט מדלגים על הכתיבה הפעם (תיכתב בקריאה הבאה בעוד 10 שניות).
+  // הקריאה עצמה רצה בלי נעילה בכוונה - היא נקראת בכל טעינת דף, ונעילה
+  // שחוסמת אותה יוצרת פקק בין הרבה קריאות מקבילות.
   var values = readSheetValuesResilient_(sheet, lastRow, LEAD_FIELDS.length);
 
   var idIdx = fieldIndex_('id');
@@ -389,52 +384,49 @@ function getLeads() {
   var statusIdx = fieldIndex_('status');
   var sectorIdx = fieldIndex_('sector');
   var leads = [];
-  var anyWriteBack = false;
-  var hasUnreadableRow = false;
+  // רק התאים הספציפיים שבאמת השתנו (ברירת מחדל לשדה ריק/נרמול סקטור) -
+  // *לא* כל השורה. בעבר נכתבה כל השורה (24 עמודות) בחזרה מתוך ה-snapshot
+  // שנקרא בתחילת הפונקציה - וזה דרס בשקט כל עריכה אחרת שקרתה לאותה שורה
+  // בין הקריאה לכתיבה (למשל ערך שהוקלדתי ישירות בעמודה "סטטוס וובינר"
+  // ממש באותם רגעים, או תשובת וואטסאפ שהגיעה מ-webhook) - כי הכתיבה חזרה
+  // כללה את כל העמודות, כולל כאלה שלא היה שום צורך לגעת בהן.
+  var writeBacks = [];
   // מחושב פעם אחת מחוץ ללולאה בכוונה - getDefaultStatus_() קוראת שוב ל-
-  // ensureSheets_() (שנועלת/משחררת נעילה), וקריאה לה בכל שורה בנפרד (כמו
-  // שהיה קודם) יצרה הרבה נעילות ברצף באותה ריצה כשמדביקים הרבה שורות
-  // חדשות בבת אחת - עד כדי כך שריצה מקבילה (הרענון האוטומטי) הייתה נתקעת
-  // ומקבלת "תום הזמן הקצוב של הנעילה".
+  // ensureSheets_() (שנועלת/משחררת נעילה), וקריאה לה בכל שורה בנפרד יוצרת
+  // הרבה נעילות ברצף באותה ריצה.
   var defaultStatus = getDefaultStatus_();
 
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    if (!row) { hasUnreadableRow = true; continue; }
+    if (!row) continue;
     if (isRowEmpty_(row)) continue;
 
+    var sheetRow = i + 1;
     var now = new Date();
-    if (!row[idIdx]) { row[idIdx] = Utilities.getUuid(); anyWriteBack = true; }
-    if (!row[createdIdx]) { row[createdIdx] = now; anyWriteBack = true; }
-    if (!row[updatedIdx]) { row[updatedIdx] = now; anyWriteBack = true; }
-    if (!row[statusIdx]) { row[statusIdx] = defaultStatus; anyWriteBack = true; }
+    if (!row[idIdx]) { row[idIdx] = Utilities.getUuid(); writeBacks.push({ row: sheetRow, col: idIdx + 1, value: row[idIdx] }); }
+    if (!row[createdIdx]) { row[createdIdx] = now; writeBacks.push({ row: sheetRow, col: createdIdx + 1, value: now }); }
+    if (!row[updatedIdx]) { row[updatedIdx] = now; writeBacks.push({ row: sheetRow, col: updatedIdx + 1, value: now }); }
+    if (!row[statusIdx]) { row[statusIdx] = defaultStatus; writeBacks.push({ row: sheetRow, col: statusIdx + 1, value: defaultStatus }); }
 
     // שורה שנוספה ידנית בגיליון בד"כ תכתוב בעמודת "סקטור" את השם בעברית
     // (למשל "שוק ההון") ולא את המפתח הפנימי ("capital") שהדשבורד מסנן
     // לפיו את הטאבים - בלי הנרמול הזה הליד לא יופיע באף טאב.
     var normalizedSector = normalizeSectorValue_(row[sectorIdx]);
-    if (normalizedSector !== row[sectorIdx]) { row[sectorIdx] = normalizedSector; anyWriteBack = true; }
+    if (normalizedSector !== row[sectorIdx]) {
+      row[sectorIdx] = normalizedSector;
+      writeBacks.push({ row: sheetRow, col: sectorIdx + 1, value: normalizedSector });
+    }
 
     leads.push(rowToLead_(row));
   }
 
-  if (anyWriteBack) {
+  if (writeBacks.length) {
     var lock = LockService.getScriptLock();
     if (lock.tryLock(2000)) {
       try {
-        if (hasUnreadableRow) {
-          // נתקלנו בשורה עם שגיאת נוסחה שלא ניתן היה לקרוא (ר' readSheetValuesResilient_) -
-          // אי אפשר לכתוב אותה בחזרה כחלק מבלוק אחיד, אז חוזרים לכתיבה שורה-שורה
-          // (איטי יותר, אבל זה מקרה קצה נדיר).
-          for (var r = 1; r < values.length; r++) {
-            if (values[r]) sheet.getRange(r + 1, 1, 1, values[r].length).setValues([values[r]]);
-          }
-        } else {
-          // כתיבה אחת מרוכזת לכל בלוק הנתונים, במקום שורה-שורה - מקצרת
-          // דרמטית את משך הריצה (וכך את "חלון הזמן" הפגיע שתואר למעלה),
-          // בעיקר כשמדביקים הרבה שורות חדשות בבת אחת.
-          sheet.getRange(2, 1, values.length - 1, LEAD_FIELDS.length).setValues(values.slice(1));
-        }
+        writeBacks.forEach(function (wb) {
+          sheet.getRange(wb.row, wb.col).setValue(wb.value);
+        });
       } finally {
         lock.releaseLock();
       }
