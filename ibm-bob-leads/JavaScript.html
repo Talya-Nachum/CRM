@@ -17,7 +17,10 @@
   // סטטוס הליד בפועל לא תישבר בשקט על הבדל לא-נראה-לעין (דפוס באג חוזר
   // בפרויקט הזה - ר' CLAUDE.md, "כותרות עמודות שלא תואמות בדיוק").
   function normalizeStatusText(s) {
-    return String(s || '').trim().replace(/[״“”″]/g, '"').replace(/[׳‘’]/g, "'");
+    // "s == null ? '' : s" ולא "s || ''" בכוונה - "||" הופך גם 0 למחרוזת
+    // ריקה (0 הוא falsy ב-JS), אז ליד שבעמודה Q שלו נכתב בטעות המספר 0
+    // היה "נעלם" מטאב וובינר למרות שיש בעמודה ערך ממשי (לא ריק).
+    return String(s == null ? '' : s).trim().replace(/[״“”″]/g, '"').replace(/[׳‘’]/g, "'");
   }
   var stripCountdownTimer = null;
   var statusColorMap = {};
