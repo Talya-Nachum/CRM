@@ -5,6 +5,11 @@
   var allSectors = [];
   var selectedIds = new Set();
   var activeSectorKey = ''; // ריק רק עד שה-config נטען; אז מוגדר לסקטור הראשון כברירת מחדל
+  // "וובינר" הוא לא עוד סקטור אמיתי (לא ברשימת allSectors, אף ליד לא
+  // משויך אליו) - זה טאב-על שמציג לידים מכל הסקטורים, מסונן לפי סטטוס.
+  // activeSectorKey === webinarSectorKey הוא הדגל היחיד שמבדיל בין המצבים.
+  var webinarSectorKey = 'webinar';
+  var webinarStatuses = [];
   var stripCountdownTimer = null;
   var statusColorMap = {};
   var palette = ['#64748b', '#b8791f', '#0f7a6b', '#2f4a7a', '#7a4fb0', '#b6423a', '#0891b2', '#be185d'];
@@ -137,6 +142,8 @@
     google.script.run.withSuccessHandler(function (cfg) {
       document.getElementById('clientNameLabel').textContent = cfg.clientName;
       allSectors = cfg.sectors || [];
+      webinarSectorKey = cfg.webinarSectorKey || 'webinar';
+      webinarStatuses = cfg.webinarStatuses || [];
       // אין טאב "הכל" - כל באנר מציג רק את הלידים שלו, אז חייב להיות סקטור
       // פעיל תמיד; ברירת המחדל היא הראשון ברשימה (SECTORS ב-Code.gs).
       if (!activeSectorKey && allSectors.length) activeSectorKey = allSectors[0].key;
@@ -154,6 +161,16 @@
 
   /* ---------- טאבים: טאב לכל סקטור, בלי "הכל" ---------- */
 
+  /** true בדיוק כשטאב "וובינר" המרוכז (לא סקטור אמיתי) פעיל. */
+  function isWebinarActive() {
+    return activeSectorKey === webinarSectorKey;
+  }
+
+  /** לידים מכל הסקטורים שהסטטוס שלהם ברשימת "סטטוסים לוובינר" (ר' Code.gs). */
+  function webinarLeads() {
+    return allLeads.filter(function (l) { return webinarStatuses.indexOf(l.status) !== -1; });
+  }
+
   function renderSectorTabs() {
     var wrap = document.getElementById('sectorTabs');
     var tabs = allSectors.map(function (s) {
@@ -161,6 +178,10 @@
       var cls = 'tab-btn ' + s.color + (activeSectorKey === s.key ? ' active' : '');
       return '<button class="' + cls + '" data-sector="' + s.key + '">' + s.icon + ' ' + escapeHtml(s.label) + ' (' + count + ')</button>';
     });
+    // טאב "וובינר" מתווסף **אחרי** שלושת הסקטורים, לא ביניהם - כדי שיהיה
+    // ברור ויזואלית שהוא תצוגה נפרדת ("על-גבי" הסקטורים) ולא עוד סקטור רגיל.
+    var webinarCls = 'tab-btn webinar' + (isWebinarActive() ? ' active' : '');
+    tabs.push('<button class="' + webinarCls + '" data-sector="' + webinarSectorKey + '">🎥 וובינר (' + webinarLeads().length + ')</button>');
     wrap.innerHTML = tabs.join('');
     wrap.querySelectorAll('.tab-btn').forEach(function (btn) {
       btn.addEventListener('click', function () { setActiveSector(btn.dataset.sector); });
@@ -178,7 +199,8 @@
     var strip = document.getElementById('sectorStrip');
     if (stripCountdownTimer) { clearInterval(stripCountdownTimer); stripCountdownTimer = null; }
 
-    if (!activeSectorKey) {
+    // לטאב "וובינר" אין תאריך/מידע משלו (הוא חוצה סקטורים) - אין פס מידע.
+    if (!activeSectorKey || isWebinarActive()) {
       strip.classList.add('hidden');
       return;
     }
@@ -304,10 +326,16 @@
   function filteredLeads() {
     var search = document.getElementById('searchInput').value.trim().toLowerCase();
     var statusFilter = document.getElementById('statusFilter').value;
+    var webinarActive = isWebinarActive();
 
     return allLeads.filter(function (lead) {
       var matchesStatus = !statusFilter || lead.status === statusFilter;
-      var matchesSector = !activeSectorKey || lead.sector === activeSectorKey;
+      // בטאב "וובינר": כל סקטור עובר (לא מסננים לפי lead.sector), אבל
+      // הסטטוס חייב להיות ברשימת "סטטוסים לוובינר" - זה התנאי שמחליף
+      // את סינון הסקטור הרגיל. בכל טאב סקטור רגיל - בדיוק כמו קודם.
+      var matchesSector = webinarActive
+        ? (webinarStatuses.indexOf(lead.status) !== -1)
+        : (!activeSectorKey || lead.sector === activeSectorKey);
       var haystack = [lead.company, lead.contactName, lead.phone, lead.email, lead.notes]
         .join(' ').toLowerCase();
       var matchesSearch = !search || haystack.indexOf(search) !== -1;
@@ -452,8 +480,10 @@
     document.getElementById('leadId').value = '';
     document.getElementById('deleteLeadBtn').classList.add('hidden');
     if (allStatuses.length) document.getElementById('f_status').value = allStatuses[0];
-    // אם הוספה נעשית מתוך טאב סקטור ספציפי - משייכים את הליד החדש אליו אוטומטית.
-    document.getElementById('f_sector').value = activeSectorKey || '';
+    // אם הוספה נעשית מתוך טאב סקטור ספציפי - משייכים את הליד החדש אליו
+    // אוטומטית. מטאב "וובינר" (לא סקטור אמיתי, אין אפשרות כזו ברשימה) -
+    // "לא משויך" כברירת מחדל, כמו בהוספה בלי שום טאב פעיל.
+    document.getElementById('f_sector').value = isWebinarActive() ? '' : (activeSectorKey || '');
     document.getElementById('leadOverlay').classList.remove('hidden');
   }
 

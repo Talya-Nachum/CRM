@@ -30,6 +30,12 @@ var INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
 var LEADS_SHEET_NAME = 'לידים';
 var STATUSES_SHEET_NAME = 'רשימת סטטוסים';
 var TEMPLATES_SHEET_NAME = 'תבניות';
+// רשימה נפרדת (לא "רשימת סטטוסים" הרגילה) - אילו ערכי סטטוס, מכל סקטור
+// שהוא, "סופרים" לטאב "וובינר" המרוכז. ריקה בכוונה בהתחלה - טליה ממלאת
+// אותה בעצמה ישירות בגיליון (אותו דפוס הרשאה כמו "רשימת סטטוסים": גישת
+// עריכה לגיליון בלבד, בלי כפתור עריכה בממשק).
+var WEBINAR_STATUSES_SHEET_NAME = 'סטטוסים לוובינר';
+var WEBINAR_SECTOR_KEY = 'webinar';
 
 // TODO(client): רשימת הסטטוסים הראשונית לתהליך המכירה של הלקוח הזה - לשאול
 // אותו מראש (ר' BUILD-GUIDE.md, שאלת "אילו סטטוסים רוצים לכל ליד").
@@ -45,10 +51,13 @@ var WHATSAPP_SENT_STATUS = 'נשלח וואטסאפ';
 // עמודה שלישית = מפתח הסקטור (capital/energy/health) - קובעת אילו תבניות
 // מוצעות בכפתור הוואטסאפ בתוך המודאל של אותו סקטור. שורה עם עמודת סקטור
 // ריקה מוצעת בכל הסקטורים (למשל תבנית כללית).
+// שורה עם עמודת סקטור = 'webinar' מוצעת **רק** בטאב "וובינר" המרוכז (לא
+// דולפת לשלושת טאבי הסקטור הרגילים) - תבנית ייעודית, לא משותפת.
 var DEFAULT_TEMPLATES = [
   ['הזמנה - שוק ההון', 'להשלים', 'capital'],
   ['הזמנה - אנרגיה', 'להשלים', 'energy'],
-  ['הזמנה - בריאות', 'להשלים', 'health']
+  ['הזמנה - בריאות', 'להשלים', 'health'],
+  ['הזמנה - וובינר', 'להשלים', WEBINAR_SECTOR_KEY]
 ];
 
 // סדר העמודות בגיליון "לידים" - מקור אמת יחיד לכל הקוד וה-UI
@@ -158,7 +167,9 @@ function fixErrorPhoneCell_(cell) {
 function getConfig() {
   return {
     clientName: CLIENT_NAME,
-    sectors: SECTORS
+    sectors: SECTORS,
+    webinarSectorKey: WEBINAR_SECTOR_KEY,
+    webinarStatuses: getWebinarStatuses()
   };
 }
 
@@ -219,7 +230,8 @@ function ensureSheets_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var leadsSheet = ss.getSheetByName(LEADS_SHEET_NAME);
   if (leadsSheet && leadsSheet.getLastColumn() >= LEAD_FIELDS.length &&
-      ss.getSheetByName(STATUSES_SHEET_NAME) && ss.getSheetByName(TEMPLATES_SHEET_NAME)) {
+      ss.getSheetByName(STATUSES_SHEET_NAME) && ss.getSheetByName(TEMPLATES_SHEET_NAME) &&
+      ss.getSheetByName(WEBINAR_STATUSES_SHEET_NAME)) {
     return;
   }
 
@@ -285,6 +297,15 @@ function ensureSheetsLocked_() {
     templatesSheet = ss.insertSheet(TEMPLATES_SHEET_NAME);
     templatesSheet.getRange(1, 1, 1, 3).setValues([['שם תבנית', 'מספר תבנית', 'סקטור']]).setFontWeight('bold');
     templatesSheet.getRange(2, 1, DEFAULT_TEMPLATES.length, 3).setValues(DEFAULT_TEMPLATES);
+  }
+
+  // נוצרת ריקה (רק כותרת) בכוונה - טליה ממלאת בעצמה אילו סטטוסים "סופרים"
+  // לטאב "וובינר". כל עוד הרשימה ריקה, הטאב מציג 0 לידים (לא שגיאה - פשוט
+  // עוד לא הוגדר מה מציגים בו).
+  var webinarStatusesSheet = ss.getSheetByName(WEBINAR_STATUSES_SHEET_NAME);
+  if (!webinarStatusesSheet) {
+    webinarStatusesSheet = ss.insertSheet(WEBINAR_STATUSES_SHEET_NAME);
+    webinarStatusesSheet.getRange(1, 1).setValue('סטטוס').setFontWeight('bold');
   }
 }
 
@@ -540,6 +561,14 @@ function getStatusesFromSheet_(sheet) {
 function getDefaultStatus_() {
   var statuses = getStatuses();
   return statuses[0] || 'חדש';
+}
+
+/** רשימת הסטטוסים ש"סופרים" לטאב "וובינר" המרוכז - ר' WEBINAR_STATUSES_SHEET_NAME. */
+function getWebinarStatuses() {
+  ensureSheets_();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WEBINAR_STATUSES_SHEET_NAME);
+  if (!sheet) return [];
+  return getStatusesFromSheet_(sheet);
 }
 
 function getTemplates() {

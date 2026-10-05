@@ -22,6 +22,9 @@
     --sec-capital: #2f5fa8;
     --sec-energy: #d9822b;
     --sec-health: #159a8a;
+    /* טאב "וובינר" המרוכז - גוון סגול נבדל מכוון, כדי שלא יתבלבל עם אף
+       אחד משלושת צבעי הסקטור (הוא לא עוד סקטור, הוא תצוגה חוצת-סקטורים). */
+    --sec-webinar: #6d4fa8;
   }
 
   * { box-sizing: border-box; }
@@ -79,10 +82,15 @@
   .tab-btn.capital { background: var(--sec-capital); border-color: var(--sec-capital); color: #fff; opacity: 0.55; }
   .tab-btn.energy { background: var(--sec-energy); border-color: var(--sec-energy); color: #fff; opacity: 0.55; }
   .tab-btn.health { background: var(--sec-health); border-color: var(--sec-health); color: #fff; opacity: 0.55; }
-  .tab-btn.capital:hover, .tab-btn.energy:hover, .tab-btn.health:hover { opacity: 0.8; }
+  .tab-btn.webinar { background: var(--sec-webinar); border-color: var(--sec-webinar); color: #fff; opacity: 0.55; }
+  .tab-btn.capital:hover, .tab-btn.energy:hover, .tab-btn.health:hover, .tab-btn.webinar:hover { opacity: 0.8; }
   .tab-btn.active.capital { opacity: 1; box-shadow: 0 6px 16px -4px rgba(47,95,168,0.5); }
   .tab-btn.active.energy { opacity: 1; box-shadow: 0 6px 16px -4px rgba(217,130,43,0.5); }
   .tab-btn.active.health { opacity: 1; box-shadow: 0 6px 16px -4px rgba(21,154,138,0.5); }
+  .tab-btn.active.webinar { opacity: 1; box-shadow: 0 6px 16px -4px rgba(109,79,168,0.5); }
+  /* רווח קטן לפני טאב הוובינר, כדי שיקרא ויזואלית כ"נוסף על" שלושת
+     טאבי הסקטור ולא עוד סקטור רגיל באותה שורה. */
+  .tab-btn.webinar { margin-inline-start: 10px; }
 
   /* --- פס מידע לסקטור הפעיל (תאריך/שעון ספירה/מידע) --- */
   .sector-strip {
