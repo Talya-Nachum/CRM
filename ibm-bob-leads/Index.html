@@ -232,6 +232,35 @@
     </div>
   </div>
 
+  <!-- מודאל "מידע על הכנס" לטאב וובינר - התוכן מהקובץ ששלחה טליה, לא רק
+       קישור יוצא (ר' TODO(client) ב-Code.gs ליד WEBINAR_INFO אם התוכן ישתנה). -->
+  <div id="webinarInfoOverlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="webinar-info-hero">
+        <div class="webinar-info-top">
+          <span class="webinar-info-tag">🎥 וובינר</span>
+          <button class="icon-x" id="closeWebinarInfoBtn">✕</button>
+        </div>
+        <h2>IBM AI Coding Challenge 2026</h2>
+        <div class="sub">Code to Impact</div>
+      </div>
+      <div class="webinar-info-body">
+        <p>שמחנו שגילית עניין בשולחנות העגולים שלנו סביב Agentic Enterprise ו-AI. חשבנו שזו יכולה להיות הזדמנות מצוינת עבורך ועבור הארגון שלך להניע חדשנות בליווי ובתמיכה של IBM.</p>
+        <p>בתקופה שבה ארגונים מתמודדים עם סוגיות של אבטחת מידע, משילות, סיכונים ו-ROI בעולם ה-AI, IBM מציעה הזדמנות ייחודית, ללא עלות וללא התחייבות.</p>
+        <p>בחרו אתגר עסקי או טכנולוגי אמיתי בארגון, הקימו צוות (עסקי, טכנולוגי או משולב) וצאו לדרך במסגרת IBM AI Coding Challenge – Code to Impact.</p>
+        <p>IBM תעמיד לרשותכם את הפלטפורמה, הסביבה הטכנולוגית ומומחי AI, Data וארכיטקטורה שילוו אתכם משלב הרעיון ועד בניית הפתרון.</p>
+        <div class="prize-box">🏆 <strong>הפרס לארגון הזוכה:</strong> חודש עבודה מלא של מומחי ומדעני הנתונים של IBM, שיסייעו בבניית ובהטמעת הפתרון עד לשלב ה-Production.</div>
+        <p>נשמח אם תעודדו עובדים, מובילי חדשנות וצוותים בארגון להצטרף לאתגר ולבחון רעיונות חדשים בסביבה בטוחה ומונחית.</p>
+        <p>רוצים להצטרף לחבר השופטים? נשמח לשלב לקוחות, שותפים ומובילי דעה בתעשייה לצד מומחי IBM.</p>
+        <p>אל תפספסו את ההזדמנות לעבור מהשראה להשפעה, ומרעיון לפתרון אמיתי. 🚀</p>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" id="closeWebinarInfoBtn2" class="btn btn-plain">סגירה</button>
+        <a id="webinarInfoLink" href="#" target="_blank" rel="noopener" class="btn btn-primary">👉 להרשמה ולוובינר ההשקה</a>
+      </footer>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <?!= include('JavaScript'); ?>

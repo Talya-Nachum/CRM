@@ -55,6 +55,12 @@
 
     document.getElementById('closePearlModalBtn').addEventListener('click', closePearlModal);
     document.getElementById('closePearlBtn2').addEventListener('click', closePearlModal);
+
+    document.getElementById('closeWebinarInfoBtn').addEventListener('click', closeWebinarInfoModal);
+    document.getElementById('closeWebinarInfoBtn2').addEventListener('click', closeWebinarInfoModal);
+    document.getElementById('webinarInfoOverlay').addEventListener('click', function (evt) {
+      if (evt.target.id === 'webinarInfoOverlay') closeWebinarInfoModal();
+    });
   });
 
   /* ---------- מודאל שיחת פרלה ---------- */
@@ -261,9 +267,30 @@
   }
 
   function onSectorInfoClick() {
-    var s = isWebinarActive() ? webinarInfo : sectorByKey(activeSectorKey);
+    // בטאב "וובינר" - מודאל עם התוכן האמיתי (לא רק קישור יוצא), כי זה
+    // מה שהתבקש בפועל. בכל סקטור רגיל - נשאר כמו שהיה, פתיחת הקישור.
+    if (isWebinarActive()) {
+      openWebinarInfoModal();
+      return;
+    }
+    var s = sectorByKey(activeSectorKey);
     if (s && s.infoUrl) window.open(s.infoUrl, '_blank');
     else showToast('דף המידע לסקטור הזה עדיין לא חובר', true);
+  }
+
+  function openWebinarInfoModal() {
+    var link = document.getElementById('webinarInfoLink');
+    if (webinarInfo && webinarInfo.infoUrl) {
+      link.href = webinarInfo.infoUrl;
+      link.classList.remove('hidden');
+    } else {
+      link.classList.add('hidden');
+    }
+    document.getElementById('webinarInfoOverlay').classList.remove('hidden');
+  }
+
+  function closeWebinarInfoModal() {
+    document.getElementById('webinarInfoOverlay').classList.add('hidden');
   }
 
   function populateSectorSelect() {
