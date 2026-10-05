@@ -331,10 +331,12 @@
   function loadLeads() {
     google.script.run.withSuccessHandler(function (leads) {
       allLeads = leads;
-      renderTable();
+      // הטאבים (כולל המספר בסוגריים של וובינר) מתעדכנים ראשונים ובנפרד
+      // מהטבלה בכוונה - כך שאם שורת ליד בעייתית תגרום לשגיאה בתוך renderTable
+      // (למשל תווים חריגים בשם חברה), ספירת הטאבים עדיין תעודכן נכון ולא
+      // תיתקע על נתונים ישנים/חלקיים ממקרה טעינה קודם.
       renderSectorTabs();
-      // אבחון זמני לפער בספירת טאב וובינר - להסיר אחרי שהבעיה נמצאת.
-      alert('אבחון: נטענו ' + allLeads.length + ' לידים בסה"כ בדף, מהם ' + webinarLeads().length + ' עם ערך בעמודת וובינר.');
+      renderTable();
     }).withFailureHandler(showError).getLeads();
   }
 
