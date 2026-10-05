@@ -10,6 +10,7 @@
   // activeSectorKey === webinarSectorKey הוא הדגל היחיד שמבדיל בין המצבים.
   var webinarSectorKey = 'webinar';
   var webinarStatuses = [];
+  var webinarInfo = null; // {label, icon, date, infoUrl} - ר' WEBINAR_INFO ב-Code.gs
 
   // מנרמלת רווחים מובילים/נגררים וגרשיים עבריים (״ ׳) מול מרכאות ASCII,
   // כדי שההשוואה בין הסטטוסים שטליה מקלידה בטאב "סטטוסים לוובינר" לבין
@@ -152,6 +153,7 @@
       allSectors = cfg.sectors || [];
       webinarSectorKey = cfg.webinarSectorKey || 'webinar';
       webinarStatuses = cfg.webinarStatuses || [];
+      webinarInfo = cfg.webinarInfo || null;
       // אין טאב "הכל" - כל באנר מציג רק את הלידים שלו, אז חייב להיות סקטור
       // פעיל תמיד; ברירת המחדל היא הראשון ברשימה (SECTORS ב-Code.gs).
       if (!activeSectorKey && allSectors.length) activeSectorKey = allSectors[0].key;
@@ -208,12 +210,14 @@
     var strip = document.getElementById('sectorStrip');
     if (stripCountdownTimer) { clearInterval(stripCountdownTimer); stripCountdownTimer = null; }
 
-    // לטאב "וובינר" אין תאריך/מידע משלו (הוא חוצה סקטורים) - אין פס מידע.
-    if (!activeSectorKey || isWebinarActive()) {
+    if (!activeSectorKey) {
       strip.classList.add('hidden');
       return;
     }
-    var s = sectorByKey(activeSectorKey);
+    // בטאב "וובינר" המידע (תאריך/קישור) מגיע מ-webinarInfo (ר' Code.gs) -
+    // הוא לא ברשימת allSectors (לא סקטור אמיתי לשיוך לידים), אבל מציג
+    // פס מידע באותו אופן בדיוק כמו סקטור רגיל.
+    var s = isWebinarActive() ? webinarInfo : sectorByKey(activeSectorKey);
     if (!s) { strip.classList.add('hidden'); return; }
 
     strip.classList.remove('hidden');
@@ -257,7 +261,7 @@
   }
 
   function onSectorInfoClick() {
-    var s = sectorByKey(activeSectorKey);
+    var s = isWebinarActive() ? webinarInfo : sectorByKey(activeSectorKey);
     if (s && s.infoUrl) window.open(s.infoUrl, '_blank');
     else showToast('דף המידע לסקטור הזה עדיין לא חובר', true);
   }

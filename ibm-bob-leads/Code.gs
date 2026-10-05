@@ -24,6 +24,16 @@ var SECTORS = [
   { key: 'health', label: 'בריאות', icon: '🏥', color: 'health', date: '2026-09-15T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_healthcare_fy26/', outboundId: '' }
 ];
 
+// מידע (תאריך/קישור) לטאב "וובינר" המרוכז - "IBM AI Coding Challenge 2026".
+// לא ב-SECTORS (זה לא סקטור אמיתי לשיוך לידים), אבל מציג פס מידע משלו
+// באותו אופן בדיוק כמו סקטור רגיל (ר' updateSectorStrip ב-JavaScript.html).
+var WEBINAR_INFO = {
+  label: 'וובינר',
+  icon: '🎥',
+  date: '2026-10-12T10:30:00+03:00',
+  infoUrl: 'https://bluesolutions.co.il/ibm-bob-challenge-2026/'
+};
+
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---
 var INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
 
@@ -169,7 +179,8 @@ function getConfig() {
     clientName: CLIENT_NAME,
     sectors: SECTORS,
     webinarSectorKey: WEBINAR_SECTOR_KEY,
-    webinarStatuses: getWebinarStatuses()
+    webinarStatuses: getWebinarStatuses(),
+    webinarInfo: WEBINAR_INFO
   };
 }
 
