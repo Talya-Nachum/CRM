@@ -88,24 +88,25 @@ var LEAD_FIELDS = [
   { key: 'lastWhatsAppSentAt', label: 'וואטסאפ נשלח לאחרונה' },
   { key: 'replyText', label: 'תשובת ליד' },
   { key: 'replyAt', label: 'תאריך תשובה' },
+  // עמודה נפרדת וקבועה לטאב "וובינר" - זו עמודה Q בגיליון. קובעים אותה רק
+  // ידנית (מעריכת הליד בדשבורד, או ישירות בגיליון), ושום webhook/שליחת
+  // וואטסאפ אוטומטית לא כותבת לתוכה (בשונה מ"סטטוס" הרגיל, שמתעדכן
+  // אוטומטית בכל שליחה/תשובה/לחיצת כפתור). כל ליד שיש לו ערך כלשהו בעמודה
+  // הזו מוצג בטאב וובינר - לא משנה מה קורה ל"סטטוס" הרגיל שלו.
+  { key: 'webinarStatus', label: 'סטטוס וובינר' },
   // שדות פרלה (NLPearl, חיוג אוטומטי) - מתועדים אוטומטית מ-webhook, לא
   // דרך טופס הוספה/עריכה. תמיד בסוף הרשימה בכוונה (ר' הערה ב-ensureSheetsLocked_
-  // על migration של עמודות - הוספה באמצע הייתה שוברת גיליונות קיימים).
+  // על migration של עמודות - הוספה באמצע הייתה שוברת גיליונות קיימים). לכן
+  // webinarStatus למעלה (לא כאן) - הוא נכנס *לפני* שדות פרלה בכוונה, כי
+  // טליה כבר השתמשה בעמודה Q (המיקום שבו פרלה עדיין לא כתב בפועל - אין
+  // outboundId מוגדר לאף סקטור) לפני ששדות פרלה קיבלו תוכן אמיתי כלשהו.
   { key: 'pearlTag', label: 'תגית פרלה' },
   { key: 'pearlSummary', label: 'סיכום שיחה' },
   { key: 'pearlTranscript', label: 'תמלול שיחה' },
   { key: 'pearlCallDate', label: 'תאריך שיחה' },
   { key: 'pearlDuration', label: 'משך שיחה' },
   { key: 'pearlSentiment', label: 'רגש שיחה' },
-  { key: 'pearlRecording', label: 'הקלטת שיחה' },
-  // עמודה נפרדת וקבועה לטאב "וובינר" - קובעים אותה רק ידנית (מעריכת הליד
-  // בדשבורד, או ישירות בגיליון), ושום webhook/שליחת וואטסאפ אוטומטית לא
-  // כותבת לתוכה (בשונה מ"סטטוס" הרגיל, שמתעדכן אוטומטית בכל שליחה/תשובה/
-  // לחיצת כפתור). רק הערך בעמודה הזו קובע אם ליד מוצג בטאב וובינר - לא
-  // משנה מה קורה ל"סטטוס" הרגיל שלו. תמיד בסוף הרשימה בכוונה, מאותה סיבה
-  // שהשדות של פרלה נמצאים בסוף (ר' ensureSheetsLocked_ - הוספה באמצע
-  // הייתה שוברת את העמודות הקיימות בגיליון).
-  { key: 'webinarStatus', label: 'סטטוס וובינר' }
+  { key: 'pearlRecording', label: 'הקלטת שיחה' }
 ];
 
 // מיפוי שמות שדות אפשריים שיגיעו מדף הנחיתה (בעברית/אנגלית) לשדות שלנו
@@ -280,13 +281,20 @@ function ensureSheetsLocked_() {
       .setFontColor('#ffffff');
     leadsSheet.setFrozenRows(1);
     leadsSheet.autoResizeColumns(1, headers.length);
-  } else if (leadsSheet.getLastColumn() < headers.length) {
-    // הוספת שדות חדשים ל-LEAD_FIELDS אחרי שהגיליון כבר קיים בשימוש -
-    // משלימה רק את הכותרות החסרות בסוף, בלי לגעת בעמודות ובנתונים הקיימים.
+  } else {
+    // משלימה עמודות חסרות בסוף אם LEAD_FIELDS התארך (בלי לגעת בנתונים הקיימים),
+    // ובכל מקרה מרעננת את כל שורת הכותרות (שורה 1) כך שתתאים בדיוק ל-LEAD_FIELDS.
+    // זה בטוח לגמרי כי שורת הכותרות היא קוסמטית בלבד - הקוד תמיד קורא/כותב
+    // נתונים לפי מיקום העמודה (fieldIndex_), לא לפי הטקסט בכותרת. בלי זה,
+    // שינוי סדר/הוספת שדה באמצע LEAD_FIELDS (כמו webinarStatus שנכנס בעמודה Q,
+    // לפני שדות פרלה) היה משאיר כותרות ישנות שלא תואמות למה שבאמת כתוב בעמודה.
     var existingCols = leadsSheet.getLastColumn();
-    var missingHeaders = headers.slice(existingCols);
-    leadsSheet.getRange(1, existingCols + 1, 1, missingHeaders.length)
-      .setValues([missingHeaders])
+    if (existingCols < headers.length) {
+      var missingHeaders = headers.slice(existingCols);
+      leadsSheet.getRange(1, existingCols + 1, 1, missingHeaders.length).setValues([missingHeaders]);
+    }
+    leadsSheet.getRange(1, 1, 1, headers.length)
+      .setValues([headers])
       .setFontWeight('bold')
       .setBackground('#16213a')
       .setFontColor('#ffffff');
