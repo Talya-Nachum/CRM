@@ -166,7 +166,7 @@
       renderSectorTabs();
       updateSectorStrip();
       populateSectorSelect();
-      populateWebinarStatusSelect();
+      populateWebinarStatusOptions();
       renderTable();
       syncHeaderHeight();
     }).withFailureHandler(showError).getConfig();
@@ -309,21 +309,23 @@
   }
 
   /**
-   * אופציות הבחירה ל"סטטוס וובינר" - מגיעות מלשונית "סטטוסים לוובינר"
-   * בגיליון (webinarStatuses, ר' getConfig ב-Code.gs). זו אותה רשימה
-   * ששימשה בעבר לסינון לפי "סטטוס" הרגיל - כאן היא רק רשימת האפשרויות
-   * לבחירה בעמודה הנפרדת, לא עוד סינון של השדה הרגיל.
+   * הצעות (datalist) לשדה הטקסט "סטטוס וובינר" - מגיעות מלשונית "סטטוסים
+   * לוובינר" בגיליון (webinarStatuses, ר' getConfig ב-Code.gs), רק בתור
+   * הצעה לכתיבה מהירה. השדה הוא קלט טקסט חופשי בכוונה (לא <select>) -
+   * הערכים האמיתיים בעמודה Q הם טקסט חופשי שהוקלד ישירות בגיליון, ולרוב
+   * לא תואמים בדיוק לאף אחת מהאפשרויות ברשימה. <select> לא היה מתאים כאן:
+   * קביעת .value שלו לערך שלא קיים כ-<option> נכשלת בשקט ומשאירה את הבחירה
+   * הקודמת שהייתה שם - מה שגרם לשמירת ליד (מכל סיבה, גם לא קשורה) לדרוס
+   * בטעות את עמודה Q בערך שרירותי שנשאר תקוע מעריכת ליד קודם.
    */
-  function populateWebinarStatusSelect() {
-    var formSelect = document.getElementById('f_webinarStatus');
-    var current = formSelect.value;
-    formSelect.innerHTML = '<option value="">— לא משויך לוובינר —</option>';
+  function populateWebinarStatusOptions() {
+    var datalist = document.getElementById('webinarStatusOptions');
+    datalist.innerHTML = '';
     webinarStatuses.forEach(function (s) {
       var opt = document.createElement('option');
-      opt.value = s; opt.textContent = s;
-      formSelect.appendChild(opt);
+      opt.value = s;
+      datalist.appendChild(opt);
     });
-    formSelect.value = current;
   }
 
   /* ---------- data loading ---------- */
