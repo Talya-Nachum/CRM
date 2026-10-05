@@ -10,6 +10,14 @@
   // activeSectorKey === webinarSectorKey הוא הדגל היחיד שמבדיל בין המצבים.
   var webinarSectorKey = 'webinar';
   var webinarStatuses = [];
+
+  // מנרמלת רווחים מובילים/נגררים וגרשיים עבריים (״ ׳) מול מרכאות ASCII,
+  // כדי שההשוואה בין הסטטוסים שטליה מקלידה בטאב "סטטוסים לוובינר" לבין
+  // סטטוס הליד בפועל לא תישבר בשקט על הבדל לא-נראה-לעין (דפוס באג חוזר
+  // בפרויקט הזה - ר' CLAUDE.md, "כותרות עמודות שלא תואמות בדיוק").
+  function normalizeStatusText(s) {
+    return String(s || '').trim().replace(/[״“”″]/g, '"').replace(/[׳‘’]/g, "'");
+  }
   var stripCountdownTimer = null;
   var statusColorMap = {};
   var palette = ['#64748b', '#b8791f', '#0f7a6b', '#2f4a7a', '#7a4fb0', '#b6423a', '#0891b2', '#be185d'];
@@ -168,7 +176,8 @@
 
   /** לידים מכל הסקטורים שהסטטוס שלהם ברשימת "סטטוסים לוובינר" (ר' Code.gs). */
   function webinarLeads() {
-    return allLeads.filter(function (l) { return webinarStatuses.indexOf(l.status) !== -1; });
+    var normalized = webinarStatuses.map(normalizeStatusText);
+    return allLeads.filter(function (l) { return normalized.indexOf(normalizeStatusText(l.status)) !== -1; });
   }
 
   function renderSectorTabs() {
@@ -334,7 +343,7 @@
       // הסטטוס חייב להיות ברשימת "סטטוסים לוובינר" - זה התנאי שמחליף
       // את סינון הסקטור הרגיל. בכל טאב סקטור רגיל - בדיוק כמו קודם.
       var matchesSector = webinarActive
-        ? (webinarStatuses.indexOf(lead.status) !== -1)
+        ? (webinarStatuses.map(normalizeStatusText).indexOf(normalizeStatusText(lead.status)) !== -1)
         : (!activeSectorKey || lead.sector === activeSectorKey);
       var haystack = [lead.company, lead.contactName, lead.phone, lead.email, lead.notes]
         .join(' ').toLowerCase();
