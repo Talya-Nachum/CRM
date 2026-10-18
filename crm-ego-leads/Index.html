@@ -6,86 +6,85 @@
   <?!= include('Stylesheet'); ?>
 </head>
 <body>
-  <header class="hub">
-    <div class="logo-mark">
-      <!-- לוגו מיטוב - קבוע לכל הלקוחות, בשיתוף פעולה -->
-      <svg class="mituv-icon" viewBox="0 0 64 64" fill="none">
-        <path d="M32 4 A28 28 0 0 1 58.5 25 L44 25 A14 14 0 0 0 32 18 Z" fill="#159aa8"/>
-        <path d="M58.5 25 A28 28 0 0 1 48 54 L40 42 A14 14 0 0 0 44 25 Z" fill="#1fc2c9"/>
-        <path d="M48 54 A28 28 0 0 1 16 54 L24 42 A14 14 0 0 0 40 42 Z" fill="#f4a828"/>
-        <path d="M16 54 A28 28 0 0 1 5.5 25 L20 25 A14 14 0 0 0 24 42 Z" fill="#ef8a1e"/>
-        <path d="M5.5 25 A28 28 0 0 1 32 4 L32 18 A14 14 0 0 0 20 25 Z" fill="#159aa8"/>
-        <path d="M17 30 L26 40 L47 17" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-      </svg>
-      <span class="logo-divider" aria-hidden="true"></span>
-      <!-- TODO(client): להחליף בלוגו האמיתי של אגו כשיהיה (SVG מוטמע או
-           <img src="data:image/png;base64,...">) - ר' BUILD-GUIDE.md. -->
-      <div class="client-logo-placeholder" aria-hidden="true">לוגו</div>
-      <div class="logo-text">
-        <span class="word" id="clientNameLabel">אגו</span>
-        <span class="tag" id="clientTagLabel">ניהול לידים · בשיתוף מיטוב מכירות</span>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" fill="none">
+          <path d="M32 4 A28 28 0 0 1 58.5 25 L44 25 A14 14 0 0 0 32 18 Z" fill="#159aa8"/>
+          <path d="M58.5 25 A28 28 0 0 1 48 54 L40 42 A14 14 0 0 0 44 25 Z" fill="#1fc2c9"/>
+          <path d="M48 54 A28 28 0 0 1 16 54 L24 42 A14 14 0 0 0 40 42 Z" fill="#f4a828"/>
+          <path d="M16 54 A28 28 0 0 1 5.5 25 L20 25 A14 14 0 0 0 24 42 Z" fill="#ef8a1e"/>
+          <path d="M5.5 25 A28 28 0 0 1 32 4 L32 18 A14 14 0 0 0 20 25 Z" fill="#159aa8"/>
+          <path d="M17 30 L26 40 L47 17" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div class="brand-text">
+          <span class="name" id="clientNameLabel">אגו</span>
+          <span class="sub" id="clientTagLabel">בשיתוף מיטוב מכירות</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <div class="nav-item active"><span class="ic">👥</span> לידים</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="upgrade-card">
+          <div class="t">🤖 סוכנת קולית</div>
+          מחוברת ומדווחת תוצאות שיחה אוטומטית לכל ליד
+        </div>
+      </div>
+    </aside>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <h1>לידים</h1>
+          <div class="sub">סקירה כללית של הלידים והפעילות</div>
+        </div>
+        <div class="hub-actions">
+          <button class="hub-btn" id="infoBtn">מידע נוסף</button>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card"><div><div class="n" id="statTotal">0</div><div class="l">סה"כ לידים</div></div><div class="ic">👥</div></div>
+        <div class="stat-card stat-clickable" id="statRegisteredCard"><div><div class="n" id="statRegistered">0</div><div class="l">נרשמו עד כה</div></div><div class="ic">✅</div></div>
+        <div class="stat-card"><div><div class="n" id="statInProgress">0</div><div class="l">בתהליך</div></div><div class="ic">⏳</div></div>
+        <div class="stat-card"><div><div class="n" id="statAgent">0</div><div class="l">שיחות סוכנת</div></div><div class="ic">🤖</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <input id="searchInput" class="search-input" type="text" placeholder="חיפוש לפי שם, חברה, טלפון או אימייל...">
+          <select id="statusFilter" class="status-filter">
+            <option value="">כל הסטטוסים</option>
+          </select>
+          <button class="btn btn-wa" id="waBtn" disabled>💬 שליחת וואטסאפ (<span id="selCount">0</span>)</button>
+          <button class="btn btn-primary" id="addLeadBtn">+ הוספת ליד</button>
+          <button class="btn btn-plain" id="exportExcelBtn">📥 ייצוא</button>
+          <div class="count-pill" id="leadCount"></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="selectAll"></th>
+                <th>איש קשר</th>
+                <th>תפקיד</th>
+                <th>נייד</th>
+                <th>אימייל</th>
+                <th>מקור</th>
+                <th>סטטוס</th>
+                <th>תשובת ליד</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="leadsTableBody">
+              <tr><td colspan="9" class="empty-row">טוען נתונים...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
-
-    <!-- אין תאריך יעד כרגע (TARGET_DATE ריק ב-Code.gs) - הבלוק הזה יישאר
-         מוסתר אוטומטית. אם יתווסף אירוע עם תאריך בעתיד, זה רק מילוי
-         TARGET_DATE, לא בנייה מחדש. -->
-    <div class="countdown hidden" id="countdownBlock">
-      <span class="cd-label" id="countdownLabel">עד המועד</span>
-      <div class="cd-units">
-        <div class="cd-unit"><span class="n" id="cdDays">--</span><span class="u">ימים</span></div>
-        <div class="cd-unit"><span class="n" id="cdHours">--</span><span class="u">שעות</span></div>
-        <div class="cd-unit"><span class="n" id="cdMins">--</span><span class="u">דקות</span></div>
-      </div>
-    </div>
-
-    <button class="stat-banner" id="registeredBanner">
-      <span class="stat-n" id="registeredCount">0</span>
-      <span class="stat-u">נרשמו עד כה</span>
-    </button>
-
-    <div class="hub-actions">
-      <button class="hub-btn gold" id="paymentBtn">מעבר לתשלום</button>
-      <button class="hub-btn ghost" id="infoBtn">מידע נוסף</button>
-    </div>
-  </header>
-
-  <main>
-    <div class="toolbar">
-      <input id="searchInput" class="search-input" type="text" placeholder="חיפוש לפי שם, חברה, טלפון או אימייל...">
-      <select id="statusFilter" class="status-filter">
-        <option value="">כל הסטטוסים</option>
-      </select>
-      <button class="btn btn-wa" id="waBtn" disabled>💬 שליחת וואטסאפ (<span id="selCount">0</span>)</button>
-      <button class="btn btn-primary" id="addLeadBtn">+ הוספת ליד</button>
-      <button class="btn btn-plain" id="exportExcelBtn">📥 ייצוא לאקסל</button>
-      <div class="count-pill" id="leadCount"></div>
-    </div>
-
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th><input type="checkbox" id="selectAll"></th>
-            <th>מקור</th>
-            <th>שם חברה</th>
-            <th>ח.פ</th>
-            <th>איש קשר</th>
-            <th>תפקיד</th>
-            <th>נייד</th>
-            <th>אימייל</th>
-            <th>הערות</th>
-            <th>סטטוס</th>
-            <th>תשובת ליד</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="leadsTableBody">
-          <tr><td colspan="12" class="empty-row">טוען נתונים...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </main>
+  </div>
 
   <!-- מודאל הוספה/עריכה -->
   <div id="leadOverlay" class="overlay hidden">
@@ -218,9 +217,7 @@
     </div>
   </div>
 
-  <!-- מודאל שיחת סוכנת קולית - תמלול כבועות דיבור, סטטוס/תגית/סיכום/הקלטה.
-       מופיע רק בשורות שיש להן נתוני שיחה (ר' hasAgentData_ ב-JavaScript.html) -
-       עד שהסוכנת הקולית תחובר בפועל, שום שורה לא תציג את הכפתור הזה. -->
+  <!-- מודאל שיחת סוכנת קולית -->
   <div id="agentOverlay" class="overlay hidden">
     <div class="modal modal-wide">
       <div class="modal-head">

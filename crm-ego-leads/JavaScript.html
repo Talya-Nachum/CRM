@@ -3,23 +3,32 @@
   var allStatuses = [];
   var allTemplates = [];
   var selectedIds = new Set();
-  var statusColorMap = {};
-  var palette = ['#64748b', '#b8791f', '#0f7a6b', '#2f4a7a', '#7a4fb0', '#b6423a', '#0891b2', '#be185d'];
 
+  // TODO(client): אילו ערכים מתוך DEFAULT_STATUSES (ב-Code.gs) נחשבים
+  // "הצלחה סופית" לצורך כרטיס "נרשמו עד כה" - להתאים ללקוח הזה.
   var REGISTERED_STATUSES = ['נרשם לבד', 'נרשם ע"י מיטוב'].map(normalizeStatusText);
+
+  // TODO(client): מיפוי סטטוס → גוון תגית (ok=ירוק/warn=כתום/danger=אדום/
+  // neutral=אפור) - להתאים לרשימת הסטטוסים האמיתית של הלקוח. סטטוס שלא
+  // ברשימה מקבל "neutral" כברירת מחדל, לא שגיאה.
+  var STATUS_TONE = {
+    'נרשם לבד': 'ok', 'נרשם ע"י מיטוב': 'ok',
+    'לא מעוניין': 'danger',
+    'חדש': 'neutral', 'בתהליך': 'warn', 'נשלח וואטסאפ': 'warn'
+  };
+  var TONE_COLORS = { ok: ['#e7f8ee', '#1f9d55'], warn: ['#fff4e2', '#b8791f'], danger: ['#fdeaed', '#c7304a'], neutral: ['#eef0f5', '#5b6072'] };
 
   function normalizeStatusText(s) {
     return String(s == null ? '' : s).trim().replace(/[״“”″]/g, '"').replace(/[׳‘’]/g, "'");
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    syncHeaderHeight();
-    window.addEventListener('resize', syncHeaderHeight);
-
     loadConfig();
     loadStatuses();
     loadTemplates();
     loadLeads();
+    // רענון לידים אוטומטי כל 10 שניות (כולל תשובות וואטסאפ/סוכנת קולית
+    // נכנסות) - בלי לגעת בחיפוש/סינון/בחירה שהמשתמשת כבר הגדירה.
     setInterval(loadLeads, 10000);
 
     document.getElementById('addLeadBtn').addEventListener('click', openAddModal);
@@ -37,7 +46,7 @@
     document.getElementById('cancelWaBtn').addEventListener('click', closeWaModal);
     document.getElementById('sendWaBtn').addEventListener('click', onSendWhatsApp);
 
-    document.getElementById('registeredBanner').addEventListener('click', openRegisteredModal);
+    document.getElementById('statRegisteredCard').addEventListener('click', openRegisteredModal);
     document.getElementById('closeRegisteredModalBtn').addEventListener('click', closeRegisteredModal);
     document.getElementById('closeRegisteredBtn').addEventListener('click', closeRegisteredModal);
 
@@ -45,50 +54,19 @@
     document.getElementById('closeAgentBtn2').addEventListener('click', closeAgentModal);
   });
 
-  /* ---------- config (header: countdown + buttons) ---------- */
-
-  function syncHeaderHeight() {
-    var header = document.querySelector('header.hub');
-    if (header) document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
-  }
+  /* ---------- config ---------- */
 
   function loadConfig() {
     google.script.run.withSuccessHandler(function (cfg) {
       document.getElementById('clientNameLabel').textContent = cfg.clientName;
       if (cfg.clientTagline) document.getElementById('clientTagLabel').textContent = cfg.clientTagline;
 
-      if (cfg.targetDate) {
-        document.getElementById('countdownBlock').classList.remove('hidden');
-        startCountdown(cfg.targetDate);
-      }
-      syncHeaderHeight();
-
-      var paymentBtn = document.getElementById('paymentBtn');
       var infoBtn = document.getElementById('infoBtn');
-      paymentBtn.addEventListener('click', function () {
-        if (cfg.paymentUrl) window.open(cfg.paymentUrl, '_blank');
-        else showToast('דף הסליקה עדיין לא חובר', true);
-      });
       infoBtn.addEventListener('click', function () {
         if (cfg.infoUrl) window.open(cfg.infoUrl, '_blank');
         else showToast('דף המידע עדיין לא חובר', true);
       });
     }).withFailureHandler(showError).getConfig();
-  }
-
-  function startCountdown(targetIso) {
-    function tick() {
-      var target = new Date(targetIso).getTime();
-      var diff = Math.max(0, target - Date.now());
-      var days = Math.floor(diff / 86400000);
-      var hours = Math.floor((diff % 86400000) / 3600000);
-      var mins = Math.floor((diff % 3600000) / 60000);
-      document.getElementById('cdDays').textContent = days;
-      document.getElementById('cdHours').textContent = String(hours).padStart(2, '0');
-      document.getElementById('cdMins').textContent = String(mins).padStart(2, '0');
-    }
-    tick();
-    setInterval(tick, 30000);
   }
 
   /* ---------- data loading ---------- */
@@ -97,7 +75,7 @@
     google.script.run.withSuccessHandler(function (leads) {
       allLeads = leads;
       renderTable();
-      updateRegisteredBanner();
+      updateStats();
     }).withFailureHandler(showError).getLeads();
   }
 
@@ -105,8 +83,11 @@
     return allLeads.filter(function (l) { return REGISTERED_STATUSES.indexOf(normalizeStatusText(l.status)) !== -1; });
   }
 
-  function updateRegisteredBanner() {
-    document.getElementById('registeredCount').textContent = registeredLeads().length;
+  function updateStats() {
+    document.getElementById('statTotal').textContent = allLeads.length;
+    document.getElementById('statRegistered').textContent = registeredLeads().length;
+    document.getElementById('statInProgress').textContent = allLeads.filter(function (l) { return normalizeStatusText(l.status) === normalizeStatusText('בתהליך'); }).length;
+    document.getElementById('statAgent').textContent = allLeads.filter(hasAgentData_).length;
   }
 
   function openRegisteredModal() {
@@ -120,7 +101,7 @@
         '<td>' + escapeHtml(lead.company) + '</td>' +
         '<td>' + escapeHtml(lead.contactName) + '</td>' +
         '<td>' + escapeHtml(lead.phone) + '</td>' +
-        '<td><span class="badge" style="background:' + colorForStatus(lead.status) + '">' + escapeHtml(lead.status) + '</span></td>' +
+        '<td>' + statusBadgeHtml_(lead.status) + '</td>' +
         '<td>' + escapeHtml(lead.updatedAt) + '</td>';
       body.appendChild(tr);
     });
@@ -134,7 +115,6 @@
   function loadStatuses() {
     google.script.run.withSuccessHandler(function (statuses) {
       allStatuses = statuses;
-      assignStatusColors();
       populateStatusSelects();
     }).withFailureHandler(showError).getStatuses();
   }
@@ -145,18 +125,11 @@
     }).withFailureHandler(showError).getTemplates();
   }
 
-  function assignStatusColors() {
-    allStatuses.forEach(function (s, i) {
-      if (!statusColorMap[s]) statusColorMap[s] = palette[i % palette.length];
-    });
-  }
+  function toneForStatus(status) { return STATUS_TONE[normalizeStatusText(status)] || 'neutral'; }
 
-  function colorForStatus(status) {
-    if (!statusColorMap[status]) {
-      var idx = Object.keys(statusColorMap).length % palette.length;
-      statusColorMap[status] = palette[idx];
-    }
-    return statusColorMap[status];
+  function statusBadgeHtml_(status) {
+    var c = TONE_COLORS[toneForStatus(status)];
+    return '<span class="badge" style="background:' + c[0] + ';color:' + c[1] + '">' + escapeHtml(status) + '</span>';
   }
 
   function populateStatusSelects() {
@@ -237,6 +210,11 @@
       .exportLeadsExcel(headers, rows);
   }
 
+  function initials_(lead) {
+    var s = (lead.contactName || lead.company || '?').trim();
+    return s.charAt(0).toUpperCase() || '?';
+  }
+
   function renderTable() {
     var filtered = filteredLeads();
     var body = document.getElementById('leadsTableBody');
@@ -245,7 +223,7 @@
     document.getElementById('leadCount').textContent = filtered.length + ' לידים';
 
     if (!filtered.length) {
-      body.innerHTML = '<tr><td colspan="12" class="empty-row">אין לידים להצגה</td></tr>';
+      body.innerHTML = '<tr><td colspan="9" class="empty-row">אין לידים להצגה</td></tr>';
       updateSelectionUi();
       return;
     }
@@ -256,21 +234,19 @@
       var checked = selectedIds.has(lead.id) ? 'checked' : '';
       tr.innerHTML =
         '<td><input type="checkbox" class="row-check" data-id="' + lead.id + '" ' + checked + '></td>' +
-        '<td>' + escapeHtml(lead.source) + '</td>' +
-        '<td>' + escapeHtml(lead.company) + '</td>' +
-        '<td>' + escapeHtml(lead.companyId) + '</td>' +
-        '<td>' + escapeHtml(lead.contactName) + '</td>' +
+        '<td><div class="contact-cell"><div class="avatar">' + escapeHtml(initials_(lead)) + '</div>' +
+          '<div class="contact-text"><span class="nm">' + escapeHtml(lead.contactName) + '</span><span class="co">' + escapeHtml(lead.company) + '</span></div></div></td>' +
         '<td>' + escapeHtml(lead.role) + '</td>' +
         '<td>' + escapeHtml(lead.phone) + '</td>' +
         '<td>' + escapeHtml(lead.email) + '</td>' +
-        '<td>' + escapeHtml(lead.notes) + '</td>' +
-        '<td><span class="badge" style="background:' + colorForStatus(lead.status) + '">' + escapeHtml(lead.status) + '</span></td>' +
+        '<td>' + escapeHtml(lead.source) + '</td>' +
+        '<td>' + statusBadgeHtml_(lead.status) + '</td>' +
         '<td><div class="reply-cell"><span class="reply-text">' + escapeHtml(lead.replyText) + '</span>' +
           (lead.replyAt ? '<span class="reply-date">' + escapeHtml(lead.replyAt) + '</span>' : '') +
           '</div></td>' +
         '<td>' +
           (hasAgentData_(lead) ? '<button type="button" class="row-agent" title="שיחת סוכנת">🤖</button>' : '') +
-          '<button type="button" class="row-edit">✎</button>' +
+          '<button type="button" class="row-edit">⋯</button>' +
         '</td>';
 
       tr.querySelector('.row-check').addEventListener('click', function (evt) { evt.stopPropagation(); });
@@ -464,8 +440,10 @@
 
     var statusBadge = document.getElementById('agentStatusBadge');
     if (lead.status) {
+      var c = TONE_COLORS[toneForStatus(lead.status)];
       statusBadge.textContent = lead.status;
-      statusBadge.style.background = colorForStatus(lead.status);
+      statusBadge.style.background = c[0];
+      statusBadge.style.color = c[1];
       statusBadge.classList.remove('hidden');
     } else {
       statusBadge.classList.add('hidden');
@@ -508,8 +486,6 @@
     else { el.classList.add('hidden'); }
   }
 
-  // מפרקת טקסט תמלול בפורמט "סוכנת: ...\nליד: ..." (כמו שנכתב מ-Code.gs)
-  // לבועות דיבור - סוכנת בצד ימין (לבן, אווטאר אפור), ליד בצד שמאל (ירוק).
   function agentBubblesHtml_(raw) {
     var text = String(raw || '').trim();
     if (!text) return '<div class="admin-msg">אין תמלול זמין</div>';

@@ -16,9 +16,7 @@
 // === התאמה ללקוח ===
 var CLIENT_NAME = 'אגו';
 var CLIENT_TAGLINE = '';
-var TARGET_DATE = ''; // אין אירוע עם תאריך יעד בשלב הזה - הבלוק מוסתר אוטומטית
-var PAYMENT_URL = '';
-var INFO_URL = '';
+var INFO_URL = ''; // TODO(client): למלא כשיהיה תוכן ל"מידע נוסף"
 // === סוף בלוק ההתאמה הראשי ===
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---
@@ -99,8 +97,6 @@ function getConfig() {
   return {
     clientName: CLIENT_NAME,
     clientTagline: CLIENT_TAGLINE,
-    targetDate: TARGET_DATE,
-    paymentUrl: PAYMENT_URL,
     infoUrl: INFO_URL
   };
 }
