@@ -10,16 +10,20 @@
 טפסים, סטטוסים), יש נקודת קצה ייעודית שמיועדת לסוכנת קולית חיצונית (לא
 NLPearl - ספק אחר, טרם סופי) שתבצע שיחות ללידים ותדווח תוצאה בחזרה.
 
-### כתובת ה-Webhook למסור לספק הסוכנת הקולית
+### כתובת ה-Webhook שנמסרה לספק הסוכנת הקולית (סלבה)
 
-אחרי הפריסה (ר' BUILD-GUIDE.md שלב 5), כתובת ה-`/exec` + הפרמטר הבא:
+נמסרה במייל ב-18/10/2026:
 
 ```
-https://script.google.com/macros/s/XXXXXXXXXX/exec?source=voiceagent
+https://script.google.com/macros/s/AKfycbyJ0v5Pi6ZRBzVRQtrYsEUuPHR9YKrYKrB5tGoceQFhlqnN8jcQZMHCLtKoLahic3zaMQ/exec?source=voiceagent
 ```
 
 **חשוב:** הפרמטר `?source=voiceagent` הוא מה שמזהה שזו קריאה מהסוכנת הקולית
-(לא ליד חדש, לא תשובת וואטסאפ) - חייב להיות בכתובת שנמסרת לספק.
+(לא ליד חדש, לא תשובת וואטסאפ) - חייב להישאר בכתובת.
+
+**אם הקוד נפרס מחדש עם "New deployment" (לא "New version") - הכתובת
+משתנה, וצריך לעדכן את סלבה בכתובת החדשה.** זו אותה מלכודת שמתועדת
+ב-BUILD-GUIDE.md לגבי relay - לא ייחודית לפרויקט הזה.
 
 ### מבנה הנתונים (data contract) שהסוכנת הקולית צריכה לשלוח
 
