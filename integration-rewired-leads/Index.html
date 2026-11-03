@@ -218,6 +218,99 @@
     </div>
   </div>
 
+  <!-- מודאל מידע על האירוע - שחזור תוכן מהמסמך שהלקוחה שלחה -->
+  <div id="infoOverlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h2>Integration Rewired - סדר יום</h2>
+        <button class="icon-x" id="closeInfoModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-meta">
+          <span>📅 יום שלישי, 12.11.26</span>
+          <span>🕗 08:30–14:00</span>
+          <span>📍 Claro, תל אביב</span>
+        </div>
+        <p class="info-audience">מיועד ל: מנהלי אינטגרציה · CTO · CIO</p>
+
+        <div class="agenda-list">
+          <div class="agenda-item">
+            <div class="agenda-time">08:30</div>
+            <div class="agenda-main"><div class="agenda-title">ארוחת בוקר, קפה ונטוורקינג</div></div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">09:30</div>
+            <div class="agenda-main">
+              <div class="agenda-title">דברי פתיחה: עולם האינטגרציה שוב השתנה</div>
+              <div class="agenda-speaker">אלכסיי סלטובסקי, מנהל טכנולוגיות (Director of Technology), Tangram-Soft</div>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">09:40</div>
+            <div class="agenda-main">
+              <div class="agenda-title">אינטגרציה בעידן חדש: המפגש בין ממשקי API, אירועים (Events) וסוכני בינה מלאכותית (AI Agents)</div>
+              <div class="agenda-speaker">אלעד אפרים, מהנדס פתרונות אינטגרציה, IBM · טל נאמן, ארכיטקט פתרונות בינה מלאכותית, IBM</div>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">10:00</div>
+            <div class="agenda-main">
+              <div class="agenda-title">הכירו את "בוב" (Bob): פיתוח מבוסס בינה מלאכותית פוגש את ארכיטקטורת האינטגרציה</div>
+              <div class="agenda-speaker">טל נאמן, ארכיטקט פתרונות בינה מלאכותית, IBM</div>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">10:20</div>
+            <div class="agenda-main">
+              <div class="agenda-title">ל-APIs שלכם יש לקוח חדש: סוכני בינה מלאכותית (AI Agents) - הדגמה חיה (LIVE): מ-Prompt ועד לטרנזקציה ארגונית</div>
+              <div class="agenda-speaker">חן חמצני, ראש צוות אינטגרציה, Tangram-Soft</div>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">10:50</div>
+            <div class="agenda-main">
+              <div class="agenda-title">Kafka הוא לא MQ 2.0: הבנת הייעוד והשימוש המתאים לכל אחד מהם</div>
+              <div class="agenda-speaker">אלכס לברוב, מוביל טכני – פלטפורמות אינטגרציה, Tangram-Soft</div>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">11:20</div>
+            <div class="agenda-main"><div class="agenda-title">קפה ונטוורקינג</div></div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">11:50</div>
+            <div class="agenda-main">
+              <div class="agenda-title">העסק שלכם קורה ממש עכשיו: נתונים בתנועה (Data in Motion)</div>
+              <div class="agenda-speaker">דניאל לויט, מנהל פעילות (Country Leader), Confluent</div>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">12:10</div>
+            <div class="agenda-main">
+              <div class="agenda-title">חברו את מה שכבר קיים. מודרניזו את מה שנדרש.</div>
+              <div class="agenda-speaker">יפית שטרית, מובילה טכנית לאינטגרציה היברידית, Tangram-Soft</div>
+            </div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">12:30</div>
+            <div class="agenda-main"><div class="agenda-title">ניפוץ מיתוסים בעולם האינטגרציה: איך תיראה ארכיטקטורת האינטגרציה שלכם בשנת 2027?</div></div>
+          </div>
+          <div class="agenda-item">
+            <div class="agenda-time">12:50</div>
+            <div class="agenda-main"><div class="agenda-title">ארוחת צהריים ונטוורקינג</div></div>
+          </div>
+        </div>
+
+        <p class="info-note">* שחזור של תוכן המסמך שהתקבל, לא קובץ/עמוד מקורי מוטמע.</p>
+      </div>
+      <footer class="modal-actions">
+        <a id="infoExternalLink" href="#" target="_blank" rel="noopener" class="btn btn-plain hidden">לצפייה בעמוד האירוע הרשמי</a>
+        <div class="spacer"></div>
+        <button type="button" id="closeInfoBtn" class="btn btn-primary">סגירה</button>
+      </footer>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <?!= include('JavaScript'); ?>
