@@ -49,7 +49,9 @@ const INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp'
 // הלאה לכל אחד מהם (ר' relayInforuWebhook_ למטה).
 const INFORU_RELAY_URLS_ = [
   'https://script.google.com/macros/s/AKfycbx1uYAKfvDEbsLF3Cbyx7Lprj-TZNa8Ex-XP94GmJ38pB9ye4VNR-Xa5olIYha6v8jw/exec', // ארז קדם אקדמיה
-  'https://script.google.com/macros/s/AKfycbyPIEAbTbwoxLbjtKs_V3czxUs8C6Ia80dZdLKmtNb2eElCtNNXSidx8otCdjiCyllJ/exec'  // IBM Bob
+  'https://script.google.com/macros/s/AKfycbyPIEAbTbwoxLbjtKs_V3czxUs8C6Ia80dZdLKmtNb2eElCtNNXSidx8otCdjiCyllJ/exec', // IBM Bob
+  'https://script.google.com/macros/s/AKfycbxdNp9js_GkaPCxi27yVqLdXnMUJWJLcJWy4fEauzpK5VrQTa-JbFiOYeKiJTl1qt6L/exec', // IBM - Raise a Glass. Lower the Risk
+  'https://da97150d0468ed568f2dff61f1d478.49.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/27/workflows/46c4c60dbe274325b5fb6930bf8bfb44/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=g2XY0y4BP6-4cqBoj7hyKOUgKXKRo_eGUfDhqI3hUow' // CRM Power Automate - קליטת תשובות
 ];
 const DEFAULT_TEMPLATE_ID = '267627';
 
