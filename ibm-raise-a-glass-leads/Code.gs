@@ -17,7 +17,7 @@ var CLIENT_NAME = 'Raise a Glass. Lower the Risk.'; // IBM × Matrix Tangram
 var CLIENT_TAGLINE = 'AI, Fraud & Data Security';
 var TARGET_DATE = '2026-12-02T09:30:00+02:00'; // 02.12.26, 09:30, יקב אלכסנדר בית יצחק
 var PAYMENT_URL = ''; // אין תשלום - כפתור הוסר ב-Index.html
-var INFO_URL = ''; // אין קישור לעמוד חיצוני רשמי בשלב זה - המודאל מכיל את כל פרטי האירוע
+var INFO_URL = 'https://www.matrix-globalservices.com/events/raise-a-glass-lower-the-risk/'; // קישור להרשמה
 // === סוף בלוק ההתאמה הראשי - שאר הקובץ בד"כ לא צריך להשתנות ===
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---
