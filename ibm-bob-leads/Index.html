@@ -158,6 +158,10 @@
 
         <div class="field">
           <label>הערות</label>
+          <div class="notes-tools">
+            <select id="noteWriterSelect" title="מי מתייגת את ההערה"></select>
+            <button type="button" id="insertNoteStampBtn" class="icon-x" title="הוספת הערה מתויגת (שם + תאריך ושעה)">✏️</button>
+          </div>
           <textarea id="f_notes" rows="3"></textarea>
         </div>
 
@@ -168,6 +172,7 @@
 
         <footer class="modal-actions">
           <button type="button" id="deleteLeadBtn" class="btn btn-danger hidden">מחיקת ליד</button>
+          <button type="button" id="copyToRegistrationBtn" class="btn btn-plain">📋 העתקה לטופס הרשמה</button>
           <div class="spacer"></div>
           <button type="button" id="cancelLeadBtn" class="btn btn-plain">ביטול</button>
           <button type="submit" class="btn btn-primary">שמירה</button>

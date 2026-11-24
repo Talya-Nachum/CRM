@@ -7,6 +7,9 @@
   var activeSectorKey = ''; // ריק רק עד שה-config נטען; אז מוגדר לסקטור הראשון כברירת מחדל
   var stripCountdownTimer = null;
   var statusColorMap = {};
+  var DUPLICATE_STATUS = 'כפול';
+  var registrationFieldLabels = [];
+  var registrationUrl = '';
   var palette = ['#64748b', '#b8791f', '#0f7a6b', '#2f4a7a', '#7a4fb0', '#b6423a', '#0891b2', '#be185d'];
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -16,6 +19,7 @@
     loadConfig();
     loadStatuses();
     loadTemplates();
+    loadWriters();
     loadLeads();
     // הרענון האוטומטי כובה זמנית (היה כל 10 שניות) - ריצות מקבילות שלו
     // גרמו לעומס נעילות על הגיליון בזמן הדבקה מרובה של לידים חדשים.
@@ -28,6 +32,11 @@
     document.getElementById('cancelLeadBtn').addEventListener('click', closeLeadModal);
     document.getElementById('leadForm').addEventListener('submit', onSubmitLead);
     document.getElementById('deleteLeadBtn').addEventListener('click', onDeleteLead);
+    document.getElementById('copyToRegistrationBtn').addEventListener('click', onCopyToRegistration);
+    document.getElementById('insertNoteStampBtn').addEventListener('click', insertNoteStamp);
+    document.getElementById('noteWriterSelect').addEventListener('change', function () {
+      try { localStorage.setItem('noteWriterName', this.value); } catch (e) {}
+    });
     document.getElementById('searchInput').addEventListener('input', renderTable);
     document.getElementById('statusFilter').addEventListener('change', renderTable);
     document.getElementById('selectAll').addEventListener('change', onSelectAll);
@@ -272,6 +281,7 @@
   }
 
   function colorForStatus(status) {
+    if (String(status || '').trim() === DUPLICATE_STATUS) return '#c0392b';
     if (!statusColorMap[status]) {
       var idx = Object.keys(statusColorMap).length % palette.length;
       statusColorMap[status] = palette[idx];
@@ -382,6 +392,7 @@
     filtered.forEach(function (lead) {
       var tr = document.createElement('tr');
       if (selectedIds.has(lead.id)) tr.classList.add('selected');
+      if (String(lead.status || '').trim() === DUPLICATE_STATUS) tr.classList.add('row-duplicate');
       var checked = selectedIds.has(lead.id) ? 'checked' : '';
       tr.innerHTML =
         '<td><input type="checkbox" class="row-check" data-id="' + lead.id + '" ' + checked + '></td>' +
@@ -599,6 +610,78 @@
     toast.textContent = text;
     toast.className = 'toast' + (isError ? ' error' : '');
     setTimeout(function () { toast.classList.add('hidden'); }, 3000);
+  }
+
+  /* ---------- תיוג הערות (מי + תאריך/שעה) ---------- */
+
+  function loadWriters() {
+    google.script.run.withSuccessHandler(function (writers) {
+      var sel = document.getElementById('noteWriterSelect');
+      sel.innerHTML = '';
+      writers.forEach(function (w) {
+        var opt = document.createElement('option');
+        opt.value = w;
+        opt.textContent = w;
+        sel.appendChild(opt);
+      });
+      var saved = '';
+      try { saved = localStorage.getItem('noteWriterName') || ''; } catch (e) {}
+      if (saved && writers.indexOf(saved) !== -1) sel.value = saved;
+    }).withFailureHandler(showError).getWriters();
+  }
+
+  function insertNoteStamp() {
+    var writer = document.getElementById('noteWriterSelect').value;
+    if (!writer) {
+      showToast('אין שמות ברשימה - להוסיף שמות בטאב "רשימת כותבות" בגיליון', true);
+      return;
+    }
+    var stamp = writer + ' · ' + formatDateClient_(new Date()) + ': ';
+    var ta = document.getElementById('f_notes');
+    var sep = ta.value && !/\n$/.test(ta.value) ? '\n' : '';
+    ta.value = ta.value + sep + stamp;
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = ta.value.length;
+  }
+
+  function formatDateClient_(d) {
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  /* ---------- העתקה לטופס הרשמה (לפי הסקטור של הליד הפתוח) ---------- */
+
+  function onCopyToRegistration() {
+    var sector = sectorByKey(document.getElementById('f_sector').value);
+    var labels = (sector && sector.registrationFieldLabels) || [];
+    if (!labels.length) {
+      showToast('לא הוגדרו שדות טופס הרשמה לסקטור הזה', true);
+      return;
+    }
+    var formValues = {
+      contactName: document.getElementById('f_contactName').value,
+      company: document.getElementById('f_company').value,
+      phone: document.getElementById('f_phone').value,
+      email: document.getElementById('f_email').value,
+      role: document.getElementById('f_role').value
+    };
+    var text = labels.map(function (f) {
+      return f.label + ': ' + (formValues[f.key] || '');
+    }).join('\n');
+    var url = sector.infoUrl;
+
+    function afterCopy() {
+      showToast('הפרטים הועתקו ללוח - הדביקי בכל שדה בטופס שנפתח');
+      if (url) window.open(url, '_blank');
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(afterCopy).catch(function () {
+        showToast('לא הצלחתי להעתיק אוטומטית. הפרטים: ' + text, true);
+      });
+    } else {
+      showToast('לא הצלחתי להעתיק אוטומטית. הפרטים: ' + text, true);
+    }
   }
 
   function showError(err) {

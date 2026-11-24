@@ -18,10 +18,14 @@ var CLIENT_NAME = 'IBM BOB';
 // outboundId - מזהה קמפיין החיוג בפרלה (NLPearl) לסקטור הזה. לא משמש
 // לחיוג (זה נשאר פעולה ידנית מהמסך של פרלה) - רק לכלי האבחון debugPearlLead
 // למטה. TODO(client): למלא לכל סקטור כשיהיה זמין.
+// TODO(client): registrationFieldLabels - סדר/תוויות השדות של טופס ההרשמה
+// האמיתי של כל סקטור (שונה בין סקטורים, לכל אחד הקישור infoUrl שלו) - לבדוק
+// בקוד המקור של כל טופס (לא לנחש) לפני שממלאים. ר' "העתקה לטופס הרשמה"
+// ב-JavaScript.html.
 var SECTORS = [
-  { key: 'capital', label: 'שוק ההון', icon: '📈', color: 'capital', date: '2026-09-09T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_finance_fy26/', outboundId: '' },
-  { key: 'energy', label: 'אנרגיה', icon: '⚡', color: 'energy', date: '2026-09-16T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_energy_fy26/', outboundId: '' },
-  { key: 'health', label: 'בריאות', icon: '🏥', color: 'health', date: '2026-09-15T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_healthcare_fy26/', outboundId: '' }
+  { key: 'capital', label: 'שוק ההון', icon: '📈', color: 'capital', date: '2026-09-09T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_finance_fy26/', outboundId: '', registrationFieldLabels: [] },
+  { key: 'energy', label: 'אנרגיה', icon: '⚡', color: 'energy', date: '2026-09-16T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_energy_fy26/', outboundId: '', registrationFieldLabels: [] },
+  { key: 'health', label: 'בריאות', icon: '🏥', color: 'health', date: '2026-09-15T09:00:00+03:00', infoUrl: 'https://bluesolutions.co.il/bob_healthcare_fy26/', outboundId: '', registrationFieldLabels: [] }
 ];
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---
@@ -30,6 +34,8 @@ var INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
 var LEADS_SHEET_NAME = 'לידים';
 var STATUSES_SHEET_NAME = 'רשימת סטטוסים';
 var TEMPLATES_SHEET_NAME = 'תבניות';
+var WRITERS_SHEET_NAME = 'רשימת כותבות'; // שמות לתיוג הערות - נקרא/נערך ישירות מהגיליון, בדיוק כמו רשימת הסטטוסים
+var DEFAULT_WRITERS = ['טליה', 'מזי'];
 
 // TODO(client): רשימת הסטטוסים הראשונית לתהליך המכירה של הלקוח הזה - לשאול
 // אותו מראש (ר' BUILD-GUIDE.md, שאלת "אילו סטטוסים רוצים לכל ליד").
@@ -290,6 +296,13 @@ function ensureSheetsLocked_() {
     templatesSheet.getRange(1, 1, 1, 3).setValues([['שם תבנית', 'מספר תבנית', 'סקטור']]).setFontWeight('bold');
     templatesSheet.getRange(2, 1, DEFAULT_TEMPLATES.length, 3).setValues(DEFAULT_TEMPLATES);
   }
+
+  var writersSheet = ss.getSheetByName(WRITERS_SHEET_NAME);
+  if (!writersSheet) {
+    writersSheet = ss.insertSheet(WRITERS_SHEET_NAME);
+    writersSheet.getRange(1, 1).setValue('שם').setFontWeight('bold');
+    writersSheet.getRange(2, 1, DEFAULT_WRITERS.length, 1).setValues(DEFAULT_WRITERS.map(function (w) { return [w]; }));
+  }
 }
 
 function getLeadsSheet_() {
@@ -302,6 +315,20 @@ function getStatusesSheet_() {
 
 function getTemplatesSheet_() {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TEMPLATES_SHEET_NAME);
+}
+
+function getWritersSheet_() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WRITERS_SHEET_NAME);
+}
+
+function getWriters() {
+  ensureSheets_();
+  var sheet = getWritersSheet_();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  return sheet.getRange(2, 1, lastRow - 1, 1).getValues()
+    .map(function (r) { return r[0]; })
+    .filter(String);
 }
 
 function logWebhook_(payload) {
