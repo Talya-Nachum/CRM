@@ -48,7 +48,14 @@
     document.getElementById('registeredBanner').addEventListener('click', openRegisteredModal);
     document.getElementById('closeRegisteredModalBtn').addEventListener('click', closeRegisteredModal);
     document.getElementById('closeRegisteredBtn').addEventListener('click', closeRegisteredModal);
+
+    document.getElementById('infoBtn').addEventListener('click', openInfoModal);
+    document.getElementById('closeInfoModalBtn').addEventListener('click', closeInfoModal);
+    document.getElementById('closeInfoBtn').addEventListener('click', closeInfoModal);
   });
+
+  function openInfoModal() { document.getElementById('infoOverlay').classList.remove('hidden'); }
+  function closeInfoModal() { document.getElementById('infoOverlay').classList.add('hidden'); }
 
   /* ---------- config (header: countdown + buttons) ---------- */
 
@@ -69,15 +76,18 @@
       syncHeaderHeight();
 
       var paymentBtn = document.getElementById('paymentBtn');
-      var infoBtn = document.getElementById('infoBtn');
-      paymentBtn.addEventListener('click', function () {
-        if (cfg.paymentUrl) window.open(cfg.paymentUrl, '_blank');
-        else showToast('דף הסליקה עדיין לא חובר', true);
-      });
-      infoBtn.addEventListener('click', function () {
-        if (cfg.infoUrl) window.open(cfg.infoUrl, '_blank');
-        else showToast('דף המידע עדיין לא חובר', true);
-      });
+      if (cfg.paymentUrl) {
+        paymentBtn.classList.remove('hidden');
+        paymentBtn.addEventListener('click', function () { window.open(cfg.paymentUrl, '_blank'); });
+      }
+
+      if (cfg.infoUrl) {
+        document.getElementById('registerCard').classList.remove('hidden');
+        document.getElementById('registerExternalLink').href = cfg.infoUrl;
+        var infoLink = document.getElementById('infoExternalLink');
+        infoLink.href = cfg.infoUrl;
+        infoLink.classList.remove('hidden');
+      }
     }).withFailureHandler(showError).getConfig();
   }
 

@@ -7,51 +7,73 @@
 </head>
 <body>
   <header class="hub">
-    <div class="logo-mark">
-      <!-- לוגו מיטוב - קבוע לכל הלקוחות, בשיתוף פעולה -->
-      <svg class="mituv-icon" viewBox="0 0 64 64" fill="none">
-        <path d="M32 4 A28 28 0 0 1 58.5 25 L44 25 A14 14 0 0 0 32 18 Z" fill="#159aa8"/>
-        <path d="M58.5 25 A28 28 0 0 1 48 54 L40 42 A14 14 0 0 0 44 25 Z" fill="#1fc2c9"/>
-        <path d="M48 54 A28 28 0 0 1 16 54 L24 42 A14 14 0 0 0 40 42 Z" fill="#f4a828"/>
-        <path d="M16 54 A28 28 0 0 1 5.5 25 L20 25 A14 14 0 0 0 24 42 Z" fill="#ef8a1e"/>
-        <path d="M5.5 25 A28 28 0 0 1 32 4 L32 18 A14 14 0 0 0 20 25 Z" fill="#159aa8"/>
-        <path d="M17 30 L26 40 L47 17" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-      </svg>
-      <span class="logo-divider" aria-hidden="true"></span>
-      <!-- TODO(client): להחליף את הריבוע הזה בלוגו האמיתי של הלקוח (SVG מוטמע
-           או <img src="data:image/png;base64,...">). אם יש קובץ לוגו, לבקש
-           ממנו לינק ל-Google Drive משותף ("כל מי שיש לו את הקישור") -
-           WebFetch לא תמיד יכול להוריד תמונות שנשלחות ישירות בצ'אט. -->
-      <div class="client-logo-placeholder" aria-hidden="true">לוגו</div>
-      <div class="logo-text">
-        <span class="word" id="clientNameLabel">שם הלקוח</span>
-        <span class="tag" id="clientTagLabel">ניהול לידים · בשיתוף מיטוב מכירות</span>
+    <div class="hub-topbar">
+      <div class="logo-mark">
+        <!-- לוגו מיטוב - קבוע לכל הלקוחות, בשיתוף פעולה -->
+        <svg class="mituv-icon" viewBox="0 0 64 64" fill="none">
+          <path d="M32 4 A28 28 0 0 1 58.5 25 L44 25 A14 14 0 0 0 32 18 Z" fill="#159aa8"/>
+          <path d="M58.5 25 A28 28 0 0 1 48 54 L40 42 A14 14 0 0 0 44 25 Z" fill="#1fc2c9"/>
+          <path d="M48 54 A28 28 0 0 1 16 54 L24 42 A14 14 0 0 0 40 42 Z" fill="#f4a828"/>
+          <path d="M16 54 A28 28 0 0 1 5.5 25 L20 25 A14 14 0 0 0 24 42 Z" fill="#ef8a1e"/>
+          <path d="M5.5 25 A28 28 0 0 1 32 4 L32 18 A14 14 0 0 0 20 25 Z" fill="#159aa8"/>
+          <path d="M17 30 L26 40 L47 17" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <span class="logo-divider" aria-hidden="true"></span>
+        <!-- TODO(client): להחליף את הריבוע הזה בלוגו האמיתי של הלקוח (SVG מוטמע
+             או <img src="data:image/png;base64,...">). אם יש קובץ לוגו, לבקש
+             ממנו לינק ל-Google Drive משותף ("כל מי שיש לו את הקישור") -
+             WebFetch לא תמיד יכול להוריד תמונות שנשלחות ישירות בצ'אט. -->
+        <div class="client-logo-placeholder" aria-hidden="true">לוגו</div>
+        <div class="logo-text">
+          <span class="word" id="clientNameLabel">שם הלקוח</span>
+          <span class="tag" id="clientTagLabel">ניהול לידים · בשיתוף מיטוב מכירות</span>
+        </div>
+      </div>
+
+      <!-- TODO(client): לוודא שהטקסט "נרשמו עד כה" מתאים למונח העסקי של
+           הלקוח (למשל "נסגרו עסקאות"/"אושרו" וכו'), ולעדכן REGISTERED_STATUSES
+           ב-JavaScript.html בהתאם - ר' BUILD-GUIDE.md. -->
+      <button class="stat-banner" id="registeredBanner">
+        <span class="stat-n" id="registeredCount">0</span>
+        <span class="stat-u">נרשמו עד כה</span>
+      </button>
+
+      <div class="hub-actions">
+        <button class="hub-btn gold hidden" id="paymentBtn">מעבר לתשלום</button>
       </div>
     </div>
 
-    <!-- TODO(client): אם ל-TARGET_DATE ב-Code.gs יש ערך, הבלוק הזה יופיע
-         אוטומטית (ר' JavaScript.html - loadConfig). אם אין תאריך רלוונטי
-         ללקוח הזה, אפשר למחוק את כל ה-div הזה. -->
-    <div class="countdown hidden" id="countdownBlock">
-      <span class="cd-label" id="countdownLabel">עד המועד</span>
-      <div class="cd-units">
-        <div class="cd-unit"><span class="n" id="cdDays">--</span><span class="u">ימים</span></div>
-        <div class="cd-unit"><span class="n" id="cdHours">--</span><span class="u">שעות</span></div>
-        <div class="cd-unit"><span class="n" id="cdMins">--</span><span class="u">דקות</span></div>
+    <!-- שורת ההדגשה: מונה זמן + מידע על האירוע + הרשמה - שלושת האלמנטים
+         שהלקוחה ביקשה במפורש שיהיו הכי בולטים בעמוד. כל אחד מהם מוסתר
+         אוטומטית ב-loadConfig (JavaScript.html) אם אין לו ערך רלוונטי
+         (TARGET_DATE / INFO_URL). -->
+    <div class="hero-row">
+      <!-- TODO(client): אם אין ל-TARGET_DATE ב-Code.gs ערך רלוונטי ללקוח הזה,
+           אפשר למחוק את כל כרטיס ה-hero-card הזה (ולהתאים grid-template-columns
+           ב-Stylesheet.html ל-1fr 1.25fr). -->
+      <div class="hero-card countdown hidden" id="countdownBlock">
+        <span class="hc-label" id="countdownLabel">עד המועד</span>
+        <div class="cd-units">
+          <div class="cd-unit"><span class="n" id="cdDays">--</span><span class="u">ימים</span></div>
+          <div class="cd-unit"><span class="n" id="cdHours">--</span><span class="u">שעות</span></div>
+          <div class="cd-unit"><span class="n" id="cdMins">--</span><span class="u">דקות</span></div>
+        </div>
       </div>
-    </div>
 
-    <!-- TODO(client): לוודא שהטקסט "נרשמו עד כה" מתאים למונח העסקי של
-         הלקוח (למשל "נסגרו עסקאות"/"אושרו" וכו'), ולעדכן REGISTERED_STATUSES
-         ב-JavaScript.html בהתאם - ר' BUILD-GUIDE.md. -->
-    <button class="stat-banner" id="registeredBanner">
-      <span class="stat-n" id="registeredCount">0</span>
-      <span class="stat-u">נרשמו עד כה</span>
-    </button>
+      <button type="button" class="hero-card info" id="infoBtn">
+        <div class="hc-icon">ℹ️</div>
+        <div class="hc-title">מידע על האירוע</div>
+        <div class="hc-sub">תאריך, מיקום ואג'נדה מלאה</div>
+      </button>
 
-    <div class="hub-actions">
-      <button class="hub-btn gold" id="paymentBtn">מעבר לתשלום</button>
-      <button class="hub-btn ghost" id="infoBtn">מידע נוסף</button>
+      <!-- TODO(client): אם אין ל-INFO_URL ב-Code.gs ערך (אין עדיין לינק הרשמה),
+           הכרטיס הזה מוסתר אוטומטית עד שיתווסף. -->
+      <div class="hero-card register hidden" id="registerCard">
+        <div class="hc-label">ההרשמה לאירוע פתוחה</div>
+        <div class="hc-title">הרשמה לאירוע</div>
+        <div class="hc-sub">קישור ישיר לדף ההזמנה הרשמי</div>
+        <a href="#" id="registerExternalLink" target="_blank" rel="noopener">להרשמה ↗</a>
+      </div>
     </div>
   </header>
 
@@ -219,6 +241,28 @@
       </div>
       <footer class="modal-actions">
         <button type="button" id="closeRegisteredBtn" class="btn btn-plain">סגירה</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- מודאל מידע על האירוע - TODO(client): להדביק כאן את תוכן האירוע
+       (תאריך/מיקום/אג'נדה) בדיוק ובמדויק כמו שהלקוחה שולחת אותו בצ'אט -
+       מילה במילה, בלי לנסח מחדש או למזג שורות. לינק ההרשמה (INFO_URL)
+       כבר מופיע גם כאן בתחתית וגם ככרטיס נפרד בכותרת הראשית. -->
+  <div id="infoOverlay" class="overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h2>מידע על האירוע</h2>
+        <button class="icon-x" id="closeInfoModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- TODO(client): תוכן האירוע המלא נכנס כאן -->
+        <p>תוכן האירוע (תאריך, מיקום, אג'נדה) יתווסף כאן.</p>
+      </div>
+      <footer class="modal-actions">
+        <a id="infoExternalLink" href="#" target="_blank" rel="noopener" class="btn btn-primary hidden">הרשמה לאירוע</a>
+        <div class="spacer"></div>
+        <button type="button" id="closeInfoBtn" class="btn btn-plain">סגירה</button>
       </footer>
     </div>
   </div>
