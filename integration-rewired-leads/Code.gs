@@ -18,6 +18,10 @@ var CLIENT_TAGLINE = 'APIs. Events. Agents.';
 var TARGET_DATE = '2026-11-12T08:30:00+02:00'; // 12.11.26, 08:30, Claro TLV
 var PAYMENT_URL = ''; // אין תשלום - כפתור הוסר ב-Index.html
 var INFO_URL = 'https://www.matrix-globalservices.com/events/integration-rewired/'; // עמוד האירוע הרשמי
+// TODO(client): סדר/תוויות השדות של טופס ההרשמה *האמיתי* של האירוע הזה - לבדוק
+// בקוד המקור של הטופס (כנראה דומה ל-Raise a Glass, אותו אתר, אבל לא לנחש -
+// לוודא בפועל, יכול להיות שהשדות שונים).
+var REGISTRATION_FIELD_LABELS = [];
 // === סוף בלוק ההתאמה הראשי - שאר הקובץ בד"כ לא צריך להשתנות ===
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---
@@ -98,7 +102,8 @@ function getConfig() {
     clientTagline: CLIENT_TAGLINE,
     targetDate: TARGET_DATE,
     paymentUrl: PAYMENT_URL,
-    infoUrl: INFO_URL
+    infoUrl: INFO_URL,
+    registrationFieldLabels: REGISTRATION_FIELD_LABELS
   };
 }
 

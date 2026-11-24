@@ -26,6 +26,9 @@ var PAYMENT_URL = ''; // לא רלוונטי לאירוע הזה (אין תשל�
 // ישירות ב-Index.html, כי אין גישה לקובץ התמונה שנשלח בצ'אט (ר' BUILD-GUIDE.md,
 // "מגבלות סביבת הפיתוח").
 var INFO_URL = '';
+// TODO(client): סדר/תוויות השדות של טופס ההרשמה *האמיתי* של האירוע - לבדוק
+// בקוד המקור של הטופס (לא לנחש) בכל פעם שהלקוחה שולחת קישור הרשמה חדש.
+var REGISTRATION_FIELD_LABELS = [];
 // === סוף בלוק ההתאמה הראשי - שאר הקובץ בד"כ לא צריך להשתנות ===
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---
@@ -111,7 +114,8 @@ function getConfig() {
     clientTagline: CLIENT_TAGLINE,
     targetDate: TARGET_DATE,
     paymentUrl: PAYMENT_URL,
-    infoUrl: INFO_URL
+    infoUrl: INFO_URL,
+    registrationFieldLabels: REGISTRATION_FIELD_LABELS
   };
 }
 

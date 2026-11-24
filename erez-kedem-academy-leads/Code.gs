@@ -14,6 +14,9 @@
 var ACADEMY_START_DATE = '2026-10-05T00:00:00+03:00'; // עדכני כשהתאריך הסופי ייקבע
 var PAYMENT_URL = 'https://secure.cardcom.solutions/EA/EA5/CiU4xYNnWESl4SB3eC41WA/PaymentSP';
 var INFO_URL = 'https://mituv-my.sharepoint.com/:w:/g/personal/talya_mituvforsales_co_il/IQABdIuj-z2ARa0e62zQT_GcASfM8lFLchL1dppcar53EhI?e=xnAbWP';
+// TODO(client): סדר/תוויות השדות של טופס ההרשמה *האמיתי* של האירוע - לבדוק
+// בקוד המקור של הטופס (לא לנחש) בכל פעם שהלקוחה שולחת קישור הרשמה חדש.
+var REGISTRATION_FIELD_LABELS = [];
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט כמו במערכת הראשית ---
 var INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
@@ -91,7 +94,8 @@ function getConfig() {
   return {
     academyStartDate: ACADEMY_START_DATE,
     paymentUrl: PAYMENT_URL,
-    infoUrl: INFO_URL
+    infoUrl: INFO_URL,
+    registrationFieldLabels: REGISTRATION_FIELD_LABELS
   };
 }
 

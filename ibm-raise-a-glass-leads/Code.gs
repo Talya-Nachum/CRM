@@ -18,6 +18,15 @@ var CLIENT_TAGLINE = 'AI, Fraud & Data Security';
 var TARGET_DATE = '2026-12-02T09:30:00+02:00'; // 02.12.26, 09:30, יקב אלכסנדר בית יצחק
 var PAYMENT_URL = ''; // אין תשלום - כפתור הוסר ב-Index.html
 var INFO_URL = 'https://www.matrix-globalservices.com/events/raise-a-glass-lower-the-risk/'; // קישור להרשמה
+// סדר/תוויות השדות בטופס ההרשמה האמיתי (Contact Form 7 באתר Matrix) - לפי
+// קוד המקור שהתקבל בפועל (id="full-name"/"company"/"mobile"/"job-role"/"email").
+var REGISTRATION_FIELD_LABELS = [
+  { key: 'contactName', label: 'Full Name' },
+  { key: 'company', label: 'Company' },
+  { key: 'phone', label: 'Mobile' },
+  { key: 'role', label: 'Job Position' },
+  { key: 'email', label: 'Email' }
+];
 // === סוף בלוק ההתאמה הראשי - שאר הקובץ בד"כ לא צריך להשתנות ===
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---
@@ -98,7 +107,8 @@ function getConfig() {
     clientTagline: CLIENT_TAGLINE,
     targetDate: TARGET_DATE,
     paymentUrl: PAYMENT_URL,
-    infoUrl: INFO_URL
+    infoUrl: INFO_URL,
+    registrationFieldLabels: REGISTRATION_FIELD_LABELS
   };
 }
 

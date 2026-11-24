@@ -9,6 +9,9 @@
   var REGISTERED_STATUSES = ['נרשם לבד', 'נרשם ע"י מיטוב'].map(normalizeStatusText);
   var DUPLICATE_STATUS = normalizeStatusText('כפול');
 
+  var registrationFieldLabels = [];
+  var registrationUrl = '';
+
   // מנרמלת גרשיים/גרש עברי (״ ׳) וגרשיים מעוצבים לצורת ASCII פשוטה, כדי
   // שהשוואת סטטוסים לא תישבר בשקט אם מישהו מקליד "ע״י" עם גרשיים עבריים
   // (הצורה התקנית בעברית) במקום מרכאות רגילות - בדיוק כמו רשימת הסטטוסים
@@ -36,6 +39,7 @@
     document.getElementById('cancelLeadBtn').addEventListener('click', closeLeadModal);
     document.getElementById('leadForm').addEventListener('submit', onSubmitLead);
     document.getElementById('deleteLeadBtn').addEventListener('click', onDeleteLead);
+    document.getElementById('copyToRegistrationBtn').addEventListener('click', onCopyToRegistration);
     document.getElementById('searchInput').addEventListener('input', renderTable);
     document.getElementById('statusFilter').addEventListener('change', renderTable);
     document.getElementById('selectAll').addEventListener('change', onSelectAll);
@@ -85,7 +89,43 @@
         infoLink.classList.remove('hidden');
       }
       document.getElementById('infoBtn').addEventListener('click', openInfoModal);
+
+      registrationFieldLabels = cfg.registrationFieldLabels || [];
+      registrationUrl = cfg.infoUrl || '';
+      if (registrationFieldLabels.length && registrationUrl) {
+        document.getElementById('copyToRegistrationBtn').classList.remove('hidden');
+      }
     }).withFailureHandler(showError).getConfig();
+  }
+
+  function onCopyToRegistration() {
+    if (!registrationFieldLabels.length) {
+      showToast('לא הוגדרו שדות טופס הרשמה לאירוע הזה', true);
+      return;
+    }
+    var formValues = {
+      contactName: document.getElementById('f_contactName').value,
+      company: document.getElementById('f_company').value,
+      phone: document.getElementById('f_phone').value,
+      email: document.getElementById('f_email').value,
+      role: document.getElementById('f_role').value
+    };
+    var text = registrationFieldLabels.map(function (f) {
+      return f.label + ': ' + (formValues[f.key] || '');
+    }).join('\n');
+
+    function afterCopy() {
+      showToast('הפרטים הועתקו ללוח - הדביקי בכל שדה בטופס שנפתח');
+      if (registrationUrl) window.open(registrationUrl, '_blank');
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(afterCopy).catch(function () {
+        showToast('לא הצלחתי להעתיק אוטומטית. הפרטים: ' + text, true);
+      });
+    } else {
+      showToast('לא הצלחתי להעתיק אוטומטית. הפרטים: ' + text, true);
+    }
   }
 
   function startCountdown(targetIso) {
