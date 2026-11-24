@@ -32,6 +32,10 @@ var DEFAULT_STATUSES = ['בתהליך', 'נרשם לבד', 'נרשם ע"י מי�
 // הסטטוס שנקבע אוטומטית לכל ליד שנבחר בשליחת וואטסאפ מוצלחת (ר' sendWhatsApp)
 var WHATSAPP_SENT_STATUS = 'נשלח וואטסאפ';
 
+// הסטטוס שנקבע אוטומטית לליד חדש שזוהה ככפילות (ר' isDuplicateLead_/addLead) -
+// לפי התאמה בטלפון נייד (9 ספרות אחרונות) או אימייל מול ליד קיים.
+var DUPLICATE_LEAD_STATUS = 'כפול';
+
 // שמות תבניות לדוגמה בלבד - להחליף את "מספר תבנית" בטאב "תבניות" במספרים
 // האמיתיים מאינפוריו (אפשר גם לשנות/להוסיף/למחוק שורות שם בלי לגעת בקוד)
 var DEFAULT_TEMPLATES = [
@@ -346,11 +350,31 @@ function fixErrorPhoneCell_(cell) {
   cell.setValue(digits);
 }
 
+/**
+ * בדיקת כפילות לליד חדש מול הלידים הקיימים - לפי טלפון נייד (9 ספרות
+ * אחרונות, כמו בכל שאר הקוד) או אימייל (לא תלוי רישיות/רווחים).
+ */
+function isDuplicateLead_(candidate, existingLeads) {
+  var phone = onlyDigits_(candidate.phone).slice(-9);
+  var email = String(candidate.email || '').trim().toLowerCase();
+  for (var i = 0; i < existingLeads.length; i++) {
+    var other = existingLeads[i];
+    if (phone && onlyDigits_(other.phone).slice(-9) === phone) return true;
+    if (email && String(other.email || '').trim().toLowerCase() === email) return true;
+  }
+  return false;
+}
+
 function addLead(leadData) {
   ensureSheets_();
   var sheet = getLeadsSheet_();
   var id = Utilities.getUuid();
   var now = new Date();
+
+  if (isDuplicateLead_(leadData, getLeads())) {
+    ensureStatusExists_(DUPLICATE_LEAD_STATUS);
+    leadData.status = DUPLICATE_LEAD_STATUS;
+  }
 
   var row = LEAD_FIELDS.map(function (f) {
     if (f.key === 'id') return id;
