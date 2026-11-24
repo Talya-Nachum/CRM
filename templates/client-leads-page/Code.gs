@@ -17,7 +17,19 @@ var CLIENT_NAME = '[שם הלקוח]'; // TODO(client): שם הלקוח כפי �
 var CLIENT_TAGLINE = ''; // TODO(client): תת-כותרת קצרה מתחת ללוגו (תחום עיסוק וכו')
 var TARGET_DATE = ''; // TODO(client): תאריך יעד לשעון הספירה, ISO למשל '2026-10-01T00:00:00+03:00' - אם אין שעון רלוונטי, אפשר להשאיר ריק ולהסיר את הבלוק ב-Index.html/JavaScript.html
 var PAYMENT_URL = ''; // TODO(client): כתובת דף הסליקה - אפשר להשאיר ריק ולמלא כשיהיה מוכן
-var INFO_URL = ''; // TODO(client): כתובת/לינק למידע נוסף - אפשר להשאיר ריק ולמלא כשיהיה מוכן
+var INFO_URL = ''; // TODO(client): כתובת/לינק למידע נוסף (ומשמש גם כקישור "הרשמה לאירוע") - אפשר להשאיר ריק ולמלא כשיהיה מוכן
+// TODO(client): סדר/תוויות השדות של טופס ההרשמה *האמיתי* של האירוע הזה -
+// לבדוק בקוד המקור של הטופס (לא לנחש) בכל פעם שהלקוחה שולחת קישור הרשמה
+// לאירוע חדש, כי כל אתר/טופס שונה. ר' "העתקה לטופס הרשמה" ב-JavaScript.html.
+var REGISTRATION_FIELD_LABELS = [];
+// לדוגמה (Raise a Glass, Contact Form 7 באתר matrix-globalservices.com):
+// var REGISTRATION_FIELD_LABELS = [
+//   { key: 'contactName', label: 'Full Name' },
+//   { key: 'company', label: 'Company' },
+//   { key: 'phone', label: 'Mobile' },
+//   { key: 'role', label: 'Job Position' },
+//   { key: 'email', label: 'Email' }
+// ];
 // === סוף בלוק ההתאמה הראשי - שאר הקובץ בד"כ לא צריך להשתנות ===
 
 // --- אינפוריו (וואטסאפ) - אותו endpoint ואותו פורמט לכל הלקוחות ---
@@ -102,7 +114,8 @@ function getConfig() {
     clientTagline: CLIENT_TAGLINE,
     targetDate: TARGET_DATE,
     paymentUrl: PAYMENT_URL,
-    infoUrl: INFO_URL
+    infoUrl: INFO_URL,
+    registrationFieldLabels: REGISTRATION_FIELD_LABELS
   };
 }
 

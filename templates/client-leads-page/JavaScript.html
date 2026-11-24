@@ -15,6 +15,10 @@
   // נתונים" עם צביעה אדומה באקסל - זו הייתה בקשה מפורשת של הלקוחה.
   var DUPLICATE_STATUS = normalizeStatusText('כפול');
 
+  // "העתקה לטופס הרשמה" (ר' onCopyToRegistration) - נטענים מ-getConfig
+  var registrationFieldLabels = [];
+  var registrationUrl = '';
+
   // מנרמלת גרשיים/גרש עברי (״ ׳) וגרשיים מעוצבים לצורת ASCII פשוטה, כדי
   // שהשוואת סטטוסים לא תישבר בשקט אם מישהו מקליד "ע״י" עם גרשיים עבריים
   // (הצורה התקנית בעברית) במקום מרכאות רגילות - בדיוק כמו רשימת הסטטוסים
@@ -42,6 +46,7 @@
     document.getElementById('cancelLeadBtn').addEventListener('click', closeLeadModal);
     document.getElementById('leadForm').addEventListener('submit', onSubmitLead);
     document.getElementById('deleteLeadBtn').addEventListener('click', onDeleteLead);
+    document.getElementById('copyToRegistrationBtn').addEventListener('click', onCopyToRegistration);
     document.getElementById('searchInput').addEventListener('input', renderTable);
     document.getElementById('statusFilter').addEventListener('change', renderTable);
     document.getElementById('selectAll').addEventListener('change', onSelectAll);
@@ -99,7 +104,51 @@
         infoLink.href = cfg.infoUrl;
         infoLink.classList.remove('hidden');
       }
+
+      registrationFieldLabels = cfg.registrationFieldLabels || [];
+      registrationUrl = cfg.infoUrl || '';
+      if (registrationFieldLabels.length && registrationUrl) {
+        document.getElementById('copyToRegistrationBtn').classList.remove('hidden');
+      }
     }).withFailureHandler(showError).getConfig();
+  }
+
+  /**
+   * "העתקה לטופס הרשמה" - מעתיקה ללוח את פרטי הליד הפתוח בחלון העריכה,
+   * מסודרים בדיוק לפי סדר/שמות השדות של טופס ההרשמה החיצוני (ר' TODO(client)
+   * REGISTRATION_FIELD_LABELS ב-Code.gs - שונה מאירוע לאירוע), ופותחת את
+   * קישור ההרשמה בטאב חדש כדי להדביק בכל שדה. אין דרך שהדשבורד ימלא בעצמו
+   * את השדות בטופס של אתר אחר (cross-origin) - זה הפתרון שעובד בלי תלות
+   * בשיתוף פעולה של בעלי האתר החיצוני.
+   */
+  function onCopyToRegistration() {
+    if (!registrationFieldLabels.length) {
+      showToast('לא הוגדרו שדות טופס הרשמה לאירוע הזה', true);
+      return;
+    }
+    var formValues = {
+      contactName: document.getElementById('f_contactName').value,
+      company: document.getElementById('f_company').value,
+      phone: document.getElementById('f_phone').value,
+      email: document.getElementById('f_email').value,
+      role: document.getElementById('f_role').value
+    };
+    var text = registrationFieldLabels.map(function (f) {
+      return f.label + ': ' + (formValues[f.key] || '');
+    }).join('\n');
+
+    function afterCopy() {
+      showToast('הפרטים הועתקו ללוח - הדביקי בכל שדה בטופס שנפתח');
+      if (registrationUrl) window.open(registrationUrl, '_blank');
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(afterCopy).catch(function () {
+        showToast('לא הצלחתי להעתיק אוטומטית. הפרטים: ' + text, true);
+      });
+    } else {
+      showToast('לא הצלחתי להעתיק אוטומטית. הפרטים: ' + text, true);
+    }
   }
 
   function startCountdown(targetIso) {
