@@ -9,6 +9,7 @@
   // סטטוסים שנחשבים "נרשם בפועל" לצורך הבאנר "כמה נרשמו עד כה" - שני
   // הסטטוסים היחידים שמייצגים רישום שהושלם (להבדיל מ"בתהליך"/"חדש" וכו')
   var REGISTERED_STATUSES = ['נרשם לבד', 'נרשם ע"י מיטוב'].map(normalizeStatusText);
+  var DUPLICATE_STATUS = normalizeStatusText('כפול');
 
   // מנרמלת גרשיים/גרש עברי (״ ׳) וגרשיים מעוצבים לצורת ASCII פשוטה, כדי
   // שהשוואת סטטוסים לא תישבר בשקט אם מישהו מקליד "ע״י" עם גרשיים עבריים
@@ -25,6 +26,7 @@
     loadConfig();
     loadStatuses();
     loadTemplates();
+    loadWriters();
     loadLeads();
 
     document.getElementById('addLeadBtn').addEventListener('click', openAddModal);
@@ -45,6 +47,11 @@
     document.getElementById('registeredBanner').addEventListener('click', openRegisteredModal);
     document.getElementById('closeRegisteredModalBtn').addEventListener('click', closeRegisteredModal);
     document.getElementById('closeRegisteredBtn').addEventListener('click', closeRegisteredModal);
+
+    document.getElementById('insertNoteStampBtn').addEventListener('click', insertNoteStamp);
+    document.getElementById('noteWriterSelect').addEventListener('change', function () {
+      try { localStorage.setItem('noteWriterName', this.value); } catch (e) {}
+    });
   });
 
   /* ---------- config (header: countdown + buttons) ---------- */
@@ -148,6 +155,7 @@
   }
 
   function colorForStatus(status) {
+    if (normalizeStatusText(status) === DUPLICATE_STATUS) return '#c0392b';
     if (!statusColorMap[status]) {
       var idx = Object.keys(statusColorMap).length % palette.length;
       statusColorMap[status] = palette[idx];
@@ -251,6 +259,7 @@
     filtered.forEach(function (lead) {
       var tr = document.createElement('tr');
       if (selectedIds.has(lead.id)) tr.classList.add('selected');
+      if (normalizeStatusText(lead.status) === DUPLICATE_STATUS) tr.classList.add('row-duplicate');
       var checked = selectedIds.has(lead.id) ? 'checked' : '';
       tr.innerHTML =
         '<td><input type="checkbox" class="row-check" data-id="' + lead.id + '" ' + checked + '></td>' +
@@ -448,6 +457,43 @@
     toast.textContent = text;
     toast.className = 'toast' + (isError ? ' error' : '');
     setTimeout(function () { toast.classList.add('hidden'); }, 3000);
+  }
+
+  /* ---------- תיוג הערות (מי + תאריך/שעה) ---------- */
+
+  function loadWriters() {
+    google.script.run.withSuccessHandler(function (writers) {
+      var sel = document.getElementById('noteWriterSelect');
+      sel.innerHTML = '';
+      writers.forEach(function (w) {
+        var opt = document.createElement('option');
+        opt.value = w;
+        opt.textContent = w;
+        sel.appendChild(opt);
+      });
+      var saved = '';
+      try { saved = localStorage.getItem('noteWriterName') || ''; } catch (e) {}
+      if (saved && writers.indexOf(saved) !== -1) sel.value = saved;
+    }).withFailureHandler(showError).getWriters();
+  }
+
+  function insertNoteStamp() {
+    var writer = document.getElementById('noteWriterSelect').value;
+    if (!writer) {
+      showToast('אין שמות ברשימה - להוסיף שמות בטאב "רשימת כותבות" בגיליון', true);
+      return;
+    }
+    var stamp = writer + ' · ' + formatDateClient_(new Date()) + ': ';
+    var ta = document.getElementById('f_notes');
+    var sep = ta.value && !/\n$/.test(ta.value) ? '\n' : '';
+    ta.value = ta.value + sep + stamp;
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = ta.value.length;
+  }
+
+  function formatDateClient_(d) {
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
   function showError(err) {

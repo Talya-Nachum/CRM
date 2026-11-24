@@ -21,6 +21,8 @@ var INFORU_ENDPOINT = 'https://capi.inforu.co.il/api/v2/WhatsApp/SendWhatsApp';
 var LEADS_SHEET_NAME = 'לידים';
 var STATUSES_SHEET_NAME = 'רשימת סטטוסים';
 var TEMPLATES_SHEET_NAME = 'תבניות';
+var WRITERS_SHEET_NAME = 'רשימת כותבות'; // שמות לתיוג הערות - נקרא/נערך ישירות מהגיליון, בדיוק כמו רשימת הסטטוסים
+var DEFAULT_WRITERS = ['טליה', 'מזי'];
 
 var DEFAULT_STATUSES = ['חדש', 'בתהליך', 'נרשם לבד', 'נרשם ע"י מיטוב', 'בטיפול ארז', 'לא מעוניין', 'נשלח וואטסאפ'];
 
@@ -200,6 +202,13 @@ function ensureSheetsLocked_() {
     templatesSheet.getRange(1, 1, 1, 2).setValues([['שם תבנית', 'מספר תבנית']]).setFontWeight('bold');
     templatesSheet.getRange(2, 1, DEFAULT_TEMPLATES.length, 2).setValues(DEFAULT_TEMPLATES);
   }
+
+  var writersSheet = ss.getSheetByName(WRITERS_SHEET_NAME);
+  if (!writersSheet) {
+    writersSheet = ss.insertSheet(WRITERS_SHEET_NAME);
+    writersSheet.getRange(1, 1).setValue('שם').setFontWeight('bold');
+    writersSheet.getRange(2, 1, DEFAULT_WRITERS.length, 1).setValues(DEFAULT_WRITERS.map(function (w) { return [w]; }));
+  }
 }
 
 function getLeadsSheet_() {
@@ -212,6 +221,20 @@ function getStatusesSheet_() {
 
 function getTemplatesSheet_() {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TEMPLATES_SHEET_NAME);
+}
+
+function getWritersSheet_() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WRITERS_SHEET_NAME);
+}
+
+function getWriters() {
+  ensureSheets_();
+  var sheet = getWritersSheet_();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  return sheet.getRange(2, 1, lastRow - 1, 1).getValues()
+    .map(function (r) { return r[0]; })
+    .filter(String);
 }
 
 function logWebhook_(payload) {
