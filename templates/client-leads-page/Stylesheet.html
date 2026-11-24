@@ -261,6 +261,15 @@
   .row2 { display: flex; gap: 12px; }
   .row2 > div { flex: 1; display: flex; flex-direction: column; gap: 5px; }
   .field { display: flex; flex-direction: column; gap: 5px; }
+  .notes-tools { display: flex; align-items: center; gap: 8px; }
+  .notes-tools select { flex: 1; }
+  .notes-tools .icon-x { font-size: 18px; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+
+  /* שורה שזוהתה כליד כפול (ר' isDuplicateLead_ ב-Code.gs) - הבלטה חזותית
+     חזקה (לא רק תגית סטטוס קטנה), כמו "אימות נתונים" עם צביעה אדומה באקסל -
+     זו בקשה מפורשת של הלקוחה, לא רק תג צבעוני רגיל. */
+  tbody tr.row-duplicate { background: #fdecea; }
+  tbody tr.row-duplicate:hover { background: #fbdcd9; }
   label { font-size: 12px; font-weight: 600; color: var(--muted); }
 
   .template-choice { display: flex; flex-direction: column; gap: 8px; }
